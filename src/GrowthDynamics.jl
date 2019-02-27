@@ -1,7 +1,9 @@
 module GrowthDynamics
 
-export Lattices
+export  Lattices,
+        LatticeTumorDynamics
 
+using Reexport
 using Distributed
 using OpenCLPicker
 
@@ -44,23 +46,24 @@ include("FitnessIterators.jl")
     include("OffLatticeTumorDynamics.jl")
 end
 include("SimulationRunner.jl")
+@reexport using .SimulationRunner
 
 using Serialization
-using LightGraphs, MetaGraphs
+@reexport using LightGraphs
+@reexport using MetaGraphs
 using FileIO
 using JSON: json
 import Printf: @sprintf
 using DataFrames
-using ProgressMeter
 
 @opencl using .OffLatticeTumorDynamics
-using ObservableCollector
+@reexport using ObservableCollector
 
 using .FitnessIterators
 import .TumorConfigurations
 using .LatticeTumorDynamics
-using .TumorObservables
-using .AnalysisMethods
+@reexport using .TumorObservables
+@reexport using .AnalysisMethods
 
 
 end

@@ -1,7 +1,15 @@
+module SimulationRunner
 #=
 Helper functions to save results and parameters
 of a run.
 =#
+using JSON
+export  get_last_file_number,
+        json_parameters,
+        _run_sim_conditional!,
+        repeated_runs
+
+
 function get_last_file_number(path::AbstractString)
     old_num::Int = 0
     for file in readdir(path)
@@ -87,4 +95,7 @@ function repeated_runs(N::Integer, dyn!, obs, setup, parameters;
     end
 
     return X
+end
+
+##==END Module==##
 end
