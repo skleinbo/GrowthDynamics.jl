@@ -17,7 +17,7 @@ function timeserieses(X::AbstractArray)
         D = Dict{Symbol,Any}()
         for m in x
             if !haskey(D, m.name)
-                push!(D, m.name => [m.val])
+                push!(D, m.name => Union{typeof(m.val), Missing}[m.val])
             else
                 push!(D[m.name], m.val)
             end
