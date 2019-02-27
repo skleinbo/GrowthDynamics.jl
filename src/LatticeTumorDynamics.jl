@@ -91,7 +91,7 @@ end
 
 function die_or_proliferate!(
     ;state::LT=TumorConfigurations.uniform_circle(0),
-    fitness=Float64[],
+    fitness=()->0.0,
     T=0,
     mu::Float64=0.0,
     f_mut=(L,G,g)->maximum(LightGraphs.vertices(G))+1,
@@ -111,7 +111,7 @@ function die_or_proliferate!(
     lin_N = size(state.data,1)
     tot_N = length(state.data)
 
-    fitness_lattice = vec([k!=0 ? fitness[k] : 0. for k in state.data])
+    fitness_lattice = vec([k!=0 ? fitness(k) : 0. for k in state.data])
     br_lattice = zeros(tot_N)
 
     nonzeros = count(x->x!=0, state.data)
@@ -219,7 +219,7 @@ function die_or_proliferate!(
                 genotype = state.data[old]
                 if rand()<mu
                     new_genotype = f_mut(state, phylogeny, genotype)
-                    if new_genotype != genotype && new_genotype<=length(fitness)
+                    if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
                         if !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
                             add_vertex!(phylogeny)
                             set_indexing_prop!(phylogeny, nv(phylogeny), :genotype, new_genotype)
@@ -232,7 +232,7 @@ function die_or_proliferate!(
                     end
                 end
                 state.data[new] = genotype
-                fitness_lattice[new] = fitness[genotype]
+                fitness_lattice[new] = fitness(genotype)
 
                 br_lattice[new] = (1.0-density!(nn,state,I[new])) * base_br * fitness_lattice[new]
                 nonzeros += 1
