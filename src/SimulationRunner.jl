@@ -70,8 +70,12 @@ function _run_sim_conditional!(
     dyn!(;params...,state=state,T=max_T,callback=obs_callback,abort=abort)
 
     if isempty(X)
-        @warn ("No observables collected!")
-        global state = state
+        if isdefined(Main,:STRICT) && Main.STRICT
+            global state = state
+            error("No observables collected!")
+        else
+            @warn ("No observables collected!")
+        end
     end
     X
 end
