@@ -21,12 +21,21 @@ export
     biallelic_layered,
     biallelic_cornered;
 
+"Returns a DiGraph with one vertex and {T=>0,genotype=>g} attribute."
+function OnePhylogeny(g=1)
+    G = MetaDiGraph(1)
+    set_prop!(G,1,:genotype,g)
+    set_prop!(G,1,:T,0)
+    set_indexing_prop!(G, :genotype)
+    G
+end
+
 "Returns a DiGraph with edge 2=>1 and {T=>0,genotype=>1,2} attribute on both verticies."
-function TwoPhylogeny()
+function TwoPhylogeny(gv=[1,2])
     G = MetaDiGraph(2)
     add_edge!(G,(2,1))
     for v in [1,2]
-        set_prop!(G,v,:genotype,v)
+        set_prop!(G,v,:genotype,gv[v])
         set_prop!(G,v,:T,0)
     end
     set_indexing_prop!(G, :genotype)
@@ -175,7 +184,14 @@ end
 end
 
 function uniform_circle2(N::Int,f=1/10,g1=1,g2=2)::Lattices.HexagonalLattice{Int}
-    state = Lattices.HexagonalLattice(N,N,1.0,fill(g1,N,N),TwoPhylogeny())
+    if g1==0
+        G = OnePhylogeny(g2)
+    elseif g2==0
+        G = OnePhylogeny(g1)
+    else
+        G = TwoPhylogeny([g1,g2])
+    end
+    state = Lattices.HexagonalLattice(N,N,1.0,fill(g1,N,N),G)
 
     if f==0.
         return state
