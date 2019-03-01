@@ -72,7 +72,7 @@ mutable struct HexagonalLattice{T} <: AbstractLattice2D{T}
     Phylogeny::MetaDiGraph
 end
 
-const HexLatticeNeighbours = Neighbours{2}
+# const HexLatticeNeighbours = Neighbours{2}
 HexLatticeNeighbours() = [ CartesianIndex(0,0) for _ in 1:6 ]
 
 
@@ -89,7 +89,7 @@ neighbours(L::HexagonalLattice, I::CartesianIndex) = begin
     tmp
 end
 
-neighbours!(nn::HexLatticeNeighbours, I::CartesianIndex, L::HexagonalLattice) = @inbounds begin
+neighbours!(nn::Neighbours{2}, I::CartesianIndex, L::HexagonalLattice) = @inbounds begin
     m,n = Tuple(I)
     if isodd(n)
         nn[1] = CartesianIndex(m-1, n-1)
