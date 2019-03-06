@@ -21,6 +21,18 @@ export
     biallelic_layered,
     biallelic_cornered;
 
+mutable struct TumorConfiguration{T<:Lattices.AbstractLattice}
+    lattice::T
+    Phylogeny::MetaDiGraph
+    t::Int
+    treal::Float64
+end
+TumorConfiguration(lattice::T, Phylogeny::MetaDiGraph) where T<:Lattices.AbstractLattice = TumorConfiguration(lattice, Phylogeny, 0, 0.0)
+Base.getindex(T::TumorConfiguration,ind...) = T.lattice.data[ind...]
+Base.getindex(T::TumorConfiguration) = T.lattice.data
+Base.setindex!(T::TumorConfiguration,v,ind...) = T.lattice.data[ind...] = v
+
+
 "Returns a DiGraph with one vertex and {T=>0,genotype=>g} attribute."
 function OnePhylogeny(g=1)
     G = MetaDiGraph(1)
@@ -183,7 +195,7 @@ end
     FreeSpace{eltype(genotypes)}(Nmax, G, positions,genotypes,birthrates,deathrates,dMat,_mask)
 end
 
-function uniform_circle2(N::Int,f=1/10,g1=1,g2=2)::Lattices.HexagonalLattice{Int}
+function uniform_circle2(N::Int,f=1/10,g1=1,g2=2)::TumorConfiguration{Lattices.HexagonalLattice{Int}}
     if g1==0
         G = OnePhylogeny(g2)
     elseif g2==0
@@ -191,7 +203,7 @@ function uniform_circle2(N::Int,f=1/10,g1=1,g2=2)::Lattices.HexagonalLattice{Int
     else
         G = TwoPhylogeny([g1,g2])
     end
-    state = Lattices.HexagonalLattice(N,N,1.0,fill(g1,N,N),G)
+    state = Lattices.HexagonalLattice(N,N,1.0,fill(g1,N,N))
 
     if f==0.
         return state
@@ -220,7 +232,7 @@ function uniform_circle2(N::Int,f=1/10,g1=1,g2=2)::Lattices.HexagonalLattice{Int
         end
     end
 
-    return state
+    return TumorConfiguration(state, G)
 end
 
 

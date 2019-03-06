@@ -90,7 +90,7 @@ end
 
 
 function die_or_proliferate!(
-    ;state::LT=TumorConfigurations.uniform_circle(0),
+    ;state=TumorConfigurations.uniform_circle(0),
     fitness=()->0.0,
     T=0,
     mu::Float64=0.0,
@@ -98,30 +98,30 @@ function die_or_proliferate!(
     d::Float64=1/100,
     constraint=true,
     DEBUG=false,
-    callback=(s,t)->begin end,
-    abort=(s,t)->false,
-    kwargs...) where LT<:AbstractLattice{<:Integer}
+    callback=s->begin end,
+    abort=s->false,
+    kwargs...)
 
     phylogeny = state.Phylogeny
 
-    I = CartesianIndices(state.data)
-    Lin = LinearIndices(state.data)
+    I = CartesianIndices(state.lattice.data)
+    Lin = LinearIndices(state.lattice.data)
 
-    dim = length(size(state.data))
-    lin_N = size(state.data,1)
-    tot_N = length(state.data)
+    dim = length(size(state.lattice.data))
+    lin_N = size(state.lattice.data,1)
+    tot_N = length(state.lattice.data)
 
-    fitness_lattice = vec([k!=0 ? fitness(k) : 0. for k in state.data])
+    fitness_lattice = vec([k!=0 ? fitness(k) : 0. for k in state.lattice.data])
     br_lattice = zeros(tot_N)
 
-    nonzeros = count(x->x!=0, state.data)
-    base_br = 1.0/tot_N - d
+    nonzeros = count(x->x!=0, state.lattice.data)
+    base_br = 1.0 - d
 
-    nn = neighbours(state, CartesianIndex{dim}()) # Initialize neighbours to the appr. type
+    nn = neighbours(state.lattice, CartesianIndex{dim}()) # Initialize neighbours to the appr. type
     neighbour_indices = collect(1:length(nn))
 
     for k in 1:tot_N
-        br_lattice[k] = (1.0-density!(nn,state,I[k])) * base_br * fitness_lattice[k]
+        br_lattice[k] = (1.0-density!(nn,state.lattice,I[k])) * base_br * fitness_lattice[k]
     end
 
     new = 0
@@ -132,12 +132,12 @@ function die_or_proliferate!(
     cumrate = 0.
     validneighbour = false
     action = :none
-    total_rate = mapreduce(+, enumerate(state.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0. end
+    total_rate = mapreduce(+, enumerate(state.lattice.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0. end
     DEBUG && println(total_rate)
 
     @inbounds for t in 0:T
-        Base.invokelatest(callback,state,t)
-        if abort(state,t)
+        Base.invokelatest(callback,state)
+        if abort(state)
             break
         end
         ## Much cheaper than checking the whole lattice each iteration
@@ -154,7 +154,7 @@ function die_or_proliferate!(
         action = :none
         while selected < tot_N
             selected += 1
-            if state.data[selected] != 0
+            if state[selected] != 0
                 cumrate += d
                 if cumrate > who_and_what
                     action = :die
@@ -173,16 +173,16 @@ function die_or_proliferate!(
             DEBUG && println("Die")
             nonzeros -= 1
             total_rate -= br_lattice[selected] + d
-            state.data[selected] = 0
+            state[selected] = 0
             fitness_lattice[selected] = 0.
             br_lattice[selected] = 0.
             ## Update birth-rates
-            neighbours!(nn, I[selected], state)
+            neighbours!(nn, I[selected], state.lattice)
             for n in nn
                 if !out_of_bounds(n, lin_N)
                     j = Lin[n]
                     # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
-                    if state.data[j] != 0
+                    if state[j] != 0
                         DEBUG && println("adjusting rates on $j by $(fitness_lattice[j])")
                         total_rate -= br_lattice[j]
                         br_lattice[j] +=  1.0/length(nn) * fitness_lattice[j] * base_br
@@ -200,10 +200,10 @@ function die_or_proliferate!(
                     new = rand1toN(tot_N)
                 end
             else
-                neighbours!(nn, I[old], state)
+                neighbours!(nn, I[old], state.lattice)
                 validneighbour = false
                 for j in shuffle!(neighbour_indices)
-                    if !out_of_bounds(nn[j],lin_N) && state.data[nn[j]]==0
+                    if !out_of_bounds(nn[j],lin_N) && state[nn[j]]==0
                         new_cart = nn[j]
                         validneighbour = true
                         break
@@ -216,14 +216,14 @@ function die_or_proliferate!(
                 new = Lin[new_cart]
                 ## Mutation
                 # @assert genotype!=0
-                genotype = state.data[old]
+                genotype = state[old]
                 if rand()<mu
                     new_genotype = f_mut(state, phylogeny, genotype)
                     if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
                         if !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
                             add_vertex!(phylogeny)
                             set_indexing_prop!(phylogeny, nv(phylogeny), :genotype, new_genotype)
-                            set_prop!(phylogeny, nv(phylogeny), :T, t)
+                            set_prop!(phylogeny, nv(phylogeny), :T, state.t)
                         end
                         parent_vertex = phylogeny.metaindex[:genotype][genotype]
                         add_edge!(phylogeny,nv(phylogeny),parent_vertex)
@@ -231,19 +231,19 @@ function die_or_proliferate!(
                         genotype = new_genotype
                     end
                 end
-                state.data[new] = genotype
+                state[new] = genotype
                 fitness_lattice[new] = fitness(genotype)
 
-                br_lattice[new] = (1.0-density!(nn,state,I[new])) * base_br * fitness_lattice[new]
+                br_lattice[new] = (1.0-density!(nn,state.lattice,I[new])) * base_br * fitness_lattice[new]
                 nonzeros += 1
                 total_rate += d + br_lattice[new]
 
-                neighbours!(nn, I[new], state)
+                neighbours!(nn, I[new], state.lattice)
                 for n in nn
                     if !out_of_bounds(n, lin_N)
                         j = Lin[n]
                         # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
-                        if state.data[j] != 0
+                        if state[j] != 0
                             total_rate -= br_lattice[j]
                             br_lattice[j] -=  1.0/length(nn) * fitness_lattice[j] * base_br
                             total_rate += br_lattice[j]
@@ -254,9 +254,10 @@ function die_or_proliferate!(
         else
             DEBUG && println("Noone")
         end
-
+        state.t += 1
+        state.treal += -1/total_rate*log(1-rand())
     end
-    # @assert (mapreduce(+, enumerate(state.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0.; end) ≈ total_rate
+    # @assert (mapreduce(+, enumerate(state.lattice.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0.; end) ≈ total_rate
 end
 
 function independent_death_birth!(
@@ -270,8 +271,8 @@ function independent_death_birth!(
 
     genealogy::lattice.Phylogeny
 
-    I = CartesianIndices(state.data)
-    Lin = LinearIndices(state.data)
+    I = CartesianIndices(state.lattice.data)
+    Lin = LinearIndices(state.lattice)
 
     dim = length(size(lattice.data))
     lin_N = size(lattice.data,1)

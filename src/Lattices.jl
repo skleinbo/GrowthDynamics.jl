@@ -42,7 +42,6 @@ mutable struct LineLattice{T} <: AbstractLattice1D{T}
     Phylogeny::MetaDiGraph
 end
 
-const LineLatticeNeighbours = Neighbours{1}
 LineLatticeNeighbours() = [ CartesianIndex(0) for _ in 1:2 ]
 
 neighbours(L::LineLattice, m) = begin
@@ -51,7 +50,7 @@ neighbours(L::LineLattice, m) = begin
     tmp
 end
 
-neighbours!(nn::LineLatticeNeighbours, I::CartesianIndex, L::LineLattice) = @inbounds begin
+neighbours!(nn::Neighbours{1}, I::CartesianIndex, L::LineLattice) = @inbounds begin
         m = I[1]
         nn[1] = CartesianIndex(m-1)
         nn[2] = CartesianIndex(m+1)
@@ -69,7 +68,6 @@ mutable struct HexagonalLattice{T} <: AbstractLattice2D{T}
     Nb::Int # Lattice sites in direction b
     a::Real # Lattice constant
     data::Array{T,2}
-    Phylogeny::MetaDiGraph
 end
 
 # const HexLatticeNeighbours = Neighbours{2}
@@ -117,10 +115,9 @@ mutable struct HCPLattice{T} <: AbstractLattice3D{T}
     data::Array{T,3}
     Phylogeny::MetaDiGraph
 end
-const HCPNeighbours = Neighbours{3}
 HCPNeighbours() = [ CartesianIndex(0,0) for _ in 1:12 ]
 
-neighbours!(nn::HCPNeighbours, I::CartesianIndex, L::HCPLattice) = @inbounds begin
+neighbours!(nn::Neighbours{3}, I::CartesianIndex, L::HCPLattice) = @inbounds begin
     m,n,l = Tuple(I)
     if isodd(n)
         nn[1] = CartesianIndex(m-1, n-1, l)
@@ -164,61 +161,6 @@ end
 ind2coord(L::HCPLattice{T}, I::CartesianIndex) where T<:Any = L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2],I[3])
 
 ## -- END HCPLattice -- ##
-
-# using Interact
-# using Reactive
-# using IterTools
-
-function visualize(L::AbstractLattice3D)
-    # println(names(Main))
-    # println("fkfjk")
-    eval(Expr(:using, :IterTools))
-    eval(Expr(:using, :Reactive))
-    eval(Expr(:using, :Interact))
-
-    eval(Expr(:import, :Plots))
-    Plots.pyplot()
-
-    x = 1:L.Na
-    y = 1:L.Nb
-    z = 1:L.Nc
-    dir_dict = Dict(:x => x, :y => y, :z => z)
-
-    # xlim = L.a.* floor.( (ind2coord(L,)) )
-    # ylim = L.a.*
-    # zlim = L.a.*
-    plotops = ((:msw,0.2),(:aspect_ratio,1),(:lw,0), (:fmt,:png),(:size,(800,800)),
-        (:xlim,L.a.*(-L.Nb/2,L.Na)),(:ylim,L.a.*(0.,sqrt(3)/2*L.Nb)),(:zlim,L.a.*(0.,L.Nc)),
-        (:leg,false) )
-
-    dir_toggle =  togglebuttons([:x, :y, :z])
-    dir_sig = signal(dir_toggle)
-    slice_slider = slider(dir_dict[value(dir_sig)])
-    slice_sig = signal(slice_slider)
-        # println(dir)
-    plot_signal = map(dir_sig, slice_sig) do dir,k
-        # println(typeof(k),k)
-        # println(dir_sig)
-        if dir == :z
-            X = map( x->ind2coord(L,x...,k)[1:2], product(x,y));
-            Plots.scatter(X,zcolor=reshape(L.data[:,:,k],L.Na*L.Nb,1); plotops...)
-        elseif dir == :y
-            X = map( x->ind2coord(L,x[1],k,x[2])[1:2:3], product(x,z));
-            Plots.scatter(X,zcolor=reshape(L.data[:,k,:],L.Na*L.Nc,1); plotops...)
-        elseif dir == :x
-            X = map( x->ind2coord(L,k,x...)[2:3], product(y,z));
-            Plots.scatter(X,zcolor=reshape(L.data[k,:,:],L.Nb*L.Nc,1); plotops...)
-        else
-            println("Meh.")
-        end
-
-
-    end
-    # println(plot_signal)
-    display.([dir_toggle,slice_slider])
-    return plot_signal
-end
-
 
 
 end
