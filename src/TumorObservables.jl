@@ -1,13 +1,17 @@
 module TumorObservables
 
+import IndexedTables: table, join, renamecol
+
 import OpenCLPicker: @opencl
 
 @opencl import OpenCL
-import MetaGraphs: inneighbors
+import MetaGraphs: nv, inneighbors, neighborhood_dists, set_prop!, get_prop
 
 
 import ..Lattices
 import ..LatticeTumorDynamics
+
+import ..TumorConfigurations: TumorConfiguration
 
 @opencl import ..OffLattice
 @opencl import ..OffLatticeTumorDynamics
@@ -54,19 +58,31 @@ function total_population_size(L::Lattices.AbstractLattice{<:Integer})
     countnz(L.data)
 end
 
-function population_size(L::Lattices.AbstractLattice{<:Integer}, t)
-    m = maximum(L.data)
-    if m == 0
-        return []
+function population_size(L::Lattices.AbstractLattice{T}, t) where T<:Integer
+    D = Dict{T, Int64}()
+    for x in L.data
+        if x==0
+            continue
+        end
+        if !haskey(D, x)
+            push!(D, x=>1)
+        else
+            D[x] += 1
+        end
     end
-    genotypes = 1:m
-    Ng = [(g,0.) for g in genotypes]
-    for g in genotypes
-        Ng[g] = (g,count(x->x==g,L.data))
-    end
-    return Ng
+    return sort( [ (k,v) for (k,v) in D ], lt=(x,y)->x[1]<y[1] )
 end
 
+function set_population_size!(state::TumorConfiguration)
+    P = state.Phylogeny
+    ps = population_size(state.lattice, 0)
+    for (g,s) in ps
+        set_prop!(P, P[g, :genotype], :npop, s)
+    end
+    nothing
+end
+
+## SLOW
 @opencl function population_size(L::OffLattice.FreeSpace{<:Integer}, t)
     state = L.genotypes[Bool.(L._mask)]
     m = 0
@@ -198,12 +214,29 @@ function lone_survivor_condition(L)
     return 0 in u && length(u)==2 || length(u)==1
 end
 
+## Pylogenic observables
+##
+##
 function nchildren(L,g)
     vertex = L.Phylogeny[:genotype][g]
     length(inneighbors(L.Phylogeny, vertex))
 end
 
 has_children(L,g) = nchildren(L,g) > 0
+
+function phylo_hist(state::TumorConfiguration)
+    nb = neighborhood_dists(state.Phylogeny, 1, nv(state.Phylogeny), dir=:in)
+    nb_table = table(map(nb) do x
+        (get_prop(state.Phylogeny, x[1], :genotype),x[2])
+    end, pkey=[1])
+    renamecol(nb_table, 1=>:g, 2=>:dist)
+    # dists = getindex.(nb,2)
+    ps_table = table(population_size(state.lattice, 0), pkey=[1])
+    renamecol(ps_table, 1=>:g, 2=>:npop)
+
+    # verts = getindex.(nb,1)
+    join(ps_table, nb_table)
+end
 
 ##end module
 end

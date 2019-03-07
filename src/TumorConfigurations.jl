@@ -19,7 +19,8 @@ export
     uniform_sphere,
     uniform_sphere2,
     biallelic_layered,
-    biallelic_cornered;
+    biallelic_cornered,
+    TumorConfiguration
 
 mutable struct TumorConfiguration{T<:Lattices.AbstractLattice}
     lattice::T
@@ -38,6 +39,7 @@ function OnePhylogeny(g=1)
     G = MetaDiGraph(1)
     set_prop!(G,1,:genotype,g)
     set_prop!(G,1,:T,0)
+    set_prop!(G,1,:npop,0)
     set_indexing_prop!(G, :genotype)
     G
 end
@@ -49,6 +51,7 @@ function TwoPhylogeny(gv=[1,2])
     for v in [1,2]
         set_prop!(G,v,:genotype,gv[v])
         set_prop!(G,v,:T,0)
+        set_prop!(G,v,:npop,0)
     end
     set_indexing_prop!(G, :genotype)
     G

@@ -4,7 +4,7 @@ export  moran!,
         independent_death_birth!,
         die_or_proliferate!
 
-import MetaGraphs: nv, add_vertex!, add_edge!, set_indexing_prop!, set_prop!
+import MetaGraphs: nv, add_vertex!, add_edge!, set_indexing_prop!, set_prop!, get_prop
 using StatsBase: Weights,sample
 import Random: shuffle!
 
@@ -173,6 +173,11 @@ function die_or_proliferate!(
             DEBUG && println("Die")
             nonzeros -= 1
             total_rate -= br_lattice[selected] + d
+
+            g = state.lattice.data[selected]
+            old_ps = get_prop(phylogeny, phylogeny[g, :genotype], :npop)
+            set_prop!(phylogeny, phylogeny[g, :genotype], :npop, min(0,old_ps-1))
+
             state[selected] = 0
             fitness_lattice[selected] = 0.
             br_lattice[selected] = 0.
@@ -224,6 +229,7 @@ function die_or_proliferate!(
                             add_vertex!(phylogeny)
                             set_indexing_prop!(phylogeny, nv(phylogeny), :genotype, new_genotype)
                             set_prop!(phylogeny, nv(phylogeny), :T, state.t)
+                            set_prop!(phylogeny, nv(phylogeny), :npop, 0)
                         end
                         parent_vertex = phylogeny.metaindex[:genotype][genotype]
                         add_edge!(phylogeny,nv(phylogeny),parent_vertex)
@@ -231,6 +237,11 @@ function die_or_proliferate!(
                         genotype = new_genotype
                     end
                 end
+
+                g = state.lattice.data[selected]
+                old_ps = get_prop(phylogeny, phylogeny[g, :genotype], :npop)
+                set_prop!(phylogeny, phylogeny[g, :genotype], :npop, old_ps+1)
+
                 state[new] = genotype
                 fitness_lattice[new] = fitness(genotype)
 
