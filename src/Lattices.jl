@@ -1,6 +1,8 @@
 module Lattices
 
 export  AbstractLattice,
+        RealLattice,
+        NoLattice,
         HexagonalLattice,
         LineLattice,
         HCPLattice,
@@ -15,10 +17,11 @@ export  AbstractLattice,
 
 import MetaGraphs: MetaDiGraph
 
-abstract type AbstractLattice{T} end
-abstract type AbstractLattice1D{T} <:AbstractLattice{T} end
-abstract type AbstractLattice2D{T} <:AbstractLattice{T} end
-abstract type AbstractLattice3D{T} <:AbstractLattice{T} end
+abstract type AbstractLattice end
+abstract type AbstractLattice1D{T} <:AbstractLattice end
+abstract type AbstractLattice2D{T} <:AbstractLattice end
+abstract type AbstractLattice3D{T} <:AbstractLattice end
+const RealLattice{T} = Union{AbstractLattice1D{T}, AbstractLattice2D{T}, AbstractLattice3D{T}}
 
 out_of_bounds(I::CartesianIndex,N) = mapreduce(m->m<1||m>N,|,Tuple(I))
 
@@ -34,12 +37,17 @@ end
 
 const Neighbours{dim} = Vector{CartesianIndex{dim}}
 
+## --- NO LATTICE --- ##
+mutable struct NoLattice <: AbstractLattice
+    N::Int # System size
+end
+
+
 ## --- BEGIN 1D Lattice OBC -- ##
 mutable struct LineLattice{T} <: AbstractLattice1D{T}
     Na::Int # Lattice sites in direction a
     a::Real # Lattice constant
     data::Array{T,1}
-    Phylogeny::MetaDiGraph
 end
 
 LineLatticeNeighbours() = [ CartesianIndex(0) for _ in 1:2 ]

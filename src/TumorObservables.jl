@@ -5,7 +5,7 @@ import IndexedTables: table, join, renamecol
 import OpenCLPicker: @opencl
 
 @opencl import OpenCL
-import MetaGraphs: nv, inneighbors, neighborhood_dists, set_prop!, get_prop
+import MetaGraphs: nv, inneighbors, neighborhood, neighborhood_dists, set_prop!, get_prop, vertices
 
 
 import ..Lattices
@@ -26,7 +26,7 @@ export  allelic_fractions,
         nchildren,
         has_children
 
-function allelic_fractions(L::Lattices.AbstractLattice{<:Integer})
+function allelic_fractions(L::Lattices.RealLattice{<:Integer})
     m = maximum(L.data)
     if m == 0
         return []
@@ -54,11 +54,12 @@ end
     return Ng
 end
 
-function total_population_size(L::Lattices.AbstractLattice{<:Integer})
+function total_population_size(L::Lattices.RealLattice{<:Integer})
     countnz(L.data)
 end
 
-function population_size(L::Lattices.AbstractLattice{T}, t) where T<:Integer
+
+function population_size(L::Lattices.RealLattice{T}, t) where T<:Integer
     D = Dict{T, Int64}()
     for x in L.data
         if x==0
@@ -74,6 +75,9 @@ function population_size(L::Lattices.AbstractLattice{T}, t) where T<:Integer
 end
 
 function set_population_size!(state::TumorConfiguration)
+    if typeof(state.lattice) == NoLattice
+        return
+    end
     P = state.Phylogeny
     ps = population_size(state.lattice, 0)
     for (g,s) in ps
@@ -102,7 +106,7 @@ end
     return Ng
 end
 
-function surface(L::Lattices.AbstractLattice{<:Integer}, g::Int)
+function surface(L::Lattices.RealLattice{<:Integer}, g::Int)
     x = 0
     I = CartesianIndices(L.data)
     for j in eachindex(L.data)
@@ -117,7 +121,7 @@ function surface(L::Lattices.AbstractLattice{<:Integer}, g::Int)
     end
     return x
 end
-function surface2(L::Lattices.AbstractLattice{<:Integer}, g::Int)
+function surface2(L::Lattices.RealLattice{<:Integer}, g::Int)
     x = 0
     y = 0
     I = CartesianIndices(L.data)
@@ -229,13 +233,41 @@ function phylo_hist(state::TumorConfiguration)
     nb_table = table(map(nb) do x
         (get_prop(state.Phylogeny, x[1], :genotype),x[2])
     end, pkey=[1])
-    renamecol(nb_table, 1=>:g, 2=>:dist)
+    nb_table = renamecol(nb_table, 1=>:g, 2=>:dist)
     # dists = getindex.(nb,2)
     ps_table = table(population_size(state.lattice, 0), pkey=[1])
-    renamecol(ps_table, 1=>:g, 2=>:npop)
+    ps_table = renamecol(ps_table, 1=>:g, 2=>:npop)
 
     # verts = getindex.(nb,1)
     join(ps_table, nb_table)
+end
+
+## SLOW, to many passes over the whole graph.
+## Should be doable in one pass!
+function cphylo_hist(state::TumorConfiguration)
+    P = state.Phylogeny
+    nb = neighborhood_dists(P, 1, nv(P), dir=:in)
+    ps_table = table(population_size(state.lattice, 0), pkey=[1])
+    nb_table = table(map(nb) do x
+        (get_prop(P, x[1], :genotype),x[1], x[2])
+    end, pkey=[1])
+    nb_table = renamecol(nb_table, 1=>:g, 2=>:nv, 3=>:dist)
+    ps_table = renamecol(ps_table, 1=>:g, 2=>:npop)
+
+    joined = join(nb_table, ps_table, how=:outer)
+
+    map(vertices(P)) do bv
+        nb = neighborhood(P, bv, nv(P), dir=:in)
+        (nv=bv, dist=filter(x->x.nv==bv, joined)[1].dist,
+        cnpop=mapreduce(+, nb) do n
+            x = filter(x->x.nv==n, joined)[1].npop
+            if ismissing(x)
+                return 0.0
+            else
+                x
+            end
+        end)
+    end
 end
 
 ##end module

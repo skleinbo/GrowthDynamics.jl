@@ -9,7 +9,7 @@ using StatsBase: Weights,sample
 import Random: shuffle!
 
 using ..Lattices
-import ..TumorConfigurations
+import ..TumorConfigurations: TumorConfiguration
 
 # using OffLattice
 
@@ -26,27 +26,26 @@ growth_rate(nw,basebr) = basebr*(1 - 1/6*nw)
 ###--- Start of simulation methods ---###
 
 function moran!(
-    lattice::LT,
-    fitness::Vector{Float64};
+    state::TumorConfiguration{NoLattice};
+    fitness=g->1.0,
     T=0,
-    mu::Float64=10.0^-2,
-    f_mut=(L,G,g)->maximum(LightGraphs.vertices(G))+1,
-    constraint=true) where {LT<:AbstractLattice{<:Integer}}
+    mu::Float64=0.0,
+    f_mut=(L,G,g)->nv(G)+1,
+    d::Float64=1/100,
+    DEBUG=false,
+    callback=s->begin end,
+    abort=s->false,
+    kwargs...)
 
-    genealogy = lattice.Phylogeny
+    P = state.Phylogeny
+    K = state.lattice.N # Carrying capacity
 
-    I = CartesianIndices(lattice.data)
-    Lin = LineearIndices(lattice.data)
+    Ntotal = mapreduce(+, vertices(P)) do v
+        get_prop(P, v, :npop)
+    end
 
-    dim = length(size(lattice.data))
-    lin_N = size(lattice.data,1)
-    tot_N = lin_N^dim
 
-    genotype = maximum(LightGraphs.vertices(genealogy))
 
-    fitness_lattice = vec([k!=0 ? fitness[k] : 0. for k in lattice.data])
-
-    nn = neighbours(lattice, CartesianIndex{dim}()) # Initialize neighbours to the appr. type
     new = 0
     old = 0
     selected = 0
@@ -54,16 +53,9 @@ function moran!(
         ## Pick one to proliferate
         old = sample(1:tot_N, Weights(fitness_lattice))
 
-        if !constraint
+        new = rand(1:tot_N)
+        while new == old
             new = rand(1:tot_N)
-            while new == old
-                new = rand(1:tot_N)
-            end
-        else
-            neighbours!(nn,I[old],lattice)
-            nz_nn = filter(x->!out_of_bounds(x, lin_N), nn)
-            selected = rand(nz_nn)
-            new = Lin[selected]
         end
 
         genotype = f_mut(lattice,genealogy,lattice.data[old])
@@ -90,17 +82,17 @@ end
 
 
 function die_or_proliferate!(
-    ;state=TumorConfigurations.uniform_circle(0),
+    state::TC;
     fitness=()->0.0,
     T=0,
     mu::Float64=0.0,
-    f_mut=(L,G,g)->maximum(LightGraphs.vertices(G))+1,
+    f_mut=(L,G,g)->nv(G)+1,
     d::Float64=1/100,
     constraint=true,
     DEBUG=false,
     callback=s->begin end,
     abort=s->false,
-    kwargs...)
+    kwargs...) where TC::TumorConfigurations{<:RealLattice}
 
     phylogeny = state.Phylogeny
 
@@ -278,7 +270,7 @@ function independent_death_birth!(
     mu::Float64=10.0^-2,
     f_mut=(L,G,g)->maximum(LightGraphs.vertices(G))+1,
     d::Float64=1/100,
-    constraint=true) where LT<:AbstractLattice{<:Integer}
+    constraint=true) where LT<:RealLattice{<:Integer}
 
     genealogy::lattice.Phylogeny
 

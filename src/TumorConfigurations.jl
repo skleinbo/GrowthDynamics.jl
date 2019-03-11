@@ -8,6 +8,7 @@ import LightGraphs: DiGraph
 import MetaGraphs: MetaDiGraph, add_vertex!, add_edge!, set_prop!, set_indexing_prop!
 
 export
+    nolattice_state,
     single_center,
     single_center3,
     random_center,
@@ -32,6 +33,8 @@ TumorConfiguration(lattice::T, Phylogeny::MetaDiGraph) where T<:Lattices.Abstrac
 Base.getindex(T::TumorConfiguration,ind...) = T.lattice.data[ind...]
 Base.getindex(T::TumorConfiguration) = T.lattice.data
 Base.setindex!(T::TumorConfiguration,v,ind...) = T.lattice.data[ind...] = v
+
+nolattice_state(N::Int) = TumorConfiguration(Lattices.NoLattice(N), OnePhylogeny())
 
 
 "Returns a DiGraph with one vertex and {T=>0,genotype=>g} attribute."
