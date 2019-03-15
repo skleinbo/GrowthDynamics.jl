@@ -82,7 +82,7 @@ end
 
 
 function die_or_proliferate!(
-    state::TC;
+    state::TumorConfiguration{<:RealLattice};
     fitness=()->0.0,
     T=0,
     mu::Float64=0.0,
@@ -92,7 +92,7 @@ function die_or_proliferate!(
     DEBUG=false,
     callback=s->begin end,
     abort=s->false,
-    kwargs...) where TC::TumorConfigurations{<:RealLattice}
+    kwargs...)
 
     phylogeny = state.Phylogeny
 
