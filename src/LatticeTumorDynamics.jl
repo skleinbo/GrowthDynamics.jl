@@ -4,7 +4,8 @@ export  moran!,
         independent_death_birth!,
         die_or_proliferate!
 
-import MetaGraphs: nv, add_vertex!, add_edge!, set_indexing_prop!, set_prop!, get_prop
+import MetaGraphs: nv, vertices, add_vertex!, add_edge!,
+        set_indexing_prop!, set_prop!, set_props!, get_prop, has_prop
 using StatsBase: Weights,sample
 import Random: shuffle!
 
@@ -31,7 +32,6 @@ function moran!(
     T=0,
     mu::Float64=0.0,
     f_mut=(L,G,g)->nv(G)+1,
-    d::Float64=1/100,
     DEBUG=false,
     callback=s->begin end,
     abort=s->false,
@@ -40,34 +40,75 @@ function moran!(
     P = state.Phylogeny
     K = state.lattice.N # Carrying capacity
 
-    Ntotal = mapreduce(+, vertices(P)) do v
+    genotypes = map(vertices(P)) do v
+        get_prop(P, v, :genotype)
+    end
+    npops = map(vertices(P)) do v
         get_prop(P, v, :npop)
     end
+    rates = map(vertices(P)) do v
+        if !has_prop(P, v, :s)
+            set_prop!(P, v, :s, fitness(get_prop(P, v, :genotype)))
+        end
+        get_prop(P, v, :s)*get_prop(P, v, :npop)
+    end
+    fitnesses = map(vertices(P)) do v
+        get_prop(P, v, :s)
+    end
 
+    Ntotal = sum(npops)
+    total_rate = sum(rates)
 
-
+    wrates = Weights(rates)
+    wnpops = Weights(npops)
     new = 0
     old = 0
     selected = 0
     for t in 1:T
         ## Pick one to proliferate
-        old = sample(1:tot_N, Weights(fitness_lattice))
-
-        new = rand(1:tot_N)
-        while new == old
-            new = rand(1:tot_N)
+        old = sample(wrates)
+        new = sample(wnpops)
+        DEBUG && @info old, new
+        genotype = genotypes[old]
+        if rand()<mu
+            new_genotype = f_mut(state, P, genotype)
+            if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
+                if true || !in(new_genotype, genotypes)
+                    add_vertex!(P)
+                    push!(genotypes, new_genotype)
+                    push!(npops, 0)
+                    push!(rates, 0.0)
+                    push!(fitnesses, fitness(new_genotype))
+                end
+                add_edge!(P,nv(P),old)
+                old = length(genotypes)
+            end
         end
+        rates[old] += fitnesses[old]
+        total_rate += fitnesses[old]
+        npops[old] += 1
+        Ntotal += 1
 
-        genotype = f_mut(lattice,genealogy,lattice.data[old])
-        if rand()<mu && genotype<=length(fitness)
-            # LightGraphs.add_vertex!(genealogy)
-            # LightGraphs.add_edge!(genealogy,lattice.data[old],genotype)
-
-            lattice.data[new] = genotype
-            fitness_lattice[new] = fitness[genotype]
+        # If carrying capacity is reached, one needs to die.
+        if K < Ntotal
+            rates[new] -= fitnesses[new]
+            total_rate += fitnesses[new]
+            npops[new] -= 1
+            Ntotal -= 1
+        end
+        state.t += 1
+        state.treal += -1.0/total_rate*log(1.0-rand())
+    end
+    ## Update the phylogeny
+    for v in 1:length(npops)
+        if haskey(P.vprops, v)
+            P.vprops[v][:genotype] = genotypes[v]
+            #set_prop!(P, nv(P), :T, state.t)
+            P.vprops[v][:npop] = npops[v]
+            P.vprops[v][:s] = fitnesses[v]
         else
-            lattice.data[new] = lattice.data[old]
-            fitness_lattice[new] = fitness_lattice[old]
+            d = Dict(:genotype => genotypes[v], :npop => npops[v], :s => fitnesses[v])
+            set_props!(P, v, d)
         end
     end
 end
@@ -219,7 +260,7 @@ function die_or_proliferate!(
                     if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
                         if !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
                             add_vertex!(phylogeny)
-                            set_indexing_prop!(phylogeny, nv(phylogeny), :genotype, new_genotype)
+                            set_prop!(phylogeny, nv(phylogeny), :genotype, new_genotype)
                             set_prop!(phylogeny, nv(phylogeny), :T, state.t)
                             set_prop!(phylogeny, nv(phylogeny), :npop, 0)
                         end
@@ -258,7 +299,7 @@ function die_or_proliferate!(
             DEBUG && println("Noone")
         end
         state.t += 1
-        state.treal += -1/total_rate*log(1-rand())
+        state.treal += -1.0/total_rate*log(1.0-rand())
     end
     # @assert (mapreduce(+, enumerate(state.lattice.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0.; end) ≈ total_rate
 end

@@ -43,7 +43,6 @@ function OnePhylogeny(g=1)
     set_prop!(G,1,:genotype,g)
     set_prop!(G,1,:T,0)
     set_prop!(G,1,:npop,0)
-    set_indexing_prop!(G, :genotype)
     G
 end
 
@@ -56,7 +55,6 @@ function TwoPhylogeny(gv=[1,2])
         set_prop!(G,v,:T,0)
         set_prop!(G,v,:npop,0)
     end
-    set_indexing_prop!(G, :genotype)
     G
 end
 

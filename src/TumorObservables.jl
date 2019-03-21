@@ -74,6 +74,12 @@ function population_size(L::Lattices.RealLattice{T}, t) where T<:Integer
     return sort( [ (k,v) for (k,v) in D ], lt=(x,y)->x[1]<y[1] )
 end
 
+function population_size(S::TumorConfiguration, t)
+    map(vertices(S.Phylogeny)) do v
+        get_prop(S.Phylogeny, v, :genotype), get_prop(S.Phylogeny, v, :npop)
+    end
+end
+
 function set_population_size!(state::TumorConfiguration)
     if typeof(state.lattice) == NoLattice
         return
@@ -235,7 +241,7 @@ function phylo_hist(state::TumorConfiguration)
     end, pkey=[1])
     nb_table = renamecol(nb_table, 1=>:g, 2=>:dist)
     # dists = getindex.(nb,2)
-    ps_table = table(population_size(state.lattice, 0), pkey=[1])
+    ps_table = table(population_size(state, 0), pkey=[1])
     ps_table = renamecol(ps_table, 1=>:g, 2=>:npop)
 
     # verts = getindex.(nb,1)
@@ -247,7 +253,7 @@ end
 function cphylo_hist(state::TumorConfiguration)
     P = state.Phylogeny
     nb = neighborhood_dists(P, 1, nv(P), dir=:in)
-    ps_table = table(population_size(state.lattice, 0), pkey=[1])
+    ps_table = table(population_size(state, 0), pkey=[1])
     nb_table = table(map(nb) do x
         (get_prop(P, x[1], :genotype),x[1], x[2])
     end, pkey=[1])
