@@ -41,6 +41,8 @@ include("LatticeTumorDynamics.jl")
 include("TumorObservables.jl")
 include("AnalysisMethods.jl")
 include("FitnessIterators.jl")
+include("Phylogenies.jl")
+
 @opencl begin
     include("OffLattice.jl")
     include("OffLatticeTumorDynamics.jl")
@@ -60,10 +62,11 @@ using DataFrames
 @reexport using ObservableCollector
 
 using .FitnessIterators
-import .TumorConfigurations
-using .LatticeTumorDynamics
+@reexport using .TumorConfigurations
+@reexport using .LatticeTumorDynamics
 @reexport using .TumorObservables
 @reexport using .AnalysisMethods
+@reexport using .Phylogenies
 
 
 end

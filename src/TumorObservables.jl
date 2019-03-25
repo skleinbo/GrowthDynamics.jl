@@ -24,7 +24,9 @@ export  allelic_fractions,
         boundary,
         lone_survivor_condition,
         nchildren,
-        has_children
+        has_children,
+        cphylo_hist,
+        phylo_hist
 
 function allelic_fractions(L::Lattices.RealLattice{<:Integer})
     m = maximum(L.data)
@@ -57,6 +59,13 @@ end
 function total_population_size(L::Lattices.RealLattice{<:Integer})
     countnz(L.data)
 end
+
+function total_population_size(S::TumorConfiguration)
+    mapreduce(+, vertices(S.Phylogeny)) do v
+            get_prop(S.Phylogeny, v, :npop)
+    end
+end
+
 
 
 function population_size(L::Lattices.RealLattice{T}, t) where T<:Integer

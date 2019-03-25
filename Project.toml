@@ -3,6 +3,7 @@ name = "GrowthDynamics"
 [deps]
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 GeometryTypes = "4d00f742-c7ba-57c2-abde-4428a4b178cb"
 IndexedTables = "6deec6e2-d858-57c5-ab9b-e6ca5bd20e43"
