@@ -1,17 +1,22 @@
 module TumorObservables
 
-import IndexedTables: table, join, renamecol
+import IndexedTables: table, join, renamecol, pushcol, select
 
 import OpenCLPicker: @opencl
 
 @opencl import OpenCL
 import MetaGraphs: nv, inneighbors, neighborhood, neighborhood_dists, set_prop!, get_prop, vertices
+import LightGraphs: SimpleGraph,
+                    enumerate_paths,
+                    bellman_ford_shortest_paths
 
 
 import ..Lattices
 import ..LatticeTumorDynamics
 
 import ..TumorConfigurations: TumorConfiguration
+
+using ..Phylogenies
 
 @opencl import ..OffLattice
 @opencl import ..OffLatticeTumorDynamics
@@ -257,8 +262,6 @@ function phylo_hist(state::TumorConfiguration)
     join(ps_table, nb_table)
 end
 
-## SLOW, to many passes over the whole graph.
-## Should be doable in one pass!
 function cphylo_hist(state::TumorConfiguration)
     P = state.Phylogeny
     nb = neighborhood_dists(P, 1, nv(P), dir=:in)
@@ -270,19 +273,21 @@ function cphylo_hist(state::TumorConfiguration)
     ps_table = renamecol(ps_table, 1=>:g, 2=>:npop)
 
     joined = join(nb_table, ps_table, how=:outer)
+    joined = pushcol(joined, :cnpop, fill(1, length(joined)))
 
-    map(vertices(P)) do bv
-        nb = neighborhood(P, bv, nv(P), dir=:in)
-        (nv=bv, dist=filter(x->x.nv==bv, joined)[1].dist,
-        cnpop=mapreduce(+, nb) do n
-            x = filter(x->x.nv==n, joined)[1].npop
-            if ismissing(x)
-                return 0.0
-            else
-                x
-            end
-        end)
+    unP = SimpleGraph(P.graph)
+    paths = enumerate_paths(bellman_ford_shortest_paths(unP, 1))
+
+    npops = select(joined, :npop)|>copy
+    cnpops = select(joined, :cnpop)
+
+    popfirst!(paths)
+    for path in paths
+        cnpop_new = cnpops[path[end]]
+        cnpops[path[1:end-1]] .+= cnpop_new
     end
+
+    return joined
 end
 
 ##end module
