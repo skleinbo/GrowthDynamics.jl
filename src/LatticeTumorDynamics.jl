@@ -26,6 +26,8 @@ growth_rate(nw,basebr) = basebr*(1 - 1/6*nw)
 ## ~3x speedup
 @inline rand1toN(N) = rand(1:N)
 
+const MutationProfile = Tuple(Symbol, Float64, Int64) # (rate, :poisson/:fixed, genome length)
+
 ###--- Start of simulation methods ---###
 
 function exponential!(
@@ -33,7 +35,7 @@ function exponential!(
     fitness=g->1.0,
     T=0,
     baserate=1.0,
-    mu::Float64=0.0,
+    p_mu::Float64=0.0,
     f_mut=(L,G,g)->nv(G)+1,
     DEBUG=false,
     callback=s->begin end,
@@ -66,7 +68,7 @@ function exponential!(
     old = 0
     selected = 0
     for step in 1:T
-        DEBUG && @info "Step $step/$T"
+        @debug "Step $step/$T"
         told = state.treal
         state.treal += 1.0/(baserate*mean(fitnesses))
         dt = state.treal - told
@@ -77,19 +79,19 @@ function exponential!(
         end
 
         for (j,genotype) in enumerate(genotypes)|>collect
-            DEBUG && @info "Genotype: $j,$genotype"
+            @debug "Genotype: $j,$genotype"
             if npops[j] == 0
-                DEBUG && @info "g$genotype is empty; skipping"
+                @debug "g$genotype is empty; skipping"
                 continue
             end
             pgrow = 1.0 - exp(-fitnesses[j]/mean(fitnesses)) #CDF of exponential with s/<s>
-            DEBUG && @info "Pgrow = $pgrow"
+            @debug "Pgrow = $pgrow"
             nplus = min(rand(Binomial(npops[j], pgrow)), K-Ntotal) # How many proliferate?
             if nplus<=0
                 continue
             end
-            nmutants = rand(Binomial(nplus, mu)) # How many of those mutate?
-            DEBUG && @info step, genotype, nplus, nmutants
+            nmutants = rand(Binomial(nplus, p_mu)) # How many of those mutate?
+            @debug step, genotype, nplus, nmutants
             for _ in 1:nmutants
                 new_genotype = f_mut(state, P, genotype)
                 if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
@@ -133,7 +135,7 @@ function moran!(
     state::TumorConfiguration{NoLattice};
     fitness=g->1.0,
     T=0,
-    mu::Float64=0.0,
+    p_mu::Float64=0.0,
     f_mut=(L,G,g)->nv(G)+1,
     DEBUG=false,
     callback=s->begin end,
@@ -171,9 +173,9 @@ function moran!(
         ## Pick one to proliferate
         old = sample(wrates)
         new = sample(wnpops)
-        DEBUG && @info old, new
+        @debug old, new
         genotype = genotypes[old]
-        if rand()<mu
+        if rand()<p_mu
             new_genotype = f_mut(state, P, genotype)
             if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
                 if true || !in(new_genotype, genotypes)

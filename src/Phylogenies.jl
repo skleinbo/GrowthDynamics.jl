@@ -31,6 +31,23 @@ function df_traversal!(V::Vector{Int}, G::SimpleDiGraph, r::Int)
 end
 
 """
+Zero-truncated Poisson sampler with rate `λ`.
+"""
+@inline function sample_ztp(lambda::Float64)
+  k = 1
+  t = exp(-lambda) / (1 - exp(-lambda)) * lambda
+  s = t
+  u = rand()
+  while s < u
+    k += 1
+    t *= lambda / k
+    s += t
+  end
+  k
+end
+
+
+"""
 Annotate a phylogeny with SNPs. Every vertex in the phylogeny inherits the SNPs its parent
 plus (on average) `μ` new ones.
 
@@ -51,7 +68,7 @@ function annotate_snps!(S::TumorConfigurations.TumorConfiguration, μ;
         parent = outneighbors(P, v)[1]
         snps = copy(get_prop(P, parent, :snps))
         if kind == :poisson
-            count = rand(D)
+            count = sample_ztp(μ)
         else
             count = μ
         end
@@ -72,6 +89,28 @@ function annotate_snps!(S::TumorConfigurations.TumorConfiguration, μ;
         set_prop!(P, v, :snps, snps)
     end
 end
+
+
+"""
+Remove unpopulated genotypes from the graph.
+"""
+function prune_phylogeny(S::TumorConfigurations.TumorConfiguration)
+    P = copy(S.Phylogeny)
+    tree = df_traversal(P.graph)|>reverse
+    popfirst!(tree)
+
+    for (i,v) in enumerate(tree)
+        if get_prop(P, v, :npop) == 0
+            child = inneighbors(P, v)
+            if !isempty(child)
+                add_edge!(P, child[1], outneighbors(P, v)[1])
+            end
+            rem_vertex!(P, v)
+        end
+    end
+    P
+end
+
 
 
 

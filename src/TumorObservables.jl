@@ -1,6 +1,7 @@
 module TumorObservables
 
 import IndexedTables: table, join, renamecol, pushcol, select
+import LinearAlgebra: Symmetric
 
 import OpenCLPicker: @opencl
 
@@ -31,7 +32,10 @@ export  allelic_fractions,
         nchildren,
         has_children,
         cphylo_hist,
-        phylo_hist
+        phylo_hist,
+        polymorphisms,
+        npolymorphisms,
+        pairwise
 
 function allelic_fractions(L::Lattices.RealLattice{<:Integer})
     m = maximum(L.data)
@@ -289,6 +293,103 @@ function cphylo_hist(state::TumorConfiguration)
 
     return joined
 end
+
+## Phylogenetic observables
+
+function polymorphisms(S::TumorConfiguration)
+    mapreduce(vcat, vertices(S.Phylogeny)) do v
+        try
+            get_prop(S.Phylogeny, v, :snps)
+        catch
+            @info "Vertex $v carries no field snps."
+            Int64[]
+        end
+    end |> unique |> sort
+end
+
+npolymorphisms(S::TumorConfiguration) = length(polymorphisms(S))
+
+function nsymdiff(A,B)
+    x = 0
+    A = sort(A)
+    B = sort(B)
+
+    if isempty(A)
+        return length(B)
+    elseif isempty(B)
+        return length(A)
+    end
+
+    j = 1
+    k = 1
+    while j<=length(A) && k<=length(B)
+        if A[j] == B[k]
+            j += 1
+            while 2<=j<=length(A) && A[j] == A[j-1]
+                j += 1
+            end
+            k += 1
+            while 2<=j<=length(B) && B[j] == B[j-1]
+                k += 1
+            end
+        elseif A[j] > B[k]
+            k += 1
+            while 2<=j<=length(B) && B[j] == B[j-1]
+                k += 1
+            end
+            x += 1
+        else
+            j += 1
+            while 2<=j<=length(A) && A[j] == A[j-1]
+                j += 1
+            end
+            x += 1
+        end
+    end
+    x + length(A)-(j-1) + length(B)-(k-1)
+end
+
+
+function pairwise(S::TumorConfiguration, i, j)
+    si = get_prop(S.Phylogeny, i, :snps)
+    sj = get_prop(S.Phylogeny, j, :snps)
+    nsymdiff(si,sj)
+end
+
+function pairwise(S::TumorConfiguration)
+    X = fill(0, nv(S.Phylogeny), nv(S.Phylogeny))
+    for i in 1:nv(S.Phylogeny), j in i+1:nv(S.Phylogeny)
+        X[i,j] = pairwise(S, i, j)
+    end
+    Symmetric(X)
+end
+
+function mean_pairwise(S::TumorConfiguration)
+    X = 0
+    for i in 2:nv(S.Phylogeny), j in i:nv(S.Phylogeny)
+        X += pairwise(S, i, j)
+    end
+    X / binomial(nv(S.Phylogeny), 2)
+end
+
+"""
+See https://en.wikipedia.org/wiki/Tajima%27s_D
+"""
+function tajimasd(n, S, k)
+    a1 = sum((1/i for i in 1:n-1))
+    a2 = sum((1/i^2 for i in 1:n-1))
+    b1 = (n+1)/3/(n-1)
+    b2 = 2(n^2+n+3)/9/n/(n-1)
+    c1 = b1 - 1/a1
+    c2 = b2 - (n+2)/a1/n + a2/a1^2
+    e1 = c1/a1
+    e2 = c1/(a1^2+a2)
+
+    return (k - S/a1) / sqrt(e1*S + e2*S*(S-1))
+end
+
+tajimasd(S::TumorConfiguration) = tajimasd(total_population_size(S), npolymorphisms(S), mean_pairwise(S))
+
 
 ##end module
 end
