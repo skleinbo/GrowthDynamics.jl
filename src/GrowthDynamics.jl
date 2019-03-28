@@ -38,10 +38,10 @@ end
 include("Lattices.jl")
 include("TumorConfigurations.jl")
 include("LatticeTumorDynamics.jl")
+include("Phylogenies.jl")
 include("TumorObservables.jl")
 include("AnalysisMethods.jl")
 include("FitnessIterators.jl")
-include("Phylogenies.jl")
 
 @opencl begin
     include("OffLattice.jl")

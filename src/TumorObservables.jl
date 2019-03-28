@@ -299,7 +299,7 @@ end
 function polymorphisms(S::TumorConfiguration)
     mapreduce(vcat, vertices(S.Phylogeny)) do v
         try
-            get_prop(S.Phylogeny, v, :snps)
+            ifelse(get_prop(S.Phylogeny, v, :npop) > 0, get_prop(S.Phylogeny, v, :snps), Int64[])
         catch
             @info "Vertex $v carries no field snps."
             Int64[]
@@ -367,9 +367,9 @@ end
 function mean_pairwise(S::TumorConfiguration)
     X = 0
     for i in 2:nv(S.Phylogeny), j in i:nv(S.Phylogeny)
-        X += pairwise(S, i, j)
+        X += pairwise(S, i, j)*get_prop(S.Phylogeny, i, :npop)*get_prop(S.Phylogeny, j, :npop)
     end
-    X / binomial(nv(S.Phylogeny), 2)
+    X / binomial(total_population_size(S), 2)
 end
 
 """

@@ -26,7 +26,7 @@ growth_rate(nw,basebr) = basebr*(1 - 1/6*nw)
 ## ~3x speedup
 @inline rand1toN(N) = rand(1:N)
 
-const MutationProfile = Tuple(Symbol, Float64, Int64) # (rate, :poisson/:fixed, genome length)
+const MutationProfile = Tuple{Symbol, Float64, Int64} # (rate, :poisson/:fixed, genome length)
 
 ###--- Start of simulation methods ---###
 

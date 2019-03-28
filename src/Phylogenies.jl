@@ -55,9 +55,10 @@ plus (on average) `μ` new ones.
 * `L=10^9`: length of the genome
 * `allow_multiple=false`: Allow for a site to mutate more than once.
 * `kind=:poisson`: `:poisson` or `:fixed`
+- `replace=false`: Replace existing SNPs.
 """
 function annotate_snps!(S::TumorConfigurations.TumorConfiguration, μ;
-    L=10^9, allow_multiple=false, kind=:poisson)
+    L=10^9, allow_multiple=false, kind=:poisson, replace=false)
 
     P = S.Phylogeny
     D = Poisson(μ)
@@ -65,6 +66,9 @@ function annotate_snps!(S::TumorConfigurations.TumorConfiguration, μ;
     tree = df_traversal(P.graph)
     set_prop!(P, 1, :snps, Int[])
     for v in tree
+        if !replace && has_prop(P, v, :snps) && !isempty(get_prop(P,v,:snps))
+            continue
+        end
         parent = outneighbors(P, v)[1]
         snps = copy(get_prop(P, parent, :snps))
         if kind == :poisson
@@ -94,21 +98,56 @@ end
 """
 Remove unpopulated genotypes from the graph.
 """
-function prune_phylogeny(S::TumorConfigurations.TumorConfiguration)
-    P = copy(S.Phylogeny)
-    tree = df_traversal(P.graph)|>reverse
-    popfirst!(tree)
+prune_phylogeny(S::TumorConfigurations.TumorConfiguration) = prune_phylogeny(S.Phylogeny)
+function prune_phylogeny(S::MetaDiGraph)
+    P = copy(S)
 
-    for (i,v) in enumerate(tree)
-        if get_prop(P, v, :npop) == 0
-            child = inneighbors(P, v)
-            if !isempty(child)
-                add_edge!(P, child[1], outneighbors(P, v)[1])
+    function bridge!(s, d)
+        children = inneighbors(P, d)
+        if s==1 || get_prop(P,d,:npop) > 0
+            @debug "Adding edge"  d s
+            add_edge!(P, d, s)
+        elseif length(children)==0
+            return
+        elseif length(children) >= 1
+            for child in children
+                bridge!(s, child)
             end
-            rem_vertex!(P, v)
         end
     end
-    P
+
+    itr = filter(v->get_prop(P,v,:npop)==0 && v!=1, df_traversal(P.graph))|>collect
+    subvertices = setdiff(1:nv(P), itr)
+    for (i,v) in enumerate(itr)
+        children = inneighbors(P, v)
+        parent = outneighbors(P, v)
+        @debug "Vertex $v is empty" v children  parent[1]
+        while parent[1]!=1 && !isempty(parent) && get_prop(P, parent[1], :npop) == 0
+            parent = outneighbors(P, parent[1])
+            # if isempty(parent) || parent[1]==1
+            #     break
+            # end
+        end
+        if isempty(parent)
+            continue
+        end
+        if !isempty(children)
+            for child in children
+                bridge!(parent[1], child)
+            end
+        end
+        # @debug "Removing vertex" v
+        # rem_vertex!(P, v)
+    end
+    # while begin v=findfirst(x->get_prop())
+    SP = induced_subgraph(P, subvertices)
+    # @assert is_connected(SP[1])
+    return SP
+    # if !is_connected(SP[1])
+    #     return (P,SP)
+    # else
+    #     SP
+    # end
 end
 
 
