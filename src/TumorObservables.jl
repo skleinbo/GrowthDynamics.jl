@@ -6,7 +6,9 @@ import LinearAlgebra: Symmetric
 import OpenCLPicker: @opencl
 
 @opencl import OpenCL
-import MetaGraphs: nv, inneighbors, neighborhood, neighborhood_dists, set_prop!, get_prop, vertices
+import MetaGraphs:  nv, inneighbors, neighborhood, neighborhood_dists,
+                    set_prop!, get_prop, vertices,
+                    filter_vertices
 import LightGraphs: SimpleGraph,
                     enumerate_paths,
                     bellman_ford_shortest_paths
@@ -296,6 +298,17 @@ end
 
 ## Phylogenetic observables
 
+function common_snps(S::TumorConfiguration)
+    intersect(map(filter_vertices(S.Phylogeny, (S,v)->get_prop(S, v, :npop) > 0)) do v
+        try
+            get_prop(S.Phylogeny, v, :snps)
+        catch
+            @info "Vertex $v carries no field snps."
+            Int64[]
+        end
+    end...)
+end
+
 function polymorphisms(S::TumorConfiguration)
     mapreduce(vcat, vertices(S.Phylogeny)) do v
         try
@@ -383,7 +396,7 @@ function tajimasd(n, S, k)
     c1 = b1 - 1/a1
     c2 = b2 - (n+2)/a1/n + a2/a1^2
     e1 = c1/a1
-    e2 = c1/(a1^2+a2)
+    e2 = c2/(a1^2+a2)
 
     return (k - S/a1) / sqrt(e1*S + e2*S*(S-1))
 end

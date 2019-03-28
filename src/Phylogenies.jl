@@ -7,7 +7,13 @@ using   Distributions,
 import ..TumorConfigurations
 
 export  annotate_snps!,
-        df_traversal
+        df_traversal,
+        harm,
+        harm2,
+        prune_phylogeny
+
+harm(N::Integer) = sum(1/i for i in 1:N)
+harm2(N::Integer) = sum(1/i^2 for i in 1:N)
 
 """
 Traverse a phylogenetic tree depth first, starting at vertex 1, which is
