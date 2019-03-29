@@ -229,7 +229,7 @@ end
 
 function die_or_proliferate!(
     state::TumorConfiguration{<:RealLattice};
-    fitness=()->0.0,
+    fitness=g->0.0,
     T=0,
     mu::Float64=0.0,
     f_mut=(L,G,g)->nv(G)+1,
@@ -240,7 +240,16 @@ function die_or_proliferate!(
     abort=s->false,
     kwargs...)
 
-    phylogeny = state.Phylogeny
+    P = state.Phylogeny
+    genotypes = map(vertices(P)) do v
+        get_prop(P, v, :genotype)
+    end
+    npops = map(vertices(P)) do v
+        get_prop(P, v, :npop)
+    end
+    fitnesses = map(vertices(P)) do v
+        get_prop(P, v, :s)
+    end
 
     I = CartesianIndices(state.lattice.data)
     Lin = LinearIndices(state.lattice.data)
@@ -249,7 +258,7 @@ function die_or_proliferate!(
     lin_N = size(state.lattice.data,1)
     tot_N = length(state.lattice.data)
 
-    fitness_lattice = vec([k!=0 ? fitness(k) : 0. for k in state.lattice.data])
+    fitness_lattice = vec([k!=0 ? fitnesses[k] : 0. for k in state.lattice.data])
     br_lattice = zeros(tot_N)
 
     nonzeros = count(x->x!=0, state.lattice.data)
@@ -271,7 +280,7 @@ function die_or_proliferate!(
     validneighbour = false
     action = :none
     total_rate = mapreduce(+, enumerate(state.lattice.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0. end
-    DEBUG && println(total_rate)
+    @debug total_rate
 
     @inbounds for t in 0:T
         Base.invokelatest(callback,state)
@@ -306,15 +315,16 @@ function die_or_proliferate!(
             end
         end
 
-        DEBUG && println(br_lattice)
+        @debug br_lattice
         if action == :die
-            DEBUG && println("Die")
+            @debug "Die"
             nonzeros -= 1
             total_rate -= br_lattice[selected] + d
 
             g = state.lattice.data[selected]
-            old_ps = get_prop(phylogeny, phylogeny[g, :genotype], :npop)
-            set_prop!(phylogeny, phylogeny[g, :genotype], :npop, min(0,old_ps-1))
+            g_id = findfirst(x->x==g, genotypes)
+            old_ps = npops[g_id]
+            npops[g_id] = min(0,old_ps-1)
 
             state[selected] = 0
             fitness_lattice[selected] = 0.
@@ -326,7 +336,7 @@ function die_or_proliferate!(
                     j = Lin[n]
                     # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
                     if state[j] != 0
-                        DEBUG && println("adjusting rates on $j by $(fitness_lattice[j])")
+                        @debug "adjusting rates on $j by $(fitness_lattice[j])"
                         total_rate -= br_lattice[j]
                         br_lattice[j] +=  1.0/length(nn) * fitness_lattice[j] * base_br
                         total_rate += br_lattice[j]
@@ -335,7 +345,7 @@ function die_or_proliferate!(
             end
             ##
         elseif action == :proliferate
-            DEBUG && println("Live")
+            @debug "Live"
             old = selected
             if !constraint
                 new = 0
@@ -360,28 +370,24 @@ function die_or_proliferate!(
                 ## Mutation
                 # @assert genotype!=0
                 genotype = state[old]
+                g_id = findfirst(x->x==genotype, genotypes)
                 if rand()<mu
-                    new_genotype = f_mut(state, phylogeny, genotype)
+                    new_genotype = f_mut(state, P, genotype)
                     if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
-                        if !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
-                            add_vertex!(phylogeny)
-                            set_prop!(phylogeny, nv(phylogeny), :genotype, new_genotype)
-                            set_prop!(phylogeny, nv(phylogeny), :T, state.t)
-                            set_prop!(phylogeny, nv(phylogeny), :npop, 0)
+                        if true || !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
+                            add_vertex!(P)
+                            push!(genotypes, new_genotype)
+                            push!(npops, 1)
+                            push!(fitnesses, fitness(new_genotype))
                         end
-                        parent_vertex = phylogeny.metaindex[:genotype][genotype]
-                        add_edge!(phylogeny,nv(phylogeny),parent_vertex)
-
+                        add_edge!(P,nv(P),g_id)
                         genotype = new_genotype
+                        g_id += 1
                     end
                 end
 
-                g = state.lattice.data[selected]
-                old_ps = get_prop(phylogeny, phylogeny[g, :genotype], :npop)
-                set_prop!(phylogeny, phylogeny[g, :genotype], :npop, old_ps+1)
-
                 state[new] = genotype
-                fitness_lattice[new] = fitness(genotype)
+                fitness_lattice[new] = fitnesses[g_id]
 
                 br_lattice[new] = (1.0-density!(nn,state.lattice,I[new])) * base_br * fitness_lattice[new]
                 nonzeros += 1
@@ -401,10 +407,22 @@ function die_or_proliferate!(
                 end
             end
         else
-            DEBUG && println("Noone")
+            @debug "Noone"
         end
         state.t += 1
         state.treal += -1.0/total_rate*log(1.0-rand())
+    end
+    ## Update the phylogeny
+    for v in 1:length(npops)
+        if haskey(P.vprops, v)
+            P.vprops[v][:genotype] = genotypes[v]
+            #set_prop!(P, nv(P), :T, state.t)
+            P.vprops[v][:npop] = npops[v]
+            P.vprops[v][:s] = fitnesses[v]
+        else
+            d = Dict(:genotype => genotypes[v], :npop => npops[v], :s => fitnesses[v])
+            set_props!(P, v, d)
+        end
     end
     # @assert (mapreduce(+, enumerate(state.lattice.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0.; end) ≈ total_rate
 end
