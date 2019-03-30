@@ -14,6 +14,8 @@ import Random: shuffle!
 using ..Lattices
 import ..TumorConfigurations: TumorConfiguration
 
+import ..Phylogenies: annotate_snps!, prune_phylogeny
+
 # using OffLattice
 
 
@@ -271,6 +273,8 @@ function die_or_proliferate!(
         br_lattice[k] = (1.0-density!(nn,state.lattice,I[k])) * base_br * fitness_lattice[k]
     end
 
+    p_mu = 1.0 - exp(-mu)
+
     new = 0
     new_cart = nn[1]
     old = 0
@@ -371,7 +375,7 @@ function die_or_proliferate!(
                 # @assert genotype!=0
                 genotype = state[old]
                 g_id = findfirst(x->x==genotype, genotypes)
-                if rand()<mu
+                if rand()<p_mu
                     new_genotype = f_mut(state, P, genotype)
                     if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
                         if true || !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
@@ -424,6 +428,9 @@ function die_or_proliferate!(
             set_props!(P, v, d)
         end
     end
+    annotate_snps!(state, mu)
+    state.Phylogeny = prune_phylogeny(P)[1]
+    nothing
     # @assert (mapreduce(+, enumerate(state.lattice.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0.; end) ≈ total_rate
 end
 

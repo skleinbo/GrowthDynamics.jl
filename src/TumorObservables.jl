@@ -37,7 +37,9 @@ export  allelic_fractions,
         phylo_hist,
         polymorphisms,
         npolymorphisms,
-        pairwise
+        common_snps,
+        pairwise,
+        mean_pairwise
 
 function allelic_fractions(L::Lattices.RealLattice{<:Integer})
     m = maximum(L.data)
@@ -299,14 +301,19 @@ end
 ## Phylogenetic observables
 
 function common_snps(S::TumorConfiguration)
-    intersect(map(filter_vertices(S.Phylogeny, (S,v)->get_prop(S, v, :npop) > 0)) do v
-        try
-            get_prop(S.Phylogeny, v, :snps)
-        catch
-            @info "Vertex $v carries no field snps."
-            Int64[]
-        end
-    end...)
+    populated = filter_vertices(S.Phylogeny, (S,v)->get_prop(S, v, :npop) > 0)
+    if isempty(populated)
+        return Int64[]
+    else
+        intersect(map(populated) do v
+            try
+                get_prop(S.Phylogeny, v, :snps)
+            catch
+                @info "Vertex $v carries no field snps."
+                Int64[]
+            end
+        end...)
+    end
 end
 
 function polymorphisms(S::TumorConfiguration)

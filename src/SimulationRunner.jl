@@ -60,14 +60,14 @@ function _run_sim_conditional!(
 
     state = setup()
     max_T = params[:T]
-    dyn!(;params...,state=state,T=sweep)
+    dyn!(state;params...,T=sweep)
 
     k = 2
     X = []
 
     obs_callback(s,t) = obs(X,s,t)
 
-    dyn!(;params...,state=state,T=max_T,callback=obs_callback,abort=abort)
+    dyn!(state;params...,T=max_T,callback=obs_callback,abort=abort)
 
     if isempty(X)
         if isdefined(Main,:STRICT) && Main.STRICT
