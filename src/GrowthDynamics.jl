@@ -37,8 +37,8 @@ end
 
 include("Lattices.jl")
 include("TumorConfigurations.jl")
-include("LatticeTumorDynamics.jl")
 include("Phylogenies.jl")
+include("LatticeTumorDynamics.jl")
 include("TumorObservables.jl")
 include("AnalysisMethods.jl")
 include("FitnessIterators.jl")

@@ -137,10 +137,10 @@ function moran!(
     state::TumorConfiguration{NoLattice};
     fitness=g->1.0,
     T=0,
-    p_mu::Float64=0.0,
-    f_mut=(L,G,g)->nv(G)+1,
+    mu::Float64=0.0,
+    prune_period=0,
     DEBUG=false,
-    callback=s->begin end,
+    callback=(s,t)->begin end,
     abort=s->false,
     kwargs...)
 
@@ -166,22 +166,62 @@ function moran!(
     Ntotal = sum(npops)
     total_rate = sum(rates)
 
+    p_mu = 1.0 - exp(-mu)
+
     wrates = Weights(rates)
     wnpops = Weights(npops)
     new = 0
     old = 0
     selected = 0
-    for t in 1:T
+
+    function prune_me!()
+        for v in 1:length(npops)
+            if haskey(P.vprops, v)
+                # set_indexing_prop!(P, v, :genotype, genotypes[v])
+                #set_prop!(P, nv(P), :T, state.t)
+                P.vprops[v][:npop] = npops[v]
+                P.vprops[v][:s] = fitnesses[v]
+            else
+                d = Dict(:npop => npops[v], :s => fitnesses[v])
+                # set_indexing_prop!(P, v, :genotype, genotypes[v])
+                set_props!(P, v, d)
+            end
+        end
+        annotate_snps!(state, mu)
+        newP,remap  = prune_phylogeny(P)
+        # global mystate = state
+        P = newP
+        set_indexing_prop!(P, :genotype)
+        genotypes = genotypes[remap]
+        fitnesses = fitnesses[remap]
+        npops = npops[remap]
+        rates = rates[remap]
+        wrates = Weights(rates)
+        wnpops = Weights(npops)
+        nothing
+    end
+
+    for t in 0:T
+        if prune_period > 0 && state.t > 0 && (state.t)%prune_period==0
+            @debug "Pruning..."
+            prune_me!()
+            state.Phylogeny = P
+        end
+        Base.invokelatest(callback,state,state.t)
+        if abort(state)
+            break
+        end
         ## Pick one to proliferate
         old = sample(wrates)
         new = sample(wnpops)
         @debug old, new
         genotype = genotypes[old]
         if rand()<p_mu
-            new_genotype = f_mut(state, P, genotype)
+            new_genotype = maximum(genotypes)+1
             if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
                 if true || !in(new_genotype, genotypes)
                     add_vertex!(P)
+                    set_indexing_prop!(P, nv(P), :genotype, new_genotype)
                     push!(genotypes, new_genotype)
                     push!(npops, 0)
                     push!(rates, 0.0)
@@ -206,24 +246,14 @@ function moran!(
         state.t += 1
         state.treal += -1.0/total_rate*log(1.0-rand())
     end
-    ## Update the phylogeny
-    for v in 1:length(npops)
-        if haskey(P.vprops, v)
-            P.vprops[v][:genotype] = genotypes[v]
-            #set_prop!(P, nv(P), :T, state.t)
-            P.vprops[v][:npop] = npops[v]
-            P.vprops[v][:s] = fitnesses[v]
-        else
-            d = Dict(:genotype => genotypes[v], :npop => npops[v], :s => fitnesses[v])
-            set_props!(P, v, d)
-        end
-    end
+    prune_me!()
+    state.Phylogeny = P
 end
 
 function density!(nn,L,ind::CartesianIndex)
     lin_N = size(L.data,1)
     neighbours!(nn, ind, L)
-    tot = count(x->!out_of_bounds(x,lin_N),nn) #count(x->!out_of_bounds(x...,lin_N), nn)
+    tot = hex_nneighbors(ind,lin_N) #count(x->!out_of_bounds(x...,lin_N), nn)
     nz =  count(x->!out_of_bounds(x,lin_N) && L.data[x]!=0, nn)
     return nz/tot
 end
@@ -234,11 +264,11 @@ function die_or_proliferate!(
     fitness=g->0.0,
     T=0,
     mu::Float64=0.0,
-    f_mut=(L,G,g)->nv(G)+1,
     d::Float64=1/100,
     constraint=true,
+    prune_period=0,
     DEBUG=false,
-    callback=s->begin end,
+    callback=(s,t)->begin end,
     abort=s->false,
     kwargs...)
 
@@ -260,7 +290,7 @@ function die_or_proliferate!(
     lin_N = size(state.lattice.data,1)
     tot_N = length(state.lattice.data)
 
-    fitness_lattice = vec([k!=0 ? fitnesses[k] : 0. for k in state.lattice.data])
+    fitness_lattice = vec([k!=0 ? fitnesses[findfirst(x->x==k, genotypes)] : 0. for k in state.lattice.data])
     br_lattice = zeros(tot_N)
 
     nonzeros = count(x->x!=0, state.lattice.data)
@@ -286,14 +316,45 @@ function die_or_proliferate!(
     total_rate = mapreduce(+, enumerate(state.lattice.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0. end
     @debug total_rate
 
+    function prune_me!()
+        for v in 1:length(npops)
+            if haskey(P.vprops, v)
+                # set_indexing_prop!(P, v, :genotype, genotypes[v])
+                #set_prop!(P, nv(P), :T, state.t)
+                P.vprops[v][:npop] = npops[v]
+                P.vprops[v][:s] = fitnesses[v]
+            else
+                d = Dict(:npop => npops[v], :s => fitnesses[v])
+                # set_indexing_prop!(P, v, :genotype, genotypes[v])
+                set_props!(P, v, d)
+            end
+        end
+        annotate_snps!(state, mu)
+        newP,remap  = prune_phylogeny(P)
+        # global mystate = state
+        P = newP
+        set_indexing_prop!(P, :genotype)
+        genotypes = genotypes[remap]
+        fitnesses = fitnesses[remap]
+        npops = npops[remap]
+        nothing
+    end
+    @info "Prune period is $prune_period"
     @inbounds for t in 0:T
-        Base.invokelatest(callback,state)
+        @debug "t=$(state.t)"
+        if prune_period > 0 && state.t > 0 && (state.t)%prune_period==0
+            @debug "Pruning..."
+            prune_me!()
+            state.Phylogeny = P
+        end
+        Base.invokelatest(callback,state,state.t)
         if abort(state)
             break
         end
         ## Much cheaper than checking the whole lattice each iteration
         ## Leave the loop if lattice is empty
         if nonzeros==0
+            @info "Lattice empty. Exiting."
             break
         end
 
@@ -328,7 +389,7 @@ function die_or_proliferate!(
             g = state.lattice.data[selected]
             g_id = findfirst(x->x==g, genotypes)
             old_ps = npops[g_id]
-            npops[g_id] = min(0,old_ps-1)
+            npops[g_id] = max(0,old_ps-1)
 
             state[selected] = 0
             fitness_lattice[selected] = 0.
@@ -336,15 +397,13 @@ function die_or_proliferate!(
             ## Update birth-rates
             neighbours!(nn, I[selected], state.lattice)
             for n in nn
-                if !out_of_bounds(n, lin_N)
+                if !out_of_bounds(n, lin_N) && state[n]!=0
                     j = Lin[n]
                     # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
-                    if state[j] != 0
-                        @debug "adjusting rates on $j by $(fitness_lattice[j])"
-                        total_rate -= br_lattice[j]
-                        br_lattice[j] +=  1.0/length(nn) * fitness_lattice[j] * base_br
-                        total_rate += br_lattice[j]
-                    end
+                    @debug "adjusting rates on $j by $(fitness_lattice[j])"
+                    total_rate -= br_lattice[j]
+                    br_lattice[j] +=  1.0/hex_nneighbors(n,lin_N) * fitness_lattice[j] * base_br
+                    total_rate += br_lattice[j]
                 end
             end
             ##
@@ -376,21 +435,23 @@ function die_or_proliferate!(
                 genotype = state[old]
                 g_id = findfirst(x->x==genotype, genotypes)
                 if rand()<p_mu
-                    new_genotype = f_mut(state, P, genotype)
+                    new_genotype = maximum(genotypes)+1
                     if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
                         if true || !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
                             add_vertex!(P)
+                            set_indexing_prop!(P, nv(P), :genotype, new_genotype)
                             push!(genotypes, new_genotype)
-                            push!(npops, 1)
+                            push!(npops, 0)
                             push!(fitnesses, fitness(new_genotype))
                         end
                         add_edge!(P,nv(P),g_id)
                         genotype = new_genotype
-                        g_id += 1
+                        g_id = length(genotypes)
                     end
                 end
 
                 state[new] = genotype
+                npops[g_id] += 1
                 fitness_lattice[new] = fitnesses[g_id]
 
                 br_lattice[new] = (1.0-density!(nn,state.lattice,I[new])) * base_br * fitness_lattice[new]
@@ -399,14 +460,12 @@ function die_or_proliferate!(
 
                 neighbours!(nn, I[new], state.lattice)
                 for n in nn
-                    if !out_of_bounds(n, lin_N)
+                    if !out_of_bounds(n, lin_N) && state[n]!=0
                         j = Lin[n]
                         # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
-                        if state[j] != 0
-                            total_rate -= br_lattice[j]
-                            br_lattice[j] -=  1.0/length(nn) * fitness_lattice[j] * base_br
-                            total_rate += br_lattice[j]
-                        end
+                        total_rate -= br_lattice[j]
+                        br_lattice[j] -=  1.0/hex_nneighbors(n,lin_N) * fitness_lattice[j] * base_br
+                        total_rate += br_lattice[j]
                     end
                 end
             end
@@ -415,22 +474,15 @@ function die_or_proliferate!(
         end
         state.t += 1
         state.treal += -1.0/total_rate*log(1.0-rand())
+
+        # global flattice = fitness_lattice
+        # global brlattice = br_lattice
+        # global mystate = state
     end
     ## Update the phylogeny
-    for v in 1:length(npops)
-        if haskey(P.vprops, v)
-            P.vprops[v][:genotype] = genotypes[v]
-            #set_prop!(P, nv(P), :T, state.t)
-            P.vprops[v][:npop] = npops[v]
-            P.vprops[v][:s] = fitnesses[v]
-        else
-            d = Dict(:genotype => genotypes[v], :npop => npops[v], :s => fitnesses[v])
-            set_props!(P, v, d)
-        end
-    end
-    annotate_snps!(state, mu)
-    state.Phylogeny = prune_phylogeny(P)[1]
-    nothing
+    prune_me!()
+    state.Phylogeny = P
+    @debug "Done at $(state.t)"
     # @assert (mapreduce(+, enumerate(state.lattice.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0.; end) ≈ total_rate
 end
 

@@ -4,6 +4,7 @@ export  AbstractLattice,
         RealLattice,
         NoLattice,
         HexagonalLattice,
+        hex_nneighbors,
         LineLattice,
         HCPLattice,
         out_of_bounds,
@@ -97,22 +98,54 @@ end
 
 neighbours!(nn::Neighbours{2}, I::CartesianIndex, L::HexagonalLattice) = @inbounds begin
     m,n = Tuple(I)
-    if isodd(n)
+    if isodd(m)
         nn[1] = CartesianIndex(m-1, n-1)
-        nn[2] = CartesianIndex(m-1, n+1)
-        nn[5] = CartesianIndex(m-1, n)
-        nn[6] = CartesianIndex(m+1, n)
+        nn[2] = CartesianIndex(m-1, n)
         nn[3] = CartesianIndex(m, n+1)
-        nn[4] = CartesianIndex(m, n-1)
+        nn[4] = CartesianIndex(m+1, n)
+        nn[5] = CartesianIndex(m+1, n-1)
+        nn[6] = CartesianIndex(m, n-1)
     else
-        nn[1] = CartesianIndex(m, n-1)
-        nn[2] = CartesianIndex(m, n+1)
-        nn[5] = CartesianIndex(m-1, n)
-        nn[6] = CartesianIndex(m+1, n)
-        nn[3] = CartesianIndex(m+1, n+1)
-        nn[4] = CartesianIndex(m+1, n-1)
+        nn[1] = CartesianIndex(m-1, n)
+        nn[2] = CartesianIndex(m-1, n+1)
+        nn[3] = CartesianIndex(m, n+1)
+        nn[4] = CartesianIndex(m+1, n+1)
+        nn[5] = CartesianIndex(m+1, n)
+        nn[6] = CartesianIndex(m, n-1)
     end
 end
+function hex_nneighbors(I::CartesianIndex, N)
+    if isodd(I[1])
+        if (I[1] == 1 || I[1] == N) && 2<=I[2]<N
+            return 4
+        elseif I[2] == 1 && 2<=I[1]<N
+            return 3
+        elseif I[2] == N && 2<=I[1]<N
+            return 5
+        elseif (I[1] == N && I[2] == N) || (I[1] == 1 && I[2] == 1)
+            return 2
+        elseif I[1] == 1 && I[2] == N
+            return 3
+        else
+            return 6
+        end
+    else
+        if (I[1] == 1 || I[1] == N) && 2<=I[2]<N
+            return 4
+        elseif I[2] == 1 && 2<=I[1]<N
+            return 5
+        elseif I[2] == N && 2<=I[1]<N
+            return 3
+        elseif I[1] == N  && I[2] == N
+            return 2
+        elseif I[1] == N && I[2] == 1
+            return 3
+        else
+            return 6
+        end
+    end
+end
+
 ## -- END HexagonalLattice -- ##
 
 mutable struct HCPLattice{T} <: AbstractLattice3D{T}

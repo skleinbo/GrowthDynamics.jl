@@ -60,7 +60,9 @@ function _run_sim_conditional!(
 
     state = setup()
     max_T = params[:T]
-    dyn!(state;params...,T=sweep)
+    if sweep>0
+        dyn!(state;params...,T=sweep)
+    end
 
     k = 2
     X = []
