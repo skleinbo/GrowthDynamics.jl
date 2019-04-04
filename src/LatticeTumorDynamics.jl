@@ -37,8 +37,7 @@ function exponential!(
     fitness=g->1.0,
     T=0,
     baserate=1.0,
-    p_mu::Float64=0.0,
-    f_mut=(L,G,g)->nv(G)+1,
+    mu::Float64=0.0,
     DEBUG=false,
     callback=s->begin end,
     abort=s->false,
@@ -66,10 +65,49 @@ function exponential!(
     Ntotal = sum(npops)
     total_rate = sum(rates)
 
+    p_mu = 1.0 - exp(-mu)
+
     new = 0
     old = 0
     selected = 0
-    for step in 1:T
+
+    function prune_me!()
+        for v in 1:length(npops)
+            if haskey(P.vprops, v)
+                # set_indexing_prop!(P, v, :genotype, genotypes[v])
+                #set_prop!(P, nv(P), :T, state.t)
+                P.vprops[v][:npop] = npops[v]
+                P.vprops[v][:s] = fitnesses[v]
+            else
+                d = Dict(:npop => npops[v], :s => fitnesses[v])
+                # set_indexing_prop!(P, v, :genotype, genotypes[v])
+                set_props!(P, v, d)
+            end
+        end
+        annotate_snps!(state, mu)
+        newP,remap  = prune_phylogeny(P)
+        # global mystate = state
+        P = newP
+        set_indexing_prop!(P, :genotype)
+        genotypes = genotypes[remap]
+        fitnesses = fitnesses[remap]
+        npops = npops[remap]
+        rates = rates[remap]
+        wrates = Weights(rates)
+        wnpops = Weights(npops)
+        nothing
+    end
+
+    for step in 0:T
+        if prune_period > 0 && state.t > 0 && (state.t)%prune_period==0
+            @debug "Pruning..."
+            prune_me!()
+            state.Phylogeny = P
+        end
+        Base.invokelatest(callback,state,state.t)
+        if abort(state)
+            break
+        end
         @debug "Step $step/$T"
         told = state.treal
         state.treal += 1.0/(baserate*mean(fitnesses))
@@ -95,7 +133,7 @@ function exponential!(
             nmutants = rand(Binomial(nplus, p_mu)) # How many of those mutate?
             @debug step, genotype, nplus, nmutants
             for _ in 1:nmutants
-                new_genotype = f_mut(state, P, genotype)
+                new_genotype = maximum(genotypes)+1
                 if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
                     if true || !in(new_genotype, genotypes)
                         add_vertex!(P)
@@ -117,19 +155,9 @@ function exponential!(
 
         state.t += 1
     end
-    ## Update the phylogeny
-    for v in 1:length(npops)
-        if haskey(P.vprops, v)
-            P.vprops[v][:genotype] = genotypes[v]
-            #set_prop!(P, nv(P), :T, state.t)
-            P.vprops[v][:npop] = npops[v]
-            P.vprops[v][:s] = fitnesses[v]
-        else
-            d = Dict(:genotype => genotypes[v], :npop => npops[v], :s => fitnesses[v])
-            set_props!(P, v, d)
-        end
-    end
-
+    prune_me!()
+    state.Phylogeny = P
+    nothing
 end
 
 

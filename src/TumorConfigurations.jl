@@ -40,7 +40,7 @@ nolattice_state(N::Int) = TumorConfiguration(Lattices.NoLattice(N), OnePhylogeny
 "Returns a DiGraph with one vertex and {T=>0,genotype=>g} attribute."
 function OnePhylogeny(g=1)
     G = MetaDiGraph(1)
-    set_prop!(G,1,:genotype,g)
+    set_indexing_prop!(G,1,:genotype,g)
     set_prop!(G,1,:T,0)
     set_prop!(G,1,:npop,0)
     G
@@ -51,7 +51,7 @@ function TwoPhylogeny(gv=[1,2])
     G = MetaDiGraph(2)
     add_edge!(G,(2,1))
     for v in [1,2]
-        set_prop!(G,v,:genotype,gv[v])
+        set_indexing_prop!(G,v,:genotype,gv[v])
         set_prop!(G,v,:T,0)
         set_prop!(G,v,:npop,0)
     end
