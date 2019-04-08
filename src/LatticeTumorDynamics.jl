@@ -173,7 +173,6 @@ function moran!(
     abort=s->false,
     kwargs...)
 
-    P = state.Phylogeny
     K = state.lattice.N # Carrying capacity
 
     genotypes = state.meta.genotypes
@@ -196,14 +195,15 @@ function moran!(
     function prune_me!()
         annotate_snps!(state, mu)
         (newP,remap),newMeta  = prune_phylogeny(state)
-        # global mystate = state
         state.Phylogeny = newP
         state.meta = newMeta
+        # global mystate = state
         # set_indexing_prop!(P, :genotype)
-        genotypes = genotypes[remap]
-        fitnesses = fitnesses[remap]
-        npops = npops[remap]
-        rates = rates[remap]
+        genotypes = state.meta.genotypes
+        npops = state.meta.npops
+        fitnesses = state.meta.fitnesses
+        rates = fitnesses.*npops
+        snps = state.meta.snps
         wrates = Weights(rates)
         wnpops = Weights(npops)
         nothing
@@ -221,7 +221,7 @@ function moran!(
         ## Pick one to proliferate
         old = sample(wrates)
         new = sample(wnpops)
-        @debug old, new
+        # @debug old, new
         genotype = genotypes[old]
         if rand()<p_mu
             new_genotype = maximum(genotypes)+1
@@ -231,7 +231,7 @@ function moran!(
                     fitnesses[end] = fitness(new_genotype)
                     push!(rates, 0.0)
                 end
-                add_edge!(P,nv(P),old)
+                add_edge!(state.Phylogeny,nv(state.Phylogeny),old)
                 old = length(genotypes)
             end
         end
@@ -272,21 +272,16 @@ function die_or_proliferate!(
     d::Float64=1/100,
     constraint=true,
     prune_period=0,
+    prune_on_exit=true,
     DEBUG=false,
     callback=(s,t)->begin end,
     abort=s->false,
     kwargs...)
 
-    P = state.Phylogeny
-    genotypes = map(vertices(P)) do v
-        get_prop(P, v, :genotype)
-    end
-    npops = map(vertices(P)) do v
-        get_prop(P, v, :npop)
-    end
-    fitnesses = map(vertices(P)) do v
-        get_prop(P, v, :s)
-    end
+    genotypes = state.meta.genotypes
+    npops = state.meta.npops
+    fitnesses = state.meta.fitnesses
+    snps = state.meta.snps
 
     I = CartesianIndices(state.lattice.data)
     Lin = LinearIndices(state.lattice.data)
@@ -322,35 +317,24 @@ function die_or_proliferate!(
     @debug total_rate
 
     function prune_me!()
-        for v in 1:length(npops)
-            if haskey(P.vprops, v)
-                # set_indexing_prop!(P, v, :genotype, genotypes[v])
-                #set_prop!(P, nv(P), :T, state.t)
-                P.vprops[v][:npop] = npops[v]
-                P.vprops[v][:s] = fitnesses[v]
-            else
-                d = Dict(:npop => npops[v], :s => fitnesses[v])
-                # set_indexing_prop!(P, v, :genotype, genotypes[v])
-                set_props!(P, v, d)
-            end
-        end
         annotate_snps!(state, mu)
-        newP,remap  = prune_phylogeny(P)
+        (newP,remap),newMeta  = prune_phylogeny(state)
         # global mystate = state
-        P = newP
-        set_indexing_prop!(P, :genotype)
-        genotypes = genotypes[remap]
-        fitnesses = fitnesses[remap]
-        npops = npops[remap]
+        state.Phylogeny = newP
+        state.meta = newMeta
+        genotypes = state.meta.genotypes
+        npops = state.meta.npops
+        fitnesses = state.meta.fitnesses
+        snps = state.meta.snps
         nothing
     end
-    @info "Prune period is $prune_period"
+    @debug "Prune period is $prune_period"
     @inbounds for t in 0:T
+        prune_me!()
         @debug "t=$(state.t)"
         if prune_period > 0 && state.t > 0 && (state.t)%prune_period==0
             @debug "Pruning..."
             prune_me!()
-            state.Phylogeny = P
         end
         Base.invokelatest(callback,state,state.t)
         if abort(state)
@@ -443,13 +427,10 @@ function die_or_proliferate!(
                     new_genotype = maximum(genotypes)+1
                     if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
                         if true || !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
-                            add_vertex!(P)
-                            set_indexing_prop!(P, nv(P), :genotype, new_genotype)
-                            push!(genotypes, new_genotype)
-                            push!(npops, 0)
-                            push!(fitnesses, fitness(new_genotype))
+                            push!(state, new_genotype)
+                            fitnesses[end] = fitness(new_genotype)
                         end
-                        add_edge!(P,nv(P),g_id)
+                        add_edge!(state.Phylogeny,nv(state.Phylogeny),g_id)
                         genotype = new_genotype
                         g_id = length(genotypes)
                     end
@@ -485,8 +466,9 @@ function die_or_proliferate!(
         # global mystate = state
     end
     ## Update the phylogeny
-    prune_me!()
-    state.Phylogeny = P
+    if prune_on_exit
+        prune_me!()
+    end
     @debug "Done at $(state.t)"
     # @assert (mapreduce(+, enumerate(state.lattice.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0.; end) ≈ total_rate
 end

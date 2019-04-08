@@ -74,9 +74,7 @@ function total_population_size(L::Lattices.RealLattice{<:Integer})
 end
 
 function total_population_size(S::TumorConfiguration)
-    mapreduce(+, vertices(S.Phylogeny)) do v
-            get_prop(S.Phylogeny, v, :npop)
-    end
+    sum(S.meta.npops)
 end
 
 
@@ -301,13 +299,13 @@ end
 ## Phylogenetic observables
 
 function common_snps(S::TumorConfiguration)
-    populated = filter_vertices(S.Phylogeny, (S,v)->get_prop(S, v, :npop) > 0)
+    populated = findall(v->v > 0, S.meta.npops)
     if isempty(populated)
         return Int64[]
     else
         intersect(map(populated) do v
             try
-                get_prop(S.Phylogeny, v, :snps)
+                S.meta.snps[v]
             catch
                 @info "Vertex $v carries no field snps."
                 Int64[]
@@ -364,8 +362,8 @@ end
 
 
 function pairwise(S::TumorConfiguration, i, j)
-    si = get_prop(S.Phylogeny, i, :snps)
-    sj = get_prop(S.Phylogeny, j, :snps)
+    si = S.meta.snps[i]
+    sj = S.meta.snps[j]
     nsymdiff(si,sj)
 end
 
@@ -380,7 +378,7 @@ end
 function mean_pairwise(S::TumorConfiguration)
     X = 0
     for i in 2:nv(S.Phylogeny), j in i:nv(S.Phylogeny)
-        X += pairwise(S, i, j)*get_prop(S.Phylogeny, i, :npop)*get_prop(S.Phylogeny, j, :npop)
+        X += pairwise(S, i, j)*S.meta.npops[i]*S.meta.npops[j]
     end
     X / binomial(total_population_size(S), 2)
 end

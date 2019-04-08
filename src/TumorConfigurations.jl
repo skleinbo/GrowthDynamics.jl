@@ -7,6 +7,7 @@ import GeometryTypes: Point2f0, Point3f0
 import LightGraphs: DiGraph
 import MetaGraphs: MetaDiGraph, add_vertex!, add_edge!, set_prop!, set_indexing_prop!
 import Base: push!
+import StatsBase
 
 export
     nolattice_state,
@@ -38,6 +39,13 @@ MetaData(a::Tuple{T, Int64, Float64, Vector{Int64}}) where {T} = MetaData{T}([a[
 Base.getindex(M::MetaData{T}, i::Integer) where {T} = (M.genotypes[i], M.npops[i], M.fitnesses[i], M.snps[i])
 Base.getindex(M::MetaData{T}, i) where {T} = MetaData{T}(M.genotypes[i], M.npops[i], M.fitnesses[i], M.snps[i])
 Base.lastindex(M::MetaData{T}) where {T} = length(M.genotypes)
+function Base.setindex!(M::MetaData{T}, D::Tuple{T, Int64, Float64, Vector{Int64}}, i) where {T}
+    M.genotypes[i] = D[1]
+    M.npops[i] = D[2]
+    M.fitnesses[i] = D[3]
+    M.snps[i] = D[4]
+    D
+end
 
 ##--                                                        --##
 
@@ -73,6 +81,17 @@ function Base.push!(S::TumorConfiguration{<:Lattices.AnyTypedLattice{T}}, g::T) 
     push!(S.meta.snps, Int64[])
     nothing
 end
+
+function Base.push!(S::TumorConfiguration{<:Lattices.AnyTypedLattice{T}}, M::Tuple{T, Int64, Float64, Vector{Int64}}) where {T}
+    add_vertex!(S.Phylogeny)
+    push!(S.meta.genotypes, M[1])
+    push!(S.meta.npops, M[2])
+    push!(S.meta.fitnesses, M[3])
+    push!(S.meta.snps, M[4])
+    nothing
+end
+
+
 
 ## TODO: Remove One/TwoPhylogeny
 "Returns a DiGraph with one vertex."
@@ -238,14 +257,10 @@ end
 end
 
 function uniform_circle2(N::Int,f=1/10,g1=1,g2=2)::TumorConfiguration{Lattices.HexagonalLattice{Int}}
-    if g1==0
-        G = OnePhylogeny(g2)
-    elseif g2==0
-        G = OnePhylogeny(g1)
-    else
-        G = TwoPhylogeny([g1,g2])
-    end
-    state = Lattices.HexagonalLattice(N,N,1.0,fill(g1,N,N))
+    G = DiGraph()
+    lattice = Lattices.HexagonalLattice(N,N,1.0,fill(g1,N,N))
+    state = TumorConfiguration(lattice, G)
+
 
     if f==0.
         return state
@@ -253,28 +268,39 @@ function uniform_circle2(N::Int,f=1/10,g1=1,g2=2)::TumorConfiguration{Lattices.H
 
     mid = CartesianIndex(div(N,2),div(N,2))
 
-    function fill_neighbours!(state,ind::CartesianIndex)
+    function fill_neighbours!(lattice,ind::CartesianIndex)
         m,n = Tuple(ind)
-        nn = Lattices.neighbours(state, ind)
+        nn = Lattices.neighbours(lattice, ind)
         for neigh in nn
-            if Lattices.out_of_bounds(neigh,state.Na) continue end
-            state.data[neigh] = g2
-            if count(x->x==g2, state.data)/N^2 >= f
+            if Lattices.out_of_bounds(neigh,lattice.Na) continue end
+            lattice.data[neigh] = g2
+            if count(x->x==g2, lattice.data)/N^2 >= f
                 return nn
             end
         end
         return nn
     end
 
-    state.data[mid] = g2
-    while count(x->x==g2, state.data)/N^2 < f
-        for nn in findall(x->x==g2,state.data)
+    lattice.data[mid] = g2
+    while count(x->x==g2, lattice.data)/N^2 < f
+        for nn in findall(x->x==g2,lattice.data)
             # println(nn)
-            fill_neighbours!(state,nn)
+            fill_neighbours!(lattice,nn)
         end
     end
 
-    return TumorConfiguration(state, G)
+    counts = StatsBase.countmap(reshape(lattice.data,N^2))
+    if g1!=0
+        push!(state, (g1, counts[g1], 1.0, Int64[]))
+    end
+    if g2!=0
+        push!(state, (g2, counts[g2], 1.0, Int64[]))
+    end
+    if g1!=0 && g2!=0
+         add_edge!(G, 2, 1)
+    end
+
+    return state
 end
 
 

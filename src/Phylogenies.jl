@@ -131,9 +131,6 @@ function prune_phylogeny(S::TumorConfigurations.TumorConfiguration)
         @debug "Vertex $v is empty" v children  parent[1]
         while parent[1]!=1 && !isempty(parent) && npops[parent[1]] == 0
             parent = outneighbors(P, parent[1])
-            # if isempty(parent) || parent[1]==1
-            #     break
-            # end
         end
         if isempty(parent)
             continue
@@ -146,15 +143,8 @@ function prune_phylogeny(S::TumorConfigurations.TumorConfiguration)
         # @debug "Removing vertex" v
         # rem_vertex!(P, v)
     end
-    # while begin v=findfirst(x->get_prop())
     SP = induced_subgraph(P, subvertices)
-    # @assert is_connected(SP[1])
     return SP, S.meta[subvertices]
-    # if !is_connected(SP[1])
-    #     return (P,SP)
-    # else
-    #     SP
-    # end
 end
 function prune_phylogeny(S::MetaDiGraph)
     P = copy(S)
