@@ -6,6 +6,7 @@ import GeometryTypes: Point2f0, Point3f0
 @opencl import .OffLattice: FreeSpace,distMatrix
 import LightGraphs: DiGraph
 import MetaGraphs: MetaDiGraph, add_vertex!, add_edge!, set_prop!, set_indexing_prop!
+import Base: push!
 
 export
     nolattice_state,
@@ -21,25 +22,62 @@ export
     uniform_sphere2,
     biallelic_layered,
     biallelic_cornered,
-    TumorConfiguration
+    TumorConfiguration,
+    MetaData,
+    push!
+
+##-- METADATA for efficiently storing population information --##
+mutable struct MetaData{T}
+    genotypes::Vector{T}
+    npops::Vector{Int64}
+    fitnesses::Vector{Float64}
+    snps::Vector{Vector{Int64}}
+end
+MetaData(T::DataType) = MetaData(T[], Int64[], Float64[], Vector{Int64}[])
+MetaData(a::Tuple{T, Int64, Float64, Vector{Int64}}) where {T} = MetaData{T}([a[1]],[a[2]],[a[3]],[a[4]])
+Base.getindex(M::MetaData{T}, i::Integer) where {T} = (M.genotypes[i], M.npops[i], M.fitnesses[i], M.snps[i])
+Base.getindex(M::MetaData{T}, i) where {T} = MetaData{T}(M.genotypes[i], M.npops[i], M.fitnesses[i], M.snps[i])
+Base.lastindex(M::MetaData{T}) where {T} = length(M.genotypes)
+
+##--                                                        --##
 
 mutable struct TumorConfiguration{T<:Lattices.AbstractLattice}
     lattice::T
-    Phylogeny::MetaDiGraph
+    Phylogeny::DiGraph
+    meta::MetaData
     t::Int
     treal::Float64
 end
-TumorConfiguration(lattice::T, Phylogeny::MetaDiGraph) where T<:Lattices.AbstractLattice = TumorConfiguration(lattice, Phylogeny, 0, 0.0)
+function TumorConfiguration(lattice::Lattices.AnyTypedLattice{T}, Phylogeny::DiGraph) where {T}
+    TumorConfiguration(lattice, Phylogeny, MetaData(T), 0, 0.0)
+end
 Base.getindex(T::TumorConfiguration,ind...) = T.lattice.data[ind...]
 Base.getindex(T::TumorConfiguration) = T.lattice.data
 Base.setindex!(T::TumorConfiguration,v,ind...) = T.lattice.data[ind...] = v
 
-nolattice_state(N::Int) = TumorConfiguration(Lattices.NoLattice(N), OnePhylogeny())
+"Unstructered model with one genotype, one individual and fitness 1.0"
+nolattice_state(N::Int) = begin
+    state = TumorConfiguration(Lattices.NoLattice(N), DiGraph())
+    push!(state, 1)
+    state.meta.npops[end] = 1
+    state.meta.fitnesses[end] = 1.0
+    state
+end
 
+"Add a new _unconnected_ genotype to a TumorConfiguration"
+function Base.push!(S::TumorConfiguration{<:Lattices.AnyTypedLattice{T}}, g::T) where {T}
+    add_vertex!(S.Phylogeny)
+    push!(S.meta.genotypes, g)
+    push!(S.meta.npops, 0)
+    push!(S.meta.fitnesses, 0.0)
+    push!(S.meta.snps, Int64[])
+    nothing
+end
 
-"Returns a DiGraph with one vertex and {T=>0,genotype=>g} attribute."
+## TODO: Remove One/TwoPhylogeny
+"Returns a DiGraph with one vertex."
 function OnePhylogeny(g=1)
-    G = MetaDiGraph(1)
+    G = DiGraph(1)
     set_indexing_prop!(G,1,:genotype,g)
     set_prop!(G,1,:T,0)
     set_prop!(G,1,:npop,0)

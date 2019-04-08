@@ -317,14 +317,7 @@ function common_snps(S::TumorConfiguration)
 end
 
 function polymorphisms(S::TumorConfiguration)
-    mapreduce(vcat, vertices(S.Phylogeny)) do v
-        try
-            ifelse(get_prop(S.Phylogeny, v, :npop) > 0, get_prop(S.Phylogeny, v, :snps), Int64[])
-        catch
-            @info "Vertex $v carries no field snps."
-            Int64[]
-        end
-    end |> unique |> sort
+    union(S.meta.snps...) |> unique |> sort
 end
 
 npolymorphisms(S::TumorConfiguration) = length(polymorphisms(S))

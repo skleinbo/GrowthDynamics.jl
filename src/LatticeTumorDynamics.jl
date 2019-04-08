@@ -162,11 +162,12 @@ end
 
 
 function moran!(
-    state::TumorConfiguration{NoLattice};
+    state::TumorConfiguration{NoLattice{Int64}};
     fitness=g->1.0,
     T=0,
     mu::Float64=0.0,
     prune_period=0,
+    prune_on_exit=true,
     DEBUG=false,
     callback=(s,t)->begin end,
     abort=s->false,
@@ -175,21 +176,11 @@ function moran!(
     P = state.Phylogeny
     K = state.lattice.N # Carrying capacity
 
-    genotypes = map(vertices(P)) do v
-        get_prop(P, v, :genotype)
-    end
-    npops = map(vertices(P)) do v
-        get_prop(P, v, :npop)
-    end
-    rates = map(vertices(P)) do v
-        if !has_prop(P, v, :s)
-            set_prop!(P, v, :s, fitness(get_prop(P, v, :genotype)))
-        end
-        get_prop(P, v, :s)*get_prop(P, v, :npop)
-    end
-    fitnesses = map(vertices(P)) do v
-        get_prop(P, v, :s)
-    end
+    genotypes = state.meta.genotypes
+    npops = state.meta.npops
+    fitnesses = state.meta.fitnesses
+    rates = fitnesses.*npops
+    snps = state.meta.snps
 
     Ntotal = sum(npops)
     total_rate = sum(rates)
@@ -203,23 +194,12 @@ function moran!(
     selected = 0
 
     function prune_me!()
-        for v in 1:length(npops)
-            if haskey(P.vprops, v)
-                # set_indexing_prop!(P, v, :genotype, genotypes[v])
-                #set_prop!(P, nv(P), :T, state.t)
-                P.vprops[v][:npop] = npops[v]
-                P.vprops[v][:s] = fitnesses[v]
-            else
-                d = Dict(:npop => npops[v], :s => fitnesses[v])
-                # set_indexing_prop!(P, v, :genotype, genotypes[v])
-                set_props!(P, v, d)
-            end
-        end
         annotate_snps!(state, mu)
-        newP,remap  = prune_phylogeny(P)
+        (newP,remap),newMeta  = prune_phylogeny(state)
         # global mystate = state
-        P = newP
-        set_indexing_prop!(P, :genotype)
+        state.Phylogeny = newP
+        state.meta = newMeta
+        # set_indexing_prop!(P, :genotype)
         genotypes = genotypes[remap]
         fitnesses = fitnesses[remap]
         npops = npops[remap]
@@ -233,7 +213,6 @@ function moran!(
         if prune_period > 0 && state.t > 0 && (state.t)%prune_period==0
             @debug "Pruning..."
             prune_me!()
-            state.Phylogeny = P
         end
         Base.invokelatest(callback,state,state.t)
         if abort(state)
@@ -248,12 +227,9 @@ function moran!(
             new_genotype = maximum(genotypes)+1
             if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
                 if true || !in(new_genotype, genotypes)
-                    add_vertex!(P)
-                    set_indexing_prop!(P, nv(P), :genotype, new_genotype)
-                    push!(genotypes, new_genotype)
-                    push!(npops, 0)
+                    push!(state, new_genotype)
+                    fitnesses[end] = fitness(new_genotype)
                     push!(rates, 0.0)
-                    push!(fitnesses, fitness(new_genotype))
                 end
                 add_edge!(P,nv(P),old)
                 old = length(genotypes)
@@ -274,8 +250,9 @@ function moran!(
         state.t += 1
         state.treal += -1.0/total_rate*log(1.0-rand())
     end
-    prune_me!()
-    state.Phylogeny = P
+    if prune_on_exit
+        prune_me!()
+    end
 end
 
 function density!(nn,L,ind::CartesianIndex)

@@ -22,7 +22,16 @@ abstract type AbstractLattice end
 abstract type AbstractLattice1D{T} <:AbstractLattice end
 abstract type AbstractLattice2D{T} <:AbstractLattice end
 abstract type AbstractLattice3D{T} <:AbstractLattice end
+
+## --- NO LATTICE --- ##
+## T is the type of genotypes we will store.
+mutable struct NoLattice{T} <: AbstractLattice
+    N::Int # System size
+end
+NoLattice(N::Int) = NoLattice{Int64}(N)
+
 const RealLattice{T} = Union{AbstractLattice1D{T}, AbstractLattice2D{T}, AbstractLattice3D{T}}
+const AnyTypedLattice{T} = Union{RealLattice{T}, NoLattice{T}}
 
 out_of_bounds(I::CartesianIndex,N) = mapreduce(m->m<1||m>N,|,Tuple(I))
 
@@ -38,10 +47,6 @@ end
 
 const Neighbours{dim} = Vector{CartesianIndex{dim}}
 
-## --- NO LATTICE --- ##
-mutable struct NoLattice <: AbstractLattice
-    N::Int # System size
-end
 
 
 ## --- BEGIN 1D Lattice OBC -- ##

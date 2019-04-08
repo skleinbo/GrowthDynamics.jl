@@ -67,16 +67,17 @@ function annotate_snps!(S::TumorConfigurations.TumorConfiguration, μ;
     L=10^9, allow_multiple=false, kind=:poisson, replace=false)
 
     P = S.Phylogeny
+    SNPS = S.meta.snps
     D = Poisson(μ)
 
-    tree = df_traversal(P.graph)
-    set_prop!(P, 1, :snps, Int[])
+    tree = df_traversal(P)
+    # set_prop!(P, 1, :snps, Int[])
     for v in tree
-        if !replace && has_prop(P, v, :snps) && !isempty(get_prop(P,v,:snps))
+        if !replace && !isempty(SNPS[v])
             continue
         end
         parent = outneighbors(P, v)[1]
-        snps = copy(get_prop(P, parent, :snps))
+        snps = copy(SNPS[parent])
         if kind == :poisson
             count = sample_ztp(μ)
         else
@@ -96,7 +97,7 @@ function annotate_snps!(S::TumorConfigurations.TumorConfiguration, μ;
         end
         sort!(snps)
         @debug "Setting SNPs for $v"
-        set_prop!(P, v, :snps, snps)
+        SNPS[v] = snps
     end
 end
 
@@ -104,7 +105,57 @@ end
 """
 Remove unpopulated genotypes from the graph.
 """
-prune_phylogeny(S::TumorConfigurations.TumorConfiguration) = prune_phylogeny(S.Phylogeny)
+function prune_phylogeny(S::TumorConfigurations.TumorConfiguration)
+    P = copy(S.Phylogeny)
+    npops = S.meta.npops
+
+    function bridge!(s, d)
+        children = inneighbors(P, d)
+        if s==1 || npops[d] > 0
+            @debug "Adding edge"  d s
+            add_edge!(P, d, s)
+        elseif length(children)==0
+            return
+        elseif length(children) >= 1
+            for child in children
+                bridge!(s, child)
+            end
+        end
+    end
+
+    itr = filter(v->npops[v]==0 && v!=1, df_traversal(P))|>collect
+    subvertices = setdiff(1:nv(P), itr)
+    for (i,v) in enumerate(itr)
+        children = inneighbors(P, v)
+        parent = outneighbors(P, v)
+        @debug "Vertex $v is empty" v children  parent[1]
+        while parent[1]!=1 && !isempty(parent) && npops[parent[1]] == 0
+            parent = outneighbors(P, parent[1])
+            # if isempty(parent) || parent[1]==1
+            #     break
+            # end
+        end
+        if isempty(parent)
+            continue
+        end
+        if !isempty(children)
+            for child in children
+                bridge!(parent[1], child)
+            end
+        end
+        # @debug "Removing vertex" v
+        # rem_vertex!(P, v)
+    end
+    # while begin v=findfirst(x->get_prop())
+    SP = induced_subgraph(P, subvertices)
+    # @assert is_connected(SP[1])
+    return SP, S.meta[subvertices]
+    # if !is_connected(SP[1])
+    #     return (P,SP)
+    # else
+    #     SP
+    # end
+end
 function prune_phylogeny(S::MetaDiGraph)
     P = copy(S)
 
