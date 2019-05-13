@@ -366,9 +366,9 @@ function die_or_proliferate!(
             end
         end
 
-        @debug br_lattice
+        #@debug br_lattice
         if action == :die
-            @debug "Die"
+            #@debug "Die"
             nonzeros -= 1
             total_rate -= br_lattice[selected] + d
 
@@ -386,7 +386,7 @@ function die_or_proliferate!(
                 if !out_of_bounds(n, lin_N) && state[n]!=0
                     j = Lin[n]
                     # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
-                    @debug "adjusting rates on $j by $(fitness_lattice[j])"
+                    #@debug "adjusting rates on $j by $(fitness_lattice[j])"
                     total_rate -= br_lattice[j]
                     br_lattice[j] +=  1.0/hex_nneighbors(n,lin_N) * fitness_lattice[j] * base_br
                     total_rate += br_lattice[j]
@@ -394,7 +394,7 @@ function die_or_proliferate!(
             end
             ##
         elseif action == :proliferate
-            @debug "Live"
+            #@debug "Live"
             old = selected
             if !constraint
                 new = 0
