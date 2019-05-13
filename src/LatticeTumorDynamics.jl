@@ -1,6 +1,7 @@
 module LatticeTumorDynamics
 
-export  moran!,
+export  prune_me!,
+        moran!,
         independent_death_birth!,
         die_or_proliferate!
 
@@ -160,12 +161,22 @@ function exponential!(
     nothing
 end
 
+function prune_me!(state,mu)
+    annotate_snps!(state, mu)
+    prune_phylogeny!(state)
+    # state.Phylogeny = newP
+    # state.meta = newMeta
+    nothing
+end
+_prune!(s) = LatticeTumorDynamics.prune_me!(s, mu)
+
 
 function moran!(
     state::TumorConfiguration{NoLattice{Int64}};
     fitness=g->1.0,
     T=0,
     mu::Float64=0.0,
+    d::Float64=0.0,
     prune_period=0,
     prune_on_exit=true,
     DEBUG=false,
@@ -192,13 +203,18 @@ function moran!(
     old = 0
     selected = 0
 
-    function prune_me!()
-        annotate_snps!(state, mu)
-        (newP,remap),newMeta  = prune_phylogeny(state)
-        state.Phylogeny = newP
-        state.meta = newMeta
-        # global mystate = state
-        # set_indexing_prop!(P, :genotype)
+    for t in 0:T
+        if prune_period > 0 && state.t > 0 && (state.t)%prune_period==0
+            @debug "Pruning..."
+            prune_me!(state, mu)
+        end
+        let mu=mu
+            Base.invokelatest(callback,state,state.t)
+        end
+        if abort(state)
+            break
+        end
+        # In case we pruned, renew bindings
         genotypes = state.meta.genotypes
         npops = state.meta.npops
         fitnesses = state.meta.fitnesses
@@ -206,18 +222,6 @@ function moran!(
         snps = state.meta.snps
         wrates = Weights(rates)
         wnpops = Weights(npops)
-        nothing
-    end
-
-    for t in 0:T
-        if prune_period > 0 && state.t > 0 && (state.t)%prune_period==0
-            @debug "Pruning..."
-            prune_me!()
-        end
-        Base.invokelatest(callback,state,state.t)
-        if abort(state)
-            break
-        end
         ## Pick one to proliferate
         old = sample(wrates)
         new = sample(wnpops)
@@ -251,7 +255,7 @@ function moran!(
         state.treal += -1.0/total_rate*log(1.0-rand())
     end
     if prune_on_exit
-        prune_me!()
+        prune_me!(state, mu)
     end
 end
 
@@ -316,30 +320,23 @@ function die_or_proliferate!(
     total_rate = mapreduce(+, enumerate(state.lattice.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0. end
     @debug total_rate
 
-    function prune_me!()
-        annotate_snps!(state, mu)
-        (newP,remap),newMeta  = prune_phylogeny(state)
-        # global mystate = state
-        state.Phylogeny = newP
-        state.meta = newMeta
-        genotypes = state.meta.genotypes
-        npops = state.meta.npops
-        fitnesses = state.meta.fitnesses
-        snps = state.meta.snps
-        nothing
-    end
     @debug "Prune period is $prune_period"
     @inbounds for t in 0:T
-        prune_me!()
-        @debug "t=$(state.t)"
+        #prune_me!()
+        #@debug "t=$(state.t)"
         if prune_period > 0 && state.t > 0 && (state.t)%prune_period==0
-            @debug "Pruning..."
-            prune_me!()
+            #@debug "Pruning..."
+            prune_me!(state, mu)
         end
         Base.invokelatest(callback,state,state.t)
         if abort(state)
             break
         end
+        # In case we pruned, renew bindings.
+        genotypes = state.meta.genotypes
+        npops = state.meta.npops
+        fitnesses = state.meta.fitnesses
+        snps = state.meta.snps
         ## Much cheaper than checking the whole lattice each iteration
         ## Leave the loop if lattice is empty
         if nonzeros==0
@@ -467,7 +464,7 @@ function die_or_proliferate!(
     end
     ## Update the phylogeny
     if prune_on_exit
-        prune_me!()
+        prune_me!(state, mu)
     end
     @debug "Done at $(state.t)"
     # @assert (mapreduce(+, enumerate(state.lattice.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0.; end) ≈ total_rate
