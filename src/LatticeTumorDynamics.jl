@@ -14,7 +14,7 @@ import Random: shuffle!
 using ..Lattices
 import ..TumorConfigurations: TumorConfiguration
 
-import ..Phylogenies: annotate_snps!, prune_phylogeny
+import ..Phylogenies: annotate_snps!, prune_phylogeny!
 
 # using OffLattice
 

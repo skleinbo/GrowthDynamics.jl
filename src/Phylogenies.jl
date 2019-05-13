@@ -10,7 +10,7 @@ export  annotate_snps!,
         df_traversal,
         harm,
         harm2,
-        prune_phylogeny
+        prune_phylogeny!
 
 harm(N::Integer) = sum(1/i for i in 1:N)
 harm2(N::Integer) = sum(1/i^2 for i in 1:N)
@@ -105,8 +105,8 @@ end
 """
 Remove unpopulated genotypes from the graph.
 """
-function prune_phylogeny(S::TumorConfigurations.TumorConfiguration)
-    P = copy(S.Phylogeny)
+function prune_phylogeny!(S::TumorConfigurations.TumorConfiguration)
+    P = S.Phylogeny
     npops = S.meta.npops
 
     function bridge!(s, d)
@@ -143,9 +143,18 @@ function prune_phylogeny(S::TumorConfigurations.TumorConfiguration)
         # @debug "Removing vertex" v
         # rem_vertex!(P, v)
     end
-    SP = induced_subgraph(P, subvertices)
-    return SP, S.meta[subvertices]
+    S.Phylogeny = induced_subgraph(P, subvertices)[1]
+    S.meta = S.meta[subvertices]
+    return S.Phylogeny, S.meta
 end
+
+# function prune_phylogeny(S::TumorConfigurations.TumorConfiguration)
+#     P = copy(S.Phylogeny)
+#     prune_phylogeny!()
+
+
+
+"""DEPRECATED"""
 function prune_phylogeny(S::MetaDiGraph)
     P = copy(S)
 
