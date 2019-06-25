@@ -208,9 +208,8 @@ function moran!(
             @debug "Pruning..."
             prune_me!(state, mu)
         end
-        let mu=mu
-            Base.invokelatest(callback,state,state.t)
-        end
+
+        Base.invokelatest(callback,state,state.t)
         if abort(state)
             break
         end
@@ -250,9 +249,16 @@ function moran!(
             total_rate += fitnesses[new]
             npops[new] -= 1
             Ntotal -= 1
+            ## If the carrying capacity is reached, the process is
+            ## d-limited
+            state.treal += -1.0/(Ntotal*d)*log(1.0-rand())
+            state.treal += -1.0/total_rate*log(1.0-rand())
+        else
+            state.treal += -1.0/total_rate*log(1.0-rand())
         end
+
+
         state.t += 1
-        state.treal += -1.0/total_rate*log(1.0-rand())
     end
     if prune_on_exit
         prune_me!(state, mu)
