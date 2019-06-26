@@ -93,36 +93,29 @@ end
 
 
 
-## TODO: Remove One/TwoPhylogeny
-"Returns a DiGraph with one vertex."
-function OnePhylogeny(g=1)
-    G = DiGraph(1)
-    set_indexing_prop!(G,1,:genotype,g)
-    set_prop!(G,1,:T,0)
-    set_prop!(G,1,:npop,0)
-    G
-end
-
-"Returns a DiGraph with edge 2=>1 and {T=>0,genotype=>1,2} attribute on both verticies."
-function TwoPhylogeny(gv=[1,2])
-    G = MetaDiGraph(2)
-    add_edge!(G,(2,1))
-    for v in [1,2]
-        set_indexing_prop!(G,v,:genotype,gv[v])
-        set_prop!(G,v,:T,0)
-        set_prop!(G,v,:npop,0)
-    end
-    G
-end
-
 """
 Initialize a single cell of genotype `1` at the midpoint of an empty lattice.
 """
-function single_center(N::Int;g1=1,g2=2)::Lattices.HexagonalLattice{Int}
-    midpoint = [div(N,2),div(N,2)]
-    state = fill(g1,N,N)
+function single_center(N::Int;g1=1,g2=2)
+    G = DiGraph()
+    lattice = Lattices.HexagonalLattice(N,N,1.0,fill(g1,N,N))
+    state = TumorConfiguration(lattice, G)
+    midpoint = CartesianIndex(div(N,2),div(N,2))
+
     state[midpoint] = g2
-    return Lattices.HexagonalLattice(N,N,1.0,state)
+
+    counts = StatsBase.countmap(reshape(lattice.data,N^2))
+    if g1!=0
+        push!(state, (g1, counts[g1], 1.0, Int64[]))
+    end
+    if g2!=0
+        push!(state, (g2, counts[g2], 1.0, Int64[]))
+    end
+    if g1!=0 && g2!=0
+         add_edge!(G, 2, 1)
+    end
+
+    return state
 end
 
 """
@@ -145,23 +138,7 @@ function random_center(N::Int,L)::Array{Int64,2}
     return state
 end
 
-"""
-Fill center square with genotype `g1` with fraction `f1`, and gt `g2` with fraction `f2`.
-"""
-function uniform_square(N::Int,f1=1.0,f2=0.1,g1=1,g2=2)::Array{Int64,2}
-    midpoint = [div(N,2),div(N,2)]
-    state = zeros(Int64,N,N)
 
-    a = round(Int,max(1,div(N,2)*(1-sqrt(f1))))
-    b = round(Int,div(N,2)*(1+sqrt(f1)))
-    state[ a:b, a:b ] = g1
-
-    a = round(Int,max(1,div(N,2)*(1-sqrt(f2))))
-    b = round(Int,div(N,2)*(1+sqrt(f2)))
-    state[ a:b, a:b ] = g2
-
-    return state
-end
 
 """
 Fill line of fraction `f1` with gt `g2`; rest is gt `g1`.
@@ -216,21 +193,6 @@ function uniform_sphere2(N::Int,f=1/10,g1=1,g2=2)::Lattices.HCPLattice{Int}
 end
 
 
-
-function uniform_circle(N::Int,f=1/10,g1=1,g2=2)::Lattices.HexagonalLattice{Int}
-    state = fill(g1,N,N)
-    if N^2*f < 3/4
-        return state
-    end
-    mid = [div(N,2),div(N,2)]
-    for m in 1:N, n in 1:N
-        if (m-mid[1])^2+(n-mid[2])^2 <= ( sqrt(N^2*f/3-1/4)-1/2 )^2
-            state[m,n] = g2
-        end
-    end
-    return Lattices.HexagonalLattice(N,N,1.0,state)
-end
-
 @opencl function uniform_circle_free(N::Int, Nmax::Int, f=1/10,g1=1,g2=2,d=0f0)
     r = sqrt(f/pi)
     midpoint = Point2f0(0.5,0.5)
@@ -256,7 +218,7 @@ end
     FreeSpace{eltype(genotypes)}(Nmax, G, positions,genotypes,birthrates,deathrates,dMat,_mask)
 end
 
-function uniform_circle2(N::Int,f=1/10,g1=1,g2=2)::TumorConfiguration{Lattices.HexagonalLattice{Int}}
+function uniform_circle(N::Int,f=1/10,g1=1,g2=2)::TumorConfiguration{Lattices.HexagonalLattice{Int}}
     G = DiGraph()
     lattice = Lattices.HexagonalLattice(N,N,1.0,fill(g1,N,N))
     state = TumorConfiguration(lattice, G)
@@ -304,16 +266,5 @@ function uniform_circle2(N::Int,f=1/10,g1=1,g2=2)::TumorConfiguration{Lattices.H
 end
 
 
-function biallelic_layered(N,f,g1=1,g2=2)::Array{Int64,2}
-    state = fill(g1,N,N)
-    state[1:round(Int,N*f),1:N] = g2
-    return state
-end
-
-function biallelic_cornered(N,f,g1=1,g2=2)::Array{Int64,2}
-    state = fill(g1,N,N)
-    state[1:round(Int,N*sqrt(f)),1:round(Int,N*sqrt(f))] = g2
-    return state
-end
 ##--END module--
 end
