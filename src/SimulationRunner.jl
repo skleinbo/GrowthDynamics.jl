@@ -51,6 +51,7 @@ function _run_sim_conditional!(
     obs,
     setup,
     params;
+    results_channel,
     sweep=0,
     abort=(s,t)->false,
     verbosity=0
@@ -79,11 +80,13 @@ function _run_sim_conditional!(
             @warn ("No observables collected!")
         end
     end
-    X
+    put!(results_channel, (:N => params[:N], :s => params[:s], :mu => params[:mu],
+     :d => params[:d], :f0 => params[:f], X))
 end
 
 
 function repeated_runs(N::Integer, dyn!, obs, setup, parameters;
+     results_channel,
      sweep=0,
      abort=(s,t)->false,
      verbosity=0,
@@ -92,15 +95,11 @@ function repeated_runs(N::Integer, dyn!, obs, setup, parameters;
     verbosity > 1 && println("repeated_runs\t $params")
 
     # initial_params = deepcopy(params)
-    X = []
     for n in 1:N
-        push!(X, _run_sim_conditional!(dyn!, obs, setup, parameters;
-            sweep=sweep,abort=abort
-        ))
+        _run_sim_conditional!(dyn!, obs, setup, parameters; results_channel=results_channel,
+            sweep=sweep,abort=abort)
         callback()
     end
-
-    return X
 end
 
 ##==END Module==##
