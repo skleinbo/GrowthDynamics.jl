@@ -3,7 +3,11 @@ module SimulationRunner
 Helper functions to save results and parameters
 of a run.
 =#
+using Distributed
 using JSON
+using DataFrames
+import GrowthDynamics.AnalysisMethods: timeseries
+
 export  get_last_file_number,
         json_parameters,
         _run_sim_conditional!,
@@ -101,6 +105,33 @@ function repeated_runs(N::Integer, dyn!, obs, setup, parameters;
         callback()
     end
 end
+
+function collect_results!(df::Ref{DataFrame}, rc::Distributed.RemoteChannel, maxtakes=0)
+	n = 0
+	while n < maxtakes
+		raw = take!(rc)
+		if raw == :end
+			return df[]
+		end
+		try
+			## The last entry of the returned tuple contains by convention
+			## the observables
+			parameters = raw[1:end-1]
+			obs = raw[end] |> timeseries
+			D = merge(Dict(parameters), obs)
+			if isempty(df[])
+				df[] = DataFrame(typeof.(values(D)), collect(keys(D)), 0)
+			end
+			push!(df[], merge(Dict(parameters), obs))
+		catch err
+			@error err
+			return df[]
+		end
+		n += 1
+	end
+	df[]
+end
+
 
 ##==END Module==##
 end
