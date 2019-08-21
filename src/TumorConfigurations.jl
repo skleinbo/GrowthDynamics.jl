@@ -17,7 +17,6 @@ export
     uniform_line,
     uniform_square,
     uniform_circle,
-    uniform_circle2,
     uniform_circle_free,
     uniform_sphere,
     uniform_sphere2,
