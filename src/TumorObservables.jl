@@ -1,6 +1,6 @@
 module TumorObservables
 
-import IndexedTables: table, join, renamecol, pushcol, select
+import IndexedTables: table, join, rename, transform, select
 import LinearAlgebra: Symmetric
 
 import OpenCLPicker: @opencl
@@ -40,6 +40,20 @@ export  allelic_fractions,
         common_snps,
         pairwise,
         mean_pairwise
+
+function allelic_fractions(S::TumorConfiguration, t)
+    X = Dict{eltype(eltype(S.meta.snps)), Int64}()
+    for j in 1:length(S.meta.genotypes)
+        for snp in S.meta.snps[j]
+            if haskey(X, snp)
+                X[snp] += S.meta.npops[j]
+            else
+                push!(X, snp => S.meta.npops[j])
+            end
+        end
+    end
+    return X
+end
 
 function allelic_fractions(L::Lattices.RealLattice{<:Integer})
     m = maximum(L.data)
@@ -95,9 +109,7 @@ function population_size(L::Lattices.RealLattice{T}, t) where T<:Integer
 end
 
 function population_size(S::TumorConfiguration, t)
-    map(vertices(S.Phylogeny)) do v
-        get_prop(S.Phylogeny, v, :genotype), get_prop(S.Phylogeny, v, :npop)
-    end
+    zip(S.meta.genotypes, S.meta.npops) |> collect
 end
 
 function set_population_size!(state::TumorConfiguration)
@@ -273,19 +285,19 @@ function cphylo_hist(state::TumorConfiguration)
     nb = neighborhood_dists(P, 1, nv(P), dir=:in)
     ps_table = table(population_size(state, 0), pkey=[1])
     nb_table = table(map(nb) do x
-        (get_prop(P, x[1], :genotype),x[1], x[2])
+        (state.meta.genotypes[x[1]], x[1], x[2])
     end, pkey=[1])
-    nb_table = renamecol(nb_table, 1=>:g, 2=>:nv, 3=>:dist)
-    ps_table = renamecol(ps_table, 1=>:g, 2=>:npop)
+    nb_table = rename(nb_table, 1=>:g, 2=>:nv, 3=>:dist)
+    ps_table = rename(ps_table, 1=>:g, 2=>:npop)
 
     joined = join(nb_table, ps_table, how=:outer)
-    joined = pushcol(joined, :cnpop, fill(1, length(joined)))
+    joined = transform(joined, :cnpop => :npop)
 
-    unP = SimpleGraph(P.graph)
+    unP = SimpleGraph(P)
     paths = enumerate_paths(bellman_ford_shortest_paths(unP, 1))
 
     npops = select(joined, :npop)|>copy
-    cnpops = select(joined, :cnpop)
+    cnpops = select(joined, :cnpop)|>copy
 
     popfirst!(paths)
     for path in paths
@@ -293,7 +305,7 @@ function cphylo_hist(state::TumorConfiguration)
         cnpops[path[1:end-1]] .+= cnpop_new
     end
 
-    return joined
+    return transform(joined, :cnpop => cnpops)
 end
 
 ## Phylogenetic observables
