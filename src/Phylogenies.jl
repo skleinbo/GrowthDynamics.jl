@@ -1,10 +1,10 @@
 module Phylogenies
 
 using   Distributions,
-        MetaGraphs,
         LightGraphs
 
 import ..TumorConfigurations
+import ..TumorConfigurations: TumorConfiguration
 
 export  annotate_snps!,
         df_traversal,
@@ -54,8 +54,8 @@ end
 
 
 """
-Annotate a phylogeny with SNPs. Every vertex in the phylogeny inherits the SNPs its parent
-plus (on average) `μ` new ones.
+Annotate a phylogeny with SNPs. Every vertex in the phylogeny inherits the SNPs
+of its parent, plus (on average) `μ` new ones.
 
 * `μ`: genome wide rate (Poisson) / count (uniform)
 * `L=10^9`: length of the genome
@@ -148,65 +148,40 @@ function prune_phylogeny!(S::TumorConfigurations.TumorConfiguration)
     return S.Phylogeny, S.meta
 end
 
-# function prune_phylogeny(S::TumorConfigurations.TumorConfiguration)
-#     P = copy(S.Phylogeny)
-#     prune_phylogeny!()
+function MRCA(S::TumorConfiguration, i::Integer, j::Integer)
+    P = S.Phylogeny
+    @assert 1<=i<=nv(P) && 1<=j<=nv(P)
 
+    mrca = 1 ## 'Worst' case: MRCA is the root
 
-
-"""DEPRECATED"""
-function prune_phylogeny(S::MetaDiGraph)
-    P = copy(S)
-
-    function bridge!(s, d)
-        children = inneighbors(P, d)
-        if s==1 || get_prop(P,d,:npop) > 0
-            @debug "Adding edge"  d s
-            add_edge!(P, d, s)
-        elseif length(children)==0
-            return
-        elseif length(children) >= 1
-            for child in children
-                bridge!(s, child)
-            end
-        end
+    while i > 1 && j > 1
+        (i == j) && return i ## (i,j) have coalesced -> return MRCA
+        i = outneighbors(P, i)[1]
+        # @info i,j
+        (i == j) && return i ## (i,j) have coalesced -> return MRCA
+        j = outneighbors(P, j)[1]
+        # @info i,j
+        (i == j) && return i ## (i,j) have coalesced -> return MRCA
     end
 
-    itr = filter(v->get_prop(P,v,:npop)==0 && v!=1, df_traversal(P.graph))|>collect
-    subvertices = setdiff(1:nv(P), itr)
-    for (i,v) in enumerate(itr)
-        children = inneighbors(P, v)
-        parent = outneighbors(P, v)
-        @debug "Vertex $v is empty" v children  parent[1]
-        while parent[1]!=1 && !isempty(parent) && get_prop(P, parent[1], :npop) == 0
-            parent = outneighbors(P, parent[1])
-            # if isempty(parent) || parent[1]==1
-            #     break
-            # end
-        end
-        if isempty(parent)
-            continue
-        end
-        if !isempty(children)
-            for child in children
-                bridge!(parent[1], child)
-            end
-        end
-        # @debug "Removing vertex" v
-        # rem_vertex!(P, v)
+    return mrca
+end
+
+
+function MRCA(S::TumorConfiguration)
+    P = S.Phylogeny
+
+    mrca = nv(P)
+
+    idx = findall(x->x>0, S.meta.npops) ## Only check the currently alive
+
+    for i in idx[2:end], j in idx[2:end]
+        mrca = min(mrca, MRCA(S, i,j))
+        mrca == 1 && return mrca
     end
-    # while begin v=findfirst(x->get_prop())
-    SP = induced_subgraph(P, subvertices)
-    # @assert is_connected(SP[1])
-    return SP
-    # if !is_connected(SP[1])
-    #     return (P,SP)
-    # else
-    #     SP
-    # end
+    return mrca
 end
 
 
 
-
-end
+end ## MODULE ##

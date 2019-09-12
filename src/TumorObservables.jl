@@ -2,14 +2,15 @@ module TumorObservables
 
 import IndexedTables: table, join, rename, transform, select
 import LinearAlgebra: Symmetric
+import StatsBase: Weights, sample
 
 import OpenCLPicker: @opencl
 
 @opencl import OpenCL
-import MetaGraphs:  nv, inneighbors, neighborhood, neighborhood_dists,
-                    set_prop!, get_prop, vertices,
-                    filter_vertices
 import LightGraphs: SimpleGraph,
+                    SimpleDiGraph,
+                    nv, inneighbors, neighborhood, neighborhood_dists,
+                    vertices,
                     enumerate_paths,
                     bellman_ford_shortest_paths
 
@@ -54,6 +55,23 @@ function allelic_fractions(S::TumorConfiguration, t)
     end
     return X
 end
+
+function allelic_fractions(S::TumorConfiguration, t, samples::Integer)
+    X = Dict{eltype(eltype(S.meta.snps)), Int64}()
+    pop_samples = sample(1:length(S.meta.npops),
+        Weights(S.meta.npops ./ total_population_size(S)), samples)
+    for j in pop_samples
+        for snp in S.meta.snps[j]
+            if haskey(X, snp)
+                X[snp] += 1
+            else
+                push!(X, snp => 1)
+            end
+        end
+    end
+    return X
+end
+
 
 function allelic_fractions(L::Lattices.RealLattice{<:Integer})
     m = maximum(L.data)
@@ -149,7 +167,7 @@ function surface(L::Lattices.RealLattice{<:Integer}, g::Int)
     I = CartesianIndices(L.data)
     for j in eachindex(L.data)
         if L.data[j]==g
-            for n in Lattices.neighbours(L, I[j])
+            for n in Lattices.neighbors(L, I[j])
                 if !LatticeTumorDynamics.out_of_bounds(I[n], L.Na) && L.data[n]!=g && L.data[n]!=0
                     x+=1
                     break
@@ -166,7 +184,7 @@ function surface2(L::Lattices.RealLattice{<:Integer}, g::Int)
     for j in eachindex(L.data)
         if L.data[j]==g
             is_surface = false
-            for n in Lattices.neighbours(L, I[j])
+            for n in Lattices.neighbors(L, I[j])
                 if !LatticeTumorDynamics.out_of_bounds(n, L.Na) && L.data[n]!=g && L.data[n]!=0
                     is_surface = true
                     y += 1
@@ -259,12 +277,12 @@ end
 ## Pylogenic observables
 ##
 ##
-function nchildren(L,g)
-    vertex = L.Phylogeny[:genotype][g]
-    length(inneighbors(L.Phylogeny, vertex))
+function nchildren(S::TumorConfiguration, g)
+    vertex = findfirst(x->x==g, S.meta.genotypes)
+    length(inneighbors(S.Phylogeny, vertex))
 end
 
-has_children(L,g) = nchildren(L,g) > 0
+has_children(S, g) = nchildren(S, g) > 0
 
 function phylo_hist(state::TumorConfiguration)
     nb = neighborhood_dists(state.Phylogeny, 1, nv(state.Phylogeny), dir=:in)
@@ -310,6 +328,7 @@ end
 
 ## Phylogenetic observables
 
+is_leaf(P::SimpleDiGraph, v) = length(inneighbors(P, v)) == 0
 function common_snps(S::TumorConfiguration)
     populated = findall(v->v > 0, S.meta.npops)
     if isempty(populated)
@@ -327,7 +346,14 @@ function common_snps(S::TumorConfiguration)
 end
 
 function polymorphisms(S::TumorConfiguration)
-    union(S.meta.snps...) |> unique |> sort
+    SNPS = Set(S.meta.snps[1])
+    for v in vertices(S.Phylogeny)
+        if !is_leaf(S.Phylogeny, v)
+            continue
+        end
+        union!(SNPS, S.meta.snps[v])
+    end
+    SNPS
 end
 
 npolymorphisms(S::TumorConfiguration) = length(polymorphisms(S))
@@ -387,12 +413,15 @@ function pairwise(S::TumorConfiguration)
     Symmetric(X)
 end
 
+# function mean_pairwise(S::TumorConfiguration)
+#     X = 0
+#     for i in 2:nv(S.Phylogeny), j in i:nv(S.Phylogeny)
+#         X += pairwise(S, i, j)*S.meta.npops[i]*S.meta.npops[j]
+#     end
+#     X / binomial(total_population_size(S), 2)
+# end
 function mean_pairwise(S::TumorConfiguration)
-    X = 0
-    for i in 2:nv(S.Phylogeny), j in i:nv(S.Phylogeny)
-        X += pairwise(S, i, j)*S.meta.npops[i]*S.meta.npops[j]
-    end
-    X / binomial(total_population_size(S), 2)
+    mapreduce(x->2.0*x*(1-x), +, (allelic_fractions(S, 0) |> values |>collect) / total_population_size(S))
 end
 
 """

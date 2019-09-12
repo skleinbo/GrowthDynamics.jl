@@ -4,8 +4,7 @@ import OpenCLPicker: @opencl
 import ..Lattices
 import GeometryTypes: Point2f0, Point3f0
 @opencl import .OffLattice: FreeSpace,distMatrix
-import LightGraphs: DiGraph
-import MetaGraphs: MetaDiGraph, add_vertex!, add_edge!, set_prop!, set_indexing_prop!
+import LightGraphs: DiGraph, add_vertex!, add_edge!
 import Base: push!
 import StatsBase
 
@@ -27,22 +26,26 @@ export
     push!
 
 ##-- METADATA for efficiently storing population information --##
+const MetaDatum{T} = Tuple{T, Int64, Float64, Vector{Int64}, Tuple{Int64,Float64}}
 mutable struct MetaData{T}
     genotypes::Vector{T}
     npops::Vector{Int64}
     fitnesses::Vector{Float64}
     snps::Vector{Vector{Int64}}
+    ages::Vector{Tuple{Int64, Float64}}  ## (simulation t, real t) when a genotype entered.
 end
-MetaData(T::DataType) = MetaData(T[], Int64[], Float64[], Vector{Int64}[])
+MetaData(T::DataType) = MetaData(T[], Int64[], Float64[], Vector{Int64}[], Tuple{Int64,Float64}[])
 MetaData(a::Tuple{T, Int64, Float64, Vector{Int64}}) where {T} = MetaData{T}([a[1]],[a[2]],[a[3]],[a[4]])
-Base.getindex(M::MetaData{T}, i::Integer) where {T} = (M.genotypes[i], M.npops[i], M.fitnesses[i], M.snps[i])
-Base.getindex(M::MetaData{T}, i) where {T} = MetaData{T}(M.genotypes[i], M.npops[i], M.fitnesses[i], M.snps[i])
+Base.getindex(M::MetaData{T}, i) where {T} = MetaData{T}(M.genotypes[i], M.npops[i], M.fitnesses[i], M.snps[i], M.ages[i])
+Base.getindex(M::MetaData{T}, i::Integer) where {T} =
+    (genotype = M.genotypes[i], npop = M.npops[i], fitness = M.fitnesses[i], snps = M.snps[i], age = M.ages[i])
 Base.lastindex(M::MetaData{T}) where {T} = length(M.genotypes)
-function Base.setindex!(M::MetaData{T}, D::Tuple{T, Int64, Float64, Vector{Int64}}, i) where {T}
+function Base.setindex!(M::MetaData{T}, D::Tuple{T, Int64, Float64, Vector{Int64}, Tuple{Int64,Float64}}, i) where {T}
     M.genotypes[i] = D[1]
     M.npops[i] = D[2]
     M.fitnesses[i] = D[3]
     M.snps[i] = D[4]
+    M.ages[i] = D[5]
     D
 end
 
@@ -68,6 +71,7 @@ nolattice_state(N::Int) = begin
     push!(state, 1)
     state.meta.npops[end] = 1
     state.meta.fitnesses[end] = 1.0
+    state.meta.ages[end] = (0, 0.0)
     state
 end
 
@@ -78,19 +82,33 @@ function Base.push!(S::TumorConfiguration{<:Lattices.AnyTypedLattice{T}}, g::T) 
     push!(S.meta.npops, 0)
     push!(S.meta.fitnesses, 0.0)
     push!(S.meta.snps, Int64[])
+    push!(S.meta.ages, (S.t, S.treal))
     nothing
 end
 
-function Base.push!(S::TumorConfiguration{<:Lattices.AnyTypedLattice{T}}, M::Tuple{T, Int64, Float64, Vector{Int64}}) where {T}
+function Base.push!(S::TumorConfiguration{<:Lattices.AnyTypedLattice{T}}, M::MetaDatum{T}) where {T}
     add_vertex!(S.Phylogeny)
     push!(S.meta.genotypes, M[1])
     push!(S.meta.npops, M[2])
     push!(S.meta.fitnesses, M[3])
     push!(S.meta.snps, M[4])
+    push!(S.meta.ages, M[5])
     nothing
 end
 
 
+"""
+One-dimension system filled with genotype `g`.
+"""
+function filled_line(L, g=0)
+    G = DiGraph()
+    lattice = Lattices.LineLattice(L, 1.0, fill(g, L))
+    state = TumorConfiguration(lattice, G)
+    if g!=0
+        push!(state, (g, L, 1.0, Int64[], (0,0.0)) )
+    end
+    state
+end
 
 """
 Initialize a single cell of genotype `1` at the midpoint of an empty lattice.
@@ -168,8 +186,8 @@ function uniform_sphere2(N::Int,f=1/10,g1=1,g2=2)::Lattices.HCPLattice{Int}
     state = Lattices.HCPLattice(N,N,N,1.0,fill(g1,N,N,N))
     mid = [div(N,2),div(N,2),div(N,2)]
 
-    function fill_neighbours!(state,m,n,l)
-        nn = Lattices.neighbours(state, m,n,l)
+    function fill_neighbors!(state,m,n,l)
+        nn = Lattices.neighbors(state, m,n,l)
         for neigh in nn
             if Lattices.out_of_bounds(neigh...,state.Na) continue end
             state.data[CartesianIndex(neigh)] = g2
@@ -184,7 +202,7 @@ function uniform_sphere2(N::Int,f=1/10,g1=1,g2=2)::Lattices.HCPLattice{Int}
     while count(x->x==g2, state.data)/N^3 < f
         for nn in findall(x->x==g2,state.data)
             # println(nn)
-            fill_neighbours!(state,nn)
+            fill_neighbors!(state,nn)
         end
     end
 
@@ -229,9 +247,9 @@ function uniform_circle(N::Int,f=1/10,g1=1,g2=2)::TumorConfiguration{Lattices.He
 
     mid = CartesianIndex(div(N,2),div(N,2))
 
-    function fill_neighbours!(lattice,ind::CartesianIndex)
+    function fill_neighbors!(lattice,ind::CartesianIndex)
         m,n = Tuple(ind)
-        nn = Lattices.neighbours(lattice, ind)
+        nn = Lattices.neighbors(lattice, ind)
         for neigh in nn
             if Lattices.out_of_bounds(neigh,lattice.Na) continue end
             lattice.data[neigh] = g2
@@ -246,16 +264,16 @@ function uniform_circle(N::Int,f=1/10,g1=1,g2=2)::TumorConfiguration{Lattices.He
     while count(x->x==g2, lattice.data)/N^2 < f
         for nn in findall(x->x==g2,lattice.data)
             # println(nn)
-            fill_neighbours!(lattice,nn)
+            fill_neighbors!(lattice,nn)
         end
     end
 
     counts = StatsBase.countmap(reshape(lattice.data,N^2))
     if g1!=0
-        push!(state, (g1, counts[g1], 1.0, Int64[]))
+        push!(state, (g1, counts[g1], 1.0, Int64[], (0,0.0)))
     end
     if g2!=0
-        push!(state, (g2, counts[g2], 1.0, Int64[]))
+        push!(state, (g2, counts[g2], 1.0, Int64[], (0,0.0)))
     end
     if g1!=0 && g2!=0
          add_edge!(G, 2, 1)

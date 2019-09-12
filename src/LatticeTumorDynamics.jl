@@ -5,8 +5,8 @@ export  prune_me!,
         independent_death_birth!,
         die_or_proliferate!
 
-import MetaGraphs: nv, vertices, add_vertex!, add_edge!,
-        set_indexing_prop!, set_prop!, set_props!, get_prop, has_prop
+import LightGraphs: nv, vertices, add_vertex!, add_edge!
+
 using StatsBase: Weights,sample,mean
 import Distributions: Binomial, Exponential, cdf
 
@@ -34,82 +34,63 @@ const MutationProfile = Tuple{Symbol, Float64, Int64} # (rate, :poisson/:fixed, 
 ###--- Start of simulation methods ---###
 
 function exponential!(
-    state::TumorConfiguration{NoLattice};
+    state::TumorConfiguration{NoLattice{Int64}};
     fitness=g->1.0,
     T=0,
-    baserate=1.0,
     mu::Float64=0.0,
+    d::Float64=0.0,
+    baserate=1.0,
+    prune_period=0,
+    prune_on_exit=true,
     DEBUG=false,
-    callback=s->begin end,
+    callback=(s,t)->begin end,
     abort=s->false,
     kwargs...)
 
-    P = state.Phylogeny
+    # P = state.Phylogeny
     K = state.lattice.N # Carrying capacity
 
-    genotypes = map(vertices(P)) do v
-        get_prop(P, v, :genotype)
-    end
-    npops = map(vertices(P)) do v
-        get_prop(P, v, :npop)
-    end
-    rates = map(vertices(P)) do v
-        if !has_prop(P, v, :s)
-            set_prop!(P, v, :s, fitness(get_prop(P, v, :genotype)))
-        end
-        get_prop(P, v, :s)*get_prop(P, v, :npop)
-    end
-    fitnesses = map(vertices(P)) do v
-        get_prop(P, v, :s)
-    end
+    genotypes = state.meta.genotypes
+    npops = state.meta.npops
+    fitnesses = state.meta.fitnesses
+    rates = fitnesses.*npops
+    snps = state.meta.snps
 
     Ntotal = sum(npops)
     total_rate = sum(rates)
 
-    p_mu = 1.0 - exp(-mu)
+    if haskey(kwargs, :det_mutations) && kwargs[:det_mutations] == true
+        p_mu = 1.0
+    else
+        p_mu = 1.0 - exp(-mu)
+    end
 
+    wrates = Weights(rates)
+    wnpops = Weights(npops)
     new = 0
     old = 0
     selected = 0
 
-    function prune_me!()
-        for v in 1:length(npops)
-            if haskey(P.vprops, v)
-                # set_indexing_prop!(P, v, :genotype, genotypes[v])
-                #set_prop!(P, nv(P), :T, state.t)
-                P.vprops[v][:npop] = npops[v]
-                P.vprops[v][:s] = fitnesses[v]
-            else
-                d = Dict(:npop => npops[v], :s => fitnesses[v])
-                # set_indexing_prop!(P, v, :genotype, genotypes[v])
-                set_props!(P, v, d)
-            end
-        end
-        annotate_snps!(state, mu)
-        newP,remap  = prune_phylogeny(P)
-        # global mystate = state
-        P = newP
-        set_indexing_prop!(P, :genotype)
-        genotypes = genotypes[remap]
-        fitnesses = fitnesses[remap]
-        npops = npops[remap]
-        rates = rates[remap]
-        wrates = Weights(rates)
-        wnpops = Weights(npops)
-        nothing
-    end
-
     for step in 0:T
         if prune_period > 0 && state.t > 0 && (state.t)%prune_period==0
             @debug "Pruning..."
-            prune_me!()
-            state.Phylogeny = P
+            prune_me!(state, mu)
         end
+
         Base.invokelatest(callback,state,state.t)
         if abort(state)
             break
         end
-        @debug "Step $step/$T"
+        # In case we pruned, renew bindings
+        genotypes = state.meta.genotypes
+        npops = state.meta.npops
+        fitnesses = state.meta.fitnesses
+        rates = fitnesses.*npops
+        snps = state.meta.snps
+        wrates = Weights(rates)
+        wnpops = Weights(npops)
+
+        # @debug "Step $step/$T"
         told = state.treal
         state.treal += 1.0/(baserate*mean(fitnesses))
         dt = state.treal - told
@@ -120,30 +101,32 @@ function exponential!(
         end
 
         for (j,genotype) in enumerate(genotypes)|>collect
-            @debug "Genotype: $j,$genotype"
+            # @debug "Genotype: $j,$genotype"
             if npops[j] == 0
-                @debug "g$genotype is empty; skipping"
+                # @debug "g$genotype is empty; skipping"
                 continue
             end
-            pgrow = 1.0 - exp(-fitnesses[j]/mean(fitnesses)) #CDF of exponential with s/<s>
-            @debug "Pgrow = $pgrow"
-            nplus = min(rand(Binomial(npops[j], pgrow)), K-Ntotal) # How many proliferate?
+            if haskey(kwargs, :det_growth) && kwargs[:det_growth] == true
+                pgrow = 1.0 # grow with certainty
+                nplus = min(K-Ntotal, ceil(Int, npops[j]*baserate))
+            else
+                pgrow = 1.0 - exp(-fitnesses[j]/mean(fitnesses)) #CDF of exponential with s/<s>
+                nplus = min(rand(Binomial(npops[j], pgrow)), K-Ntotal) # How many proliferate?
+            end
+            # @debug "Pgrow = $pgrow"
             if nplus<=0
                 continue
             end
             nmutants = rand(Binomial(nplus, p_mu)) # How many of those mutate?
-            @debug step, genotype, nplus, nmutants
             for _ in 1:nmutants
-                new_genotype = maximum(genotypes)+1
+                new_genotype = genotypes[end] + 1
                 if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
                     if true || !in(new_genotype, genotypes)
-                        add_vertex!(P)
-                        push!(genotypes, new_genotype)
-                        push!(npops, 0)
+                        push!(state, new_genotype)
+                        fitnesses[end] = fitness(new_genotype)
                         push!(rates, 0.0)
-                        push!(fitnesses, fitness(new_genotype))
                     end
-                    add_edge!(P, nv(P), j)
+                    add_edge!(state.Phylogeny,nv(state.Phylogeny),j)
                     new = length(genotypes)
                     rates[new] += fitnesses[new]
                     total_rate += fitnesses[new]
@@ -156,8 +139,10 @@ function exponential!(
 
         state.t += 1
     end
-    prune_me!()
-    state.Phylogeny = P
+    if prune_on_exit
+        prune_me!(state, mu)
+    end
+    # state.Phylogeny = P
     nothing
 end
 
@@ -265,12 +250,23 @@ function moran!(
     end
 end
 
-function density!(nn,L,ind::CartesianIndex)
-    lin_N = size(L.data,1)
-    neighbours!(nn, ind, L)
-    tot = hex_nneighbors(ind,lin_N) #count(x->!out_of_bounds(x...,lin_N), nn)
-    nz =  count(x->!out_of_bounds(x,lin_N) && L.data[x]!=0, nn)
-    return nz/tot
+for LatticeType in [Lattices.LineLattice, Lattices.HexagonalLattice]
+    if LatticeType <: Lattices.HexagonalLattice
+        nn_function = :hex_nneighbors
+    elseif LatticeType <: Lattices.LineLattice
+        nn_function = :line_nneighbors
+    end
+
+    eval(
+    quote
+        function density!(nn,L::$LatticeType,ind::CartesianIndex)
+            lin_N = size(L.data, 1)
+            neighbors!(nn, ind, L)
+            tot = $(nn_function)(ind,lin_N)
+            nz =  count(x->!out_of_bounds(x,lin_N) && L.data[x]!=0, nn)
+            return nz/tot
+        end
+    end)
 end
 
 
@@ -306,8 +302,8 @@ function die_or_proliferate!(
     nonzeros = count(x->x!=0, state.lattice.data)
     base_br = 1.0 - d
 
-    nn = neighbours(state.lattice, CartesianIndex{dim}()) # Initialize neighbours to the appr. type
-    neighbour_indices = collect(1:length(nn))
+    nn = neighbors(state.lattice, CartesianIndex{dim}()) # Initialize neighbors to the appr. type
+    neighbor_indices = collect(1:length(nn))
 
     for k in 1:tot_N
         br_lattice[k] = (1.0-density!(nn,state.lattice,I[k])) * base_br * fitness_lattice[k]
@@ -321,7 +317,7 @@ function die_or_proliferate!(
     selected = 0
     br = 0.
     cumrate = 0.
-    validneighbour = false
+    validneighbor = false
     action = :none
     total_rate = mapreduce(+, enumerate(state.lattice.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0. end
     @debug total_rate
@@ -387,14 +383,14 @@ function die_or_proliferate!(
             fitness_lattice[selected] = 0.
             br_lattice[selected] = 0.
             ## Update birth-rates
-            neighbours!(nn, I[selected], state.lattice)
+            neighbors!(nn, I[selected], state.lattice)
             for n in nn
                 if !out_of_bounds(n, lin_N) && state[n]!=0
                     j = Lin[n]
                     # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
                     #@debug "adjusting rates on $j by $(fitness_lattice[j])"
                     total_rate -= br_lattice[j]
-                    br_lattice[j] +=  1.0/hex_nneighbors(n,lin_N) * fitness_lattice[j] * base_br
+                    br_lattice[j] +=  1.0/nneighbors(state.lattice, n, lin_N) * fitness_lattice[j] * base_br
                     total_rate += br_lattice[j]
                 end
             end
@@ -408,16 +404,16 @@ function die_or_proliferate!(
                     new = rand1toN(tot_N)
                 end
             else
-                neighbours!(nn, I[old], state.lattice)
-                validneighbour = false
-                for j in shuffle!(neighbour_indices)
+                neighbors!(nn, I[old], state.lattice)
+                validneighbor = false
+                for j in shuffle!(neighbor_indices)
                     if !out_of_bounds(nn[j],lin_N) && state[nn[j]]==0
                         new_cart = nn[j]
-                        validneighbour = true
+                        validneighbor = true
                         break
                     end
                 end
-                if !validneighbour
+                if !validneighbor
                     continue
                 end
 
@@ -447,13 +443,13 @@ function die_or_proliferate!(
                 nonzeros += 1
                 total_rate += d + br_lattice[new]
 
-                neighbours!(nn, I[new], state.lattice)
+                neighbors!(nn, I[new], state.lattice)
                 for n in nn
                     if !out_of_bounds(n, lin_N) && state[n]!=0
                         j = Lin[n]
                         # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
                         total_rate -= br_lattice[j]
-                        br_lattice[j] -=  1.0/hex_nneighbors(n,lin_N) * fitness_lattice[j] * base_br
+                        br_lattice[j] -=  1.0/nneighbors(state.lattice, n,lin_N) * fitness_lattice[j] * base_br
                         total_rate += br_lattice[j]
                     end
                 end
@@ -498,7 +494,7 @@ end
 #     br_lattice = zeros(tot_N)
 #
 #
-#     nn = neighbours(lattice, CartesianIndex{dim}()) # Initialize neighbours to the appr. type
+#     nn = neighbors(lattice, CartesianIndex{dim}()) # Initialize neighbors to the appr. type
 #
 #     for k in 1:tot_N
 #         br_lattice[k] = max(0., (1.0-density!(nn,lattice,k)) * 1. * fitness_lattice[k])
@@ -520,7 +516,7 @@ end
 #             fitness_lattice[i] = 0.
 #             br_lattice[i] = 0.
 #             ## Update birth-rates
-#             neighbours!(nn, I[i], lattice)
+#             neighbors!(nn, I[i], lattice)
 #             for n in nn
 #                 if !out_of_bounds(n, lin_N)
 #                     j = Lin[n]
@@ -548,7 +544,7 @@ end
 #                 new = rand1toN(tot_N)
 #             end
 #         else
-#             neighbours!(nn, I[old], lattice)
+#             neighbors!(nn, I[old], lattice)
 #             z_nn = filter(x->!out_of_bounds(x,lin_N) && lattice.data[x]==0, nn)
 #             if isempty(z_nn)
 #                 continue
@@ -569,7 +565,7 @@ end
 #             end
 #
 #             br_lattice[new] = max(0., (1.0-density!(nn,lattice,new)) * 1. * fitness_lattice[new] )
-#             neighbours!(nn, I[new], lattice)
+#             neighbors!(nn, I[new], lattice)
 #             for n in nn
 #                 if !out_of_bounds(n, lin_N)
 #                     j = Lin[n]
