@@ -421,7 +421,12 @@ end
 #     X / binomial(total_population_size(S), 2)
 # end
 function mean_pairwise(S::TumorConfiguration)
-    mapreduce(x->2.0*x*(1-x), +, (allelic_fractions(S, 0) |> values |>collect) / total_population_size(S))
+    af = allelic_fractions(S, 0)
+    if length(af) > 0
+        return mapreduce(x->2.0*x*(1-x), +, (af |> values |>collect) / total_population_size(S))
+    else
+        return 0.0
+    end
 end
 
 """
