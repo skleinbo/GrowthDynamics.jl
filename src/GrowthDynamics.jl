@@ -52,7 +52,6 @@ include("SimulationRunner.jl")
 
 using Serialization
 @reexport using LightGraphs
-@reexport using MetaGraphs
 using FileIO
 using JSON: json
 import Printf: @sprintf

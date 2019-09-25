@@ -16,7 +16,7 @@ export  Cell,
 
 import GeometryTypes: Point,Point2f0,Point3f0
 import StaticArrays: SVector
-import LightGraphs, MetaGraphs
+import LightGraphs
 
 P2or3f0 = Union{Point2f0,Point3f0}
 

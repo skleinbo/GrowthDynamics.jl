@@ -17,7 +17,7 @@ export  AbstractLattice,
         HexLatticeNeighbors,
         nneighbors
 
-import MetaGraphs: MetaDiGraph
+import LightGraphs: SimpleDiGraph
 
 abstract type AbstractLattice end
 abstract type AbstractLattice1D{T} <:AbstractLattice end
@@ -173,7 +173,7 @@ mutable struct HCPLattice{T} <: AbstractLattice3D{T}
     Nc::Int # Lattice sites in direction c
     a::Real # Lattice constant
     data::Array{T,3}
-    Phylogeny::MetaDiGraph
+    Phylogeny::SimpleDiGraph
 end
 HCPNeighbors() = [ CartesianIndex(0,0) for _ in 1:12 ]
 

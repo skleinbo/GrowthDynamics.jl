@@ -2,8 +2,7 @@ module OffLatticeTumorDynamics
 
 import GeometryTypes:   Point2f0,
                         Point3f0
-import LightGraphs
-import MetaGraphs: MetaGraph, vertices, edges, add_edge!, add_vertex!
+import LightGraphs: vertices, edges, add_edge!, add_vertex!
 import .TumorConfigurations
 
 import OffLattice:  FreeSpace,
