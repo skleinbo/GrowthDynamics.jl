@@ -184,6 +184,7 @@ function process_jobs(jobs::RemoteChannel, results::RemoteChannel, commands::Rem
 			job = take!(jobs)
 			@info "Received a job on $(myid())."
 				SimulationRunner._run_sim_conditional!(
+					job[:global],
 					job[:simulation],
 					job[:dyn],
 					results
@@ -229,6 +230,7 @@ function feeder(runner::JobRunner)
 					if !isopen(runner.jobs_channel)
 						break
 					end
+					job[:global][:job_id] = job_id
 					put!(runner.jobs_channel, job)
 					@info "Fed $job_id into queue."
 					yield()
@@ -297,7 +299,7 @@ function stop!(R::JobRunner)
 end
 
 function empty!(R::JobRunner)
-	empty!(R.jobs)
+	Base.empty!(R.jobs)
 	while isready(R.jobs_channel)
 		take!(R.jobs_channel)
 	end
@@ -307,6 +309,7 @@ end
 
 
 function _run_sim_conditional!(
+	global_params,
 	sim_params,
 	dyn_params,
     results_channel,
@@ -343,7 +346,7 @@ function _run_sim_conditional!(
             @warn ("No observables collected!")
         end
     end
-    put!(results_channel, (:N =>sim_params[:N], :s => dyn_params[:s], :mu => dyn_params[:mu],
+    put!(results_channel, (:job_id => global_params[:job_id], :N =>sim_params[:N], :s => dyn_params[:s], :mu => dyn_params[:mu],
      :d => dyn_params[:d], :f => dyn_params[:f], X))
 end
 
