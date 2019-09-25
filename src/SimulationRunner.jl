@@ -13,8 +13,10 @@ export  get_last_file_number,
         json_parameters,
         _run_sim_conditional!,
         repeated_runs,
+		JobRunner,
 		@parameters,
-		setup_simulation_environment
+		setup_simulation_environment,
+		stop, start, pause, stop!, empty!, run!
 
 
 function get_last_file_number(path::AbstractString)
@@ -250,15 +252,20 @@ function run!(runner::JobRunner)
 		runner.feeder_task = feeder(runner)
 	end
 	for w in 1:length(runner.workers)
-		if (remotecall_fetch(()->!isdefined(Main, :process_task) || istaskdone(process_task), w))
-			@info "Starting consumer task on $(w)"
+		pid = runner.workers[w].pid
+		# if (remotecall_fetch(()->!isdefined(Main, :process_task) || istaskdone(process_task), runner.workers[w].pid))
+		fut = runner.workers[w].consumer
+		if @fetchfrom pid istaskdone(fetch(fut))
+			@info "Starting consumer task on $pid"
 			start_job_processing(runner, w)
 		end
 		put!(runner.workers[w].commands, :RUN)
 	end
 	runner.running = true
 	try
-		schedule(runner.feeder_task)
+		if !istaskstarted(runner.feeder_task)
+			schedule(runner.feeder_task)
+		end
 		@info "Feeder task started."
 	catch err
 		@info "Replacing job feeder."
@@ -266,17 +273,36 @@ function run!(runner::JobRunner)
 	end
 end
 
-stop!(runner::JobRunner, id) = begin
+send_cmd(runner::JobRunner, id, cmd::Symbol) = begin
 	if 0 < id <= length(runner.workers)
-		put!(runner.workers[id].commands, :ABORT)
+		put!(runner.workers[id].commands, cmd)
 	end
 end
 
-start!(runner::JobRunner, id) = begin
-	if 0 < id <= length(runner.workers)
-		put!(runner.workers[id].commands, :RUN)
+stop(runner::JobRunner, id) = send_cmd(runner, id, :ABORT)
+pause(runner::JobRunner, id) = send_cmd(runner, id, :PAUSE)
+start(runner::JobRunner, id) = send_cmd(runner, id, :RUN)
+
+function stop!(R::JobRunner)
+	@sync for id in 1:length(R.workers)
+		@async begin
+			stop(R, id)
+			wait(R.workers[id].consumer)
+		end
+	end
+
+	R.running = false
+	@info "Waiting for feeder task to end."
+	wait(R.feeder_task)
+end
+
+function empty!(R::JobRunner)
+	empty!(R.jobs)
+	while isready(R.jobs_channel)
+		take!(R.jobs_channel)
 	end
 end
+
 
 
 
@@ -305,7 +331,7 @@ function _run_sim_conditional!(
     k = 2
     X = []
 
-    obs_callback(s,t) = obs(X,s,t)
+    obs_callback(s,t) = Base.invokelatest(obs, X,s,t)
 
     dyn!(state;dyn_params...,T=max_T,callback=obs_callback,abort=abort)
 
