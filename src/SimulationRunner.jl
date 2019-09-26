@@ -211,6 +211,7 @@ function start_job_processing(runner::JobRunner, id::Int)
 end
 
 function submit!(runner::JobRunner, job::Job)
+	job = deepcopy(job)
 	try
 		job.id = maximum(map(x->x.id, runner.jobs)) + 1
 	catch
