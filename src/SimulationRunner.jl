@@ -6,6 +6,7 @@ of a run.
 using MacroTools
 using Distributed
 using JSON
+using FileIO
 using DataFrames
 import GrowthDynamics.AnalysisMethods: timeseries
 
@@ -19,11 +20,11 @@ export  get_last_file_number,
 		stop, start, pause, stop!, empty!, run!
 
 
-function get_last_file_number(path::AbstractString)
+function get_last_file_number(path::AbstractString, suf="bin")
     old_num::Int = 0
     for file in readdir(path)
         new_num = 0
-        f_match = match(r"^(\d+)_\d+\.bin*$", file)
+        f_match = match(Regex("^(\\d+)_\\d+\\.$suf*\$"), file)
         if f_match != nothing
             new_num = parse(Int,f_match.captures[1])
             if new_num > old_num
@@ -55,12 +56,23 @@ end
 
 include("ParameterTemplate.jl")
 
+mutable struct JobMetaData
+	directory::AbstractString # Where to save the results.
+	counter::Int # For counting how many iterations have been fed into the queue.
+end
+JobMetaData() = JobMetaData("", 0)
+JobMetaData(dir::AbstractString) = JobMetaData(dir, 0)
+
 mutable struct Job
 	id::Int
 	job::Base.Generator
 	status::Symbol ## Either of :RUNNABLE, :RUNNING, :DONE, :FAILED, :PAUSED
+	results_channel::RemoteChannel	 ## Channel to be filled with results
+	results::Ref{DataFrame}
+	meta::JobMetaData
 end
-Job(job::Base.Generator) = Job(0, job, :RUNNABLE)
+Job(job::Base.Generator; directory="") = Job(0, job, :RUNNABLE, RemoteChannel(()->Channel{Any}(Inf)), Ref(DataFrame()),
+ JobMetaData(directory))
 
 mutable struct Worker
 	pid::Int
@@ -71,14 +83,9 @@ Worker(pid::Int) = Worker(pid, RemoteChannel(()->Channel{Any}(Inf)), Future())
 
 mutable struct JobRunner
 	workers::Vector{Worker} ## Which workers does the runner utilize?
-
 	jobs::Vector{Job}
-
 	running::Bool
-
 	jobs_channel::RemoteChannel ## Channel to fill with parameters for every run
-	results_channel::RemoteChannel	 ## Channel to be filled with results
-
 	feeder_task::Task
 end
 
@@ -111,20 +118,20 @@ end
 
 
 
-module tmp
-	import ..SimulationRunner
-	p = (SimulationRunner.@parameters for N = [1,2,3], mu in [1e-2]
-		Dict(
-			:dyn => Dict(
-				:T => 10*N
-			),
-			:simulation => Dict(
-				:N => N
-			)
-		)
-		parameter_template
-	end)
-end
+# module tmp
+# 	import ..SimulationRunner
+# 	p = (SimulationRunner.@parameters for N = [1,2,3], mu in [1e-2]
+# 		Dict(
+# 			:dyn => Dict(
+# 				:T => 10*N
+# 			),
+# 			:simulation => Dict(
+# 				:N => N
+# 			)
+# 		)
+# 		parameter_template
+# 	end)
+# end
 
 
 function setup_simulation_environment(num_cpu::Integer=Sys.CPU_THREADS)
@@ -138,7 +145,7 @@ function setup_simulation_environment(workers::Vector)
 	@eval Main begin
 		using Distributed
 		using DataFrames
-		using BSON
+		using FileIO
 		import Base.Iterators: repeated, flatten, product
 		@everywhere $workers begin
 			# import Serialization: serialize
@@ -151,8 +158,7 @@ function setup_simulation_environment(workers::Vector)
 	jr = JobRunner(map(pid->Worker(pid), workers),
 		Job[],
 		false,
-		RemoteChannel(()->Channel{Any}(Inf)),
-		RemoteChannel(()->Channel{Any}(Inf)),
+		RemoteChannel(()->Channel{Any}(512)),
 		Task(nothing))
 	jr.feeder_task = feeder(jr)
 	for worker in 1:length(workers)
@@ -162,7 +168,7 @@ function setup_simulation_environment(workers::Vector)
 	return jr
 end
 
-function process_jobs(jobs::RemoteChannel, results::RemoteChannel, commands::RemoteChannel)
+function process_jobs(jobs::RemoteChannel, commands::RemoteChannel)
 	run = false
 	job = nothing
 	try
@@ -172,7 +178,7 @@ function process_jobs(jobs::RemoteChannel, results::RemoteChannel, commands::Rem
 			if cmd == :RUN
 				@info "Running."
 				run = true
-			elseif cmd == :ABORT || !isopen(results) || !isopen(jobs)
+			elseif cmd == :ABORT || !isopen(jobs)
 				@info "Aborting."
 				break
 			elseif cmd == :PAUSE
@@ -181,7 +187,7 @@ function process_jobs(jobs::RemoteChannel, results::RemoteChannel, commands::Rem
 			end
 		end
 		if run && isopen(jobs)
-			job = take!(jobs)
+			job, results = take!(jobs)
 			@info "Received a job on $(myid())."
 				SimulationRunner._run_sim_conditional!(
 					job[:global],
@@ -205,7 +211,7 @@ end
 function start_job_processing(runner::JobRunner, id::Int)
 	pid = runner.workers[id].pid
 	runner.workers[id].consumer = @spawnat pid begin
-		@async SimulationRunner.process_jobs(runner.jobs_channel, runner.results_channel, runner.workers[id].commands)
+		@async SimulationRunner.process_jobs(runner.jobs_channel, runner.workers[id].commands)
 	end
 	@info "Consumer task launched on $pid."
 end
@@ -232,14 +238,15 @@ function feeder(runner::JobRunner)
 						break
 					end
 					job[:global][:job_id] = job_id
-					put!(runner.jobs_channel, job)
+					put!(runner.jobs_channel, (job, runner.jobs[job_id].results_channel))
+					runner.jobs[job_id].meta.counter += 1
 					@info "Fed $job_id into queue."
 					yield()
 				end
 				@info "Setting $job_id to :RUNNING"
 				runner.jobs[job_id].status = :RUNNING
 			end
-			sleep(0.5)
+			sleep(1.0)
 		end
 	end
 end
@@ -249,6 +256,8 @@ function run!(runner::JobRunner)
 		if j.status == :RUNNABLE
 			@info "Setting job to :QUEUING"
 			j.status = :QUEUING
+			j.meta.counter = 0
+			@async collect_results!(j.results, j.results_channel)
 		end
 	end
 	if istaskdone(runner.feeder_task)
@@ -369,7 +378,7 @@ function repeated_runs(N::Integer, dyn!, obs, setup, parameters;
     end
 end
 
-function collect_results!(df::Ref{DataFrame}, rc::Distributed.RemoteChannel, maxtakes=0)
+function collect_results!(df::Ref{DataFrame}, rc::Distributed.RemoteChannel, maxtakes=typemax(Int))
 	n = 0
 	while n < maxtakes
 		raw = take!(rc)
@@ -394,6 +403,40 @@ function collect_results!(df::Ref{DataFrame}, rc::Distributed.RemoteChannel, max
 	end
 	df[]
 end
+
+function save(job::Job)
+	directory = job.meta.directory
+	if directory == ""
+		@warn "Set job.meta.directory to save."
+		return nothing
+	end
+	try
+		mkdir(joinpath(directory, string(job.id)))
+	catch err
+	end
+	filename = string(get_last_file_number(directory*string(job.id)))*".bson"
+	FileIO.save(joinpath(directory, string(job.id), filename), :results => job.results[])
+end
+
+function save(R::JobRunner)
+	for job in R.jobs
+		save(job)
+	end
+end
+
+function autosave(job::Job; every=10)
+	len = size(job.results, 1)
+	# While the rob is running AND
+	# there are less result rows than queued jobs.
+	while job.status == :RUNNING && size(job.results[], 1) < job.meta.counter
+		if size(job.results, 1) - every >= 0
+			save(job)
+		end
+		len = size(job.results, 1)
+		sleep(60)
+	end
+end
+
 
 
 ##==END Module==##
