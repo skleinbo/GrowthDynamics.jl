@@ -10,7 +10,8 @@ export  annotate_snps!,
         df_traversal,
         harm,
         harm2,
-        prune_phylogeny!
+        prune_phylogeny!,
+        MRCA
 
 harm(N::Integer) = sum(1/i for i in 1:N)
 harm2(N::Integer) = sum(1/i^2 for i in 1:N)

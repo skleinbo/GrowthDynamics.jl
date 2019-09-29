@@ -1,8 +1,10 @@
 module TumorObservables
 
-import IndexedTables: table, join, rename, transform, select
+import IndexedTables: table, join, rename, transform, select, filter
+import DataFrames: DataFrame, names!
 import LinearAlgebra: Symmetric
 import StatsBase: Weights, sample
+import Distributions: Multinomial
 
 import OpenCLPicker: @opencl
 
@@ -25,7 +27,8 @@ using ..Phylogenies
 @opencl import ..OffLattice
 @opencl import ..OffLatticeTumorDynamics
 
-export  allelic_fractions,
+export  allele_fractions,
+        allele_spectrum,
         total_population_size,
         population_size,
         surface,
@@ -42,30 +45,33 @@ export  allelic_fractions,
         pairwise,
         mean_pairwise
 
-function allelic_fractions(S::TumorConfiguration, t)
+"Dictionary of (SNP, freq)."
+function allele_fractions(S::TumorConfiguration, t=0)
     X = Dict{eltype(eltype(S.meta.snps)), Int64}()
+    T = total_population_size(state)
     for j in 1:length(S.meta.genotypes)
         for snp in S.meta.snps[j]
             if haskey(X, snp)
-                X[snp] += S.meta.npops[j]
+                X[snp] += S.meta.npops[j]/T
             else
-                push!(X, snp => S.meta.npops[j])
+                push!(X, snp => S.meta.npops[j]/T)
             end
         end
     end
     return X
 end
 
-function allelic_fractions(S::TumorConfiguration, t, samples::Integer)
+function allele_fractions(S::TumorConfiguration, samples=length(S.meta.npops), t=0)
     X = Dict{eltype(eltype(S.meta.snps)), Int64}()
+    T = total_population_size(S)
     pop_samples = sample(1:length(S.meta.npops),
-        Weights(S.meta.npops ./ total_population_size(S)), samples)
+        Weights(S.meta.npops ./ T), samples)
     for j in pop_samples
         for snp in S.meta.snps[j]
             if haskey(X, snp)
-                X[snp] += 1
+                X[snp] += 1 / length(pop_samples)
             else
-                push!(X, snp => 1)
+                push!(X, snp => 1 / length(pop_samples))
             end
         end
     end
@@ -73,7 +79,7 @@ function allelic_fractions(S::TumorConfiguration, t, samples::Integer)
 end
 
 
-function allelic_fractions(L::Lattices.RealLattice{<:Integer})
+function allele_fractions(L::Lattices.RealLattice{<:Integer})
     m = maximum(L.data)
     if m == 0
         return []
@@ -86,7 +92,7 @@ function allelic_fractions(L::Lattices.RealLattice{<:Integer})
     end
     return Ng
 end
-@opencl function allelic_fractions(L::OffLattice.FreeSpace{<:Integer})
+@opencl function allele_fractions(L::OffLattice.FreeSpace{<:Integer})
     state = L.genotypes[Bool.(L._mask)]
     m = maximum(state)
     if m == 0
@@ -101,6 +107,37 @@ end
     return Ng
 end
 
+"""
+    allele_spectrum(state;[ threshold=0.0, read_depth=total_population_size(state)])
+
+Return a DataFrame with count, frequency of every polymorphism. Additionally sample from the population.
+"""
+function allele_spectrum(state::TumorConfiguration; threshold=0.0, read_depth=total_population_size(state))
+  popsize = total_population_size(state)
+  ## Set state to analyse
+  af = allelic_fractions(state, 0) |> table |> DataFrame
+  names!(af, [:position, :npop])
+  af.fpop = af.npop ./ popsize
+
+  ## Detection threshold
+  af = filter(x->x.fpop >= threshold, af) |> DataFrame
+
+  ## Sampling
+  sample_percent = read_depth / popsize
+  # af.depth = rand(Binomial(popsize, sample_percent), size(af, 1))
+  af.depth = fill(read_depth, size(af,1))
+
+  if sample_percent < 1.0
+    allele_sample_size = ceil(Int64, sample_percent*size(af,1))
+    af.samples = rand(Multinomial(round(Int64,sample_percent*sum(af.npop)), af.npop/sum(af.npop)))
+  else
+    allele_sample_size = size(af,1)
+    af.samples = af.npop
+  end
+
+  return af
+end
+
 function total_population_size(L::Lattices.RealLattice{<:Integer})
     countnz(L.data)
 end
@@ -109,8 +146,6 @@ end
 function total_population_size(S::TumorConfiguration)
     sum(S.meta.npops)
 end
-
-
 
 function population_size(L::Lattices.RealLattice{T}, t) where T<:Integer
     D = Dict{T, Int64}()
@@ -132,17 +167,6 @@ function population_size(S::TumorConfiguration, t)
     zip(S.meta.genotypes, S.meta.npops) |> collect
 end
 
-function set_population_size!(state::TumorConfiguration)
-    if typeof(state.lattice) == NoLattice
-        return
-    end
-    P = state.Phylogeny
-    ps = population_size(state.lattice, 0)
-    for (g,s) in ps
-        set_prop!(P, P[g, :genotype], :npop, s)
-    end
-    nothing
-end
 
 ## SLOW
 @opencl function population_size(L::OffLattice.FreeSpace{<:Integer}, t)
@@ -437,13 +461,6 @@ function pairwise(S::TumorConfiguration)
     Symmetric(X)
 end
 
-# function mean_pairwise(S::TumorConfiguration)
-#     X = 0
-#     for i in 2:nv(S.Phylogeny), j in i:nv(S.Phylogeny)
-#         X += pairwise(S, i, j)*S.meta.npops[i]*S.meta.npops[j]
-#     end
-#     X / binomial(total_population_size(S), 2)
-# end
 """
 Diversity (mean pairwise difference of mutations) of a population.
 """

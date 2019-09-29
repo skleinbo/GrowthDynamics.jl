@@ -7,23 +7,18 @@ import GeometryTypes: Point2f0, Point3f0
 import LightGraphs: DiGraph, add_vertex!, add_edge!
 import Base: push!, show
 import StatsBase
+import ..TumorObservables
 
 export
-    nolattice_state,
-    single_center,
-    single_center3,
-    random_center,
-    uniform_line,
-    uniform_square,
-    uniform_circle,
-    uniform_circle_free,
-    uniform_sphere,
-    uniform_sphere2,
-    biallelic_layered,
-    biallelic_cornered,
     TumorConfiguration,
     MetaData,
-    push!
+    push!,
+    nolattice_state,
+    single_center,
+    uniform_line,
+    uniform_circle,
+    uniform_circle_free,
+    uniform_sphere
 
 ##-- METADATA for efficiently storing population information --##
 const MetaDatum{T} = Tuple{T, Int64, Float64, Vector{Int64}, Tuple{Int64,Float64}}
@@ -102,9 +97,11 @@ end
 
 
 """
+    uniform_line(L [, g=0])
+
 One-dimension system filled with genotype `g`.
 """
-function filled_line(L, g=0)
+function uniform_line(L, g=0)
     G = DiGraph()
     lattice = Lattices.LineLattice(L, 1.0, fill(g, L))
     state = TumorConfiguration(lattice, G)
@@ -141,54 +138,8 @@ function single_center(N::Int;g1=1,g2=2)
     return state
 end
 
-"""
-Bla
-"""
-function single_center3(N::Int;g1=1,g2=2)::Lattices.HCPLattice{Int}
-    midpoint = [div(N,2),div(N,2), div(N,2)]
-    state = fill(g1,N,N,N)
-    state[midpoint] = g2
-    return Lattices.HCPLattice(N,N,N,1.0,state)
-end
 
-"""
-Seed a `LxL` center with random genotypes.
-"""
-function random_center(N::Int,L)::Array{Int64,2}
-    midpoint = (div(N,2),div(N,2))
-    state = zeros(Int64,N,N)
-    state[ div(N,2)-(L-1):div(N,2)+L, div(N,2)-(L-1):div(N,2)+L ] = rand(1:100,2*L,2*L)
-    return state
-end
-
-
-
-"""
-Fill line of fraction `f1` with gt `g2`; rest is gt `g1`.
-"""
-function uniform_line(N::Int,f=1/10,g1=1,g2=2)::Lattices.LineLattice{Int}
-    state = fill(g1,N)
-    mid = div(N,2)
-    state[mid-round(Int,N/2*f)+1:mid+round(Int,N/2*f)] = g2
-    return Lattices.LineLattice(N,1.0,state)
-end
-
-
-"""
-Fill sphere of fraction `f1` with gt `g2`; rest is gt `g1`.
-"""
 function uniform_sphere(N::Int,f=1/10,g1=1,g2=2)::Lattices.HCPLattice{Int}
-    state = fill(g1,N,N,N)
-    mid = [div(N,2),div(N,2),div(N,2)]
-    for m in 1:N, n in 1:N, l in 1:N
-        if (m-mid[1])^2+(n-mid[2])^2+(l-mid[3])^2 <= N^2*(3*f/(4pi))^(2/3)
-            state[m,n,l] = g2
-        end
-    end
-    return Lattices.HCPLattice(N,N,N,1.0,state)
-end
-
-function uniform_sphere2(N::Int,f=1/10,g1=1,g2=2)::Lattices.HCPLattice{Int}
     state = Lattices.HCPLattice(N,N,N,1.0,fill(g1,N,N,N))
     mid = [div(N,2),div(N,2),div(N,2)]
 
