@@ -35,9 +35,9 @@ version = "0.6.2"
 
 [[CategoricalArrays]]
 deps = ["Compat", "DataAPI", "Future", "JSON", "Missings", "Printf", "Reexport", "Unicode"]
-git-tree-sha1 = "5f4400b24adb1fbed17a9dcc1e8ab8aaf5b03d1f"
+git-tree-sha1 = "cc8b9d6b65ce76e934e14e3738af3abcc1019790"
 uuid = "324d7699-5711-5eae-9e2f-1d82baa6b597"
-version = "0.6.0"
+version = "0.7.0"
 
 [[CodecZlib]]
 deps = ["BinaryProvider", "Libdl", "TranscodingStreams"]
@@ -99,9 +99,21 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[Distributions]]
 deps = ["LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns"]
-git-tree-sha1 = "baaf9e165ba8a2d11fb4fb3511782ee070ee3694"
+git-tree-sha1 = "b7c7b78569f9a86bb00d85ef7336101869824b15"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
-version = "0.21.1"
+version = "0.21.2"
+
+[[DocStringExtensions]]
+deps = ["LibGit2", "Markdown", "Pkg", "Test"]
+git-tree-sha1 = "0513f1a8991e9d83255e0140aace0d0fc4486600"
+uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
+version = "0.8.0"
+
+[[Documenter]]
+deps = ["Base64", "DocStringExtensions", "InteractiveUtils", "JSON", "LibGit2", "Logging", "Markdown", "REPL", "Test", "Unicode"]
+git-tree-sha1 = "1b6ae3796f60311e39cd1770566140d2c056e87f"
+uuid = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+version = "0.23.3"
 
 [[FileIO]]
 deps = ["Pkg"]
@@ -126,9 +138,9 @@ version = "0.7.6"
 
 [[IndexedTables]]
 deps = ["DataAPI", "DataValues", "Distributed", "IteratorInterfaceExtensions", "OnlineStatsBase", "PooledArrays", "SparseArrays", "Statistics", "StructArrays", "TableTraits", "TableTraitsUtils", "Tables", "WeakRefStrings"]
-git-tree-sha1 = "269480fea577933180fb6c39bda9bd78d4c040dd"
+git-tree-sha1 = "57635c168763748fedd8282587a85cbd58d7ec9a"
 uuid = "6deec6e2-d858-57c5-ab9b-e6ca5bd20e43"
-version = "0.12.3"
+version = "0.12.4"
 
 [[Inflate]]
 deps = ["Pkg", "Printf", "Random", "Test"]
@@ -319,9 +331,9 @@ uuid = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 
 [[SimpleTraits]]
 deps = ["InteractiveUtils", "MacroTools"]
-git-tree-sha1 = "05bbf4484b975782e5e54bb0750f21f7f2f66171"
+git-tree-sha1 = "2bdf3b6300a9d66fe29ee8bb51ba100c4df9ecbc"
 uuid = "699a6c99-e7fa-54fc-8d76-47d257e15c1d"
-version = "0.9.0"
+version = "0.9.1"
 
 [[Sockets]]
 uuid = "6462fe0b-24de-5631-8697-dd941f90decc"
