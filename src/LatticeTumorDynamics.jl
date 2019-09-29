@@ -33,6 +33,22 @@ const MutationProfile = Tuple{Symbol, Float64, Int64} # (rate, :poisson/:fixed, 
 
 ###--- Start of simulation methods ---###
 
+"""
+    exponential!(state::NoLattice{Int}; <keyword arguments>)
+
+Run exponential growth on an unstructered population.
+
+# Arguments
+- `T::Int`: the number of steps (generations) to advance.
+- `fitness`: function that assigns a fitness value to a genotype `g::Int`.
+- `mu`: mutation rate.
+- `baserate`: progressing real time is measured in `1/baserate`.
+- `prune_period`: prune the phylogeny periodically after no. of steps.
+- `prune_on_exit`: prune before leaving the simulation loop.
+- `callback`: function of `state` and `time` to be called at each iteration.
+    Used primarily for collecting observables during the run.
+- `abort`: condition on `state` and `time` under which to end the run.
+"""
 function exponential!(
     state::TumorConfiguration{NoLattice{Int64}};
     fitness=g->1.0,
@@ -155,7 +171,24 @@ function prune_me!(state,mu)
 end
 _prune!(s) = LatticeTumorDynamics.prune_me!(s, mu)
 
+"""
+    moran!(state::NoLattice{Int}; <keyword arguments>)
 
+(Extended) Moran dynamics on an unstructured population. Grow until carrying capacity
+is reach. After that individuals begin replacing each other.
+
+# Arguments
+- `T::Int`: the number of steps to advance.
+- `fitness`: function that assigns a fitness value to a genotype `g::Int`.
+- `mu`: mutation rate.
+- `d`: death rate.
+- `baserate`: progressing real time is measured in `1/baserate`.
+- `prune_period`: prune the phylogeny periodically after no. of steps.
+- `prune_on_exit`: prune before leaving the simulation loop.
+- `callback`: function of `state` and `time` to be called at each iteration.
+    Used primarily for collecting observables during the run.
+- `abort`: condition on `state` and `time` under which to end the run.
+"""
 function moran!(
     state::TumorConfiguration{NoLattice{Int64}};
     fitness=g->1.0,
@@ -250,6 +283,7 @@ function moran!(
     end
 end
 
+## Define density function for different lattice types.
 for LatticeType in [Lattices.LineLattice, Lattices.HexagonalLattice]
     if LatticeType <: Lattices.HexagonalLattice
         nn_function = :hex_nneighbors
@@ -269,7 +303,27 @@ for LatticeType in [Lattices.LineLattice, Lattices.HexagonalLattice]
     end)
 end
 
+"""
+    die_or_proliferate!(state::RealLattice{Int}; <keyword arguments>)
 
+Moran-like dynamics on an spatially structured population. Each step is either a death or
+(potential) birth and mutation event.
+
+Individuals die at a rate `d`.
+Birthrate depends linearily on the number of neighbors.
+
+# Arguments
+- `T::Int`: the number of steps to advance.
+- `fitness`: function that assigns a fitness value to a genotype `g::Int`.
+- `mu`: mutation rate.
+- `d`: death rate. Zero halts the dynamics after carrying capacity is reached.
+- `baserate`: progressing real time is measured in `1/baserate`.
+- `prune_period`: prune the phylogeny periodically after no. of steps.
+- `prune_on_exit`: prune before leaving the simulation loop.
+- `callback`: function of `state` and `time` to be called at each iteration.
+    Used primarily for collecting observables during the run.
+- `abort`: condition on `state` and `time` under which to end the run.
+"""
 function die_or_proliferate!(
     state::TumorConfiguration{<:RealLattice};
     fitness=g->0.0,

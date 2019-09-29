@@ -1,0 +1,4 @@
+# Observables
+```@autodocs
+Modules = [TumorObservables]
+```

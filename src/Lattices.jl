@@ -29,6 +29,7 @@ abstract type AbstractLattice3D{T} <:AbstractLattice end
 mutable struct NoLattice{T} <: AbstractLattice
     N::Int # System size
 end
+"Dummy 'lattice' for systems without spatial structure. Carrying capacity `N`."
 NoLattice(N::Int) = NoLattice{Int64}(N)
 
 const RealLattice{T} = Union{AbstractLattice1D{T}, AbstractLattice2D{T}, AbstractLattice3D{T}}

@@ -65,7 +65,11 @@ Base.getindex(T::TumorConfiguration,ind...) = T.lattice.data[ind...]
 Base.getindex(T::TumorConfiguration) = T.lattice.data
 Base.setindex!(T::TumorConfiguration,v,ind...) = T.lattice.data[ind...] = v
 
-"Unstructered model with one genotype, one individual and fitness 1.0"
+"""
+    nolattice_state(N)
+
+Unstructered model with carrying capacity `N`, one genotype and one individual with fitness 1.0.
+"""
 nolattice_state(N::Int) = begin
     state = TumorConfiguration(Lattices.NoLattice(N), DiGraph())
     push!(state, 1)
@@ -111,7 +115,9 @@ function filled_line(L, g=0)
 end
 
 """
-Initialize a single cell of genotype `1` at the midpoint of an empty lattice.
+    single_center(N [;g1=1,g2=2])
+
+Initialize a single cell of genotype `g2` at the midpoint of hexagonal lattice filled with `g1`.
 """
 function single_center(N::Int;g1=1,g2=2)
     G = DiGraph()
@@ -235,6 +241,12 @@ end
     FreeSpace{eltype(genotypes)}(Nmax, G, positions,genotypes,birthrates,deathrates,dMat,_mask)
 end
 
+"""
+    uniform_circle(L [,f=1/10,g1=1,g2=2])
+
+Hexagonal lattice state filled with `g1`.
+Disk of filling fraction `f` with genotype `g2` at the center.
+"""
 function uniform_circle(N::Int,f=1/10,g1=1,g2=2)::TumorConfiguration{Lattices.HexagonalLattice{Int}}
     G = DiGraph()
     lattice = Lattices.HexagonalLattice(N,N,1.0,fill(g1,N,N))

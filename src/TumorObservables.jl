@@ -105,6 +105,7 @@ function total_population_size(L::Lattices.RealLattice{<:Integer})
     countnz(L.data)
 end
 
+"Total population size. Duh."
 function total_population_size(S::TumorConfiguration)
     sum(S.meta.npops)
 end
@@ -126,6 +127,7 @@ function population_size(L::Lattices.RealLattice{T}, t) where T<:Integer
     return sort( [ (k,v) for (k,v) in D ], lt=(x,y)->x[1]<y[1] )
 end
 
+"Dictionary (genotype, population size)"
 function population_size(S::TumorConfiguration, t)
     zip(S.meta.genotypes, S.meta.npops) |> collect
 end
@@ -277,11 +279,13 @@ end
 ## Pylogenic observables
 ##
 ##
+"Number of direct descendends of a genotype."
 function nchildren(S::TumorConfiguration, g)
     vertex = findfirst(x->x==g, S.meta.genotypes)
     length(inneighbors(S.Phylogeny, vertex))
 end
 
+"Does a genotype have any children?"
 has_children(S, g) = nchildren(S, g) > 0
 
 function phylo_hist(state::TumorConfiguration)
@@ -326,9 +330,10 @@ function cphylo_hist(state::TumorConfiguration)
     return transform(joined, :cnpop => cnpops)
 end
 
-## Phylogenetic observables
 
 is_leaf(P::SimpleDiGraph, v) = length(inneighbors(P, v)) == 0
+
+"List polymorphisms that are common to all genotypes."
 function common_snps(S::TumorConfiguration)
     populated = findall(v->v > 0, S.meta.npops)
     if isempty(populated)
@@ -345,6 +350,11 @@ function common_snps(S::TumorConfiguration)
     end
 end
 
+"""
+    polymorphisms(S::TumorConfiguration)
+
+Vector of polymorphisms (segregating sites).
+"""
 function polymorphisms(S::TumorConfiguration)
     SNPS = Set(S.meta.snps[1])
     for v in vertices(S.Phylogeny)
@@ -356,6 +366,11 @@ function polymorphisms(S::TumorConfiguration)
     SNPS
 end
 
+"""
+    npolymorphisms(S::TumorConfiguration)
+
+Number of polymrphisms
+"""
 npolymorphisms(S::TumorConfiguration) = length(polymorphisms(S))
 
 function nsymdiff(A,B)
@@ -398,13 +413,22 @@ function nsymdiff(A,B)
     x + length(A)-(j-1) + length(B)-(k-1)
 end
 
+"""
+    pairwise(S::TumorConfiguration, i, j)
 
+Number of pairwise genomic differences between genotype indices `i,j`.
+"""
 function pairwise(S::TumorConfiguration, i, j)
     si = S.meta.snps[i]
     sj = S.meta.snps[j]
     nsymdiff(si,sj)
 end
 
+"""
+    pairwise(S::TumorConfiguration)
+
+Matrix of pairwise differences.
+"""
 function pairwise(S::TumorConfiguration)
     X = fill(0, nv(S.Phylogeny), nv(S.Phylogeny))
     for i in 1:nv(S.Phylogeny), j in i+1:nv(S.Phylogeny)
@@ -420,6 +444,9 @@ end
 #     end
 #     X / binomial(total_population_size(S), 2)
 # end
+"""
+Diversity (mean pairwise difference of mutations) of a population.
+"""
 function mean_pairwise(S::TumorConfiguration)
     af = allelic_fractions(S, 0)
     if length(af) > 0

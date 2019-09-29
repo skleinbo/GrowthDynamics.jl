@@ -148,6 +148,9 @@ function prune_phylogeny!(S::TumorConfigurations.TumorConfiguration)
     return S.Phylogeny, S.meta
 end
 
+"""
+Return index of the most recent common ancestor between `(i,j)` in a phylogeny.
+"""
 function MRCA(S::TumorConfiguration, i::Integer, j::Integer)
     P = S.Phylogeny
     @assert 1<=i<=nv(P) && 1<=j<=nv(P)
@@ -167,7 +170,9 @@ function MRCA(S::TumorConfiguration, i::Integer, j::Integer)
     return mrca
 end
 
-
+"""
+Return index of the most recent common ancestor between in a phylogeny.
+"""
 function MRCA(S::TumorConfiguration)
     P = S.Phylogeny
 
