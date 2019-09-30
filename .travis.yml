@@ -2,7 +2,7 @@ dist: bionic
 language: julia
 
 before_install:
-  - sudo add-apt-repository ppa:anbe/opencl
+  - sudo add-apt-repository ppa:anbe/opencl -y
   - sudo apt-get update
   - sudo apt-get install pocl -y
 
