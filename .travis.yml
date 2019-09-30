@@ -1,15 +1,14 @@
 language: julia
-os:
-  - linux
+os: linux
+  addons:
+    packages:
+      - pocl
+
 julia:
   - 1.2
 
 notifications:
   email: false
-
-before_install:
-    - sudo apt-get -qq update
-    - sudo apt-get install pocl
 
 jobs:
   include:
