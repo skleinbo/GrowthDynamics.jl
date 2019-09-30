@@ -28,6 +28,7 @@ using ..Phylogenies
 @opencl import ..OffLatticeTumorDynamics
 
 export  allele_fractions,
+        sampled_allele_fractions,
         allele_spectrum,
         total_population_size,
         population_size,
@@ -45,7 +46,7 @@ export  allele_fractions,
         pairwise,
         mean_pairwise
 
-"Dictionary of (SNP, freq)."
+"Dictionary of `(SNP, freq)`."
 function allele_fractions(S::TumorConfiguration, t=0)
     X = Dict{eltype(eltype(S.meta.snps)), Int64}()
     T = total_population_size(state)
@@ -61,10 +62,16 @@ function allele_fractions(S::TumorConfiguration, t=0)
     return X
 end
 
-function allele_fractions(S::TumorConfiguration, samples=length(S.meta.npops), t=0)
+"""
+    sampled_allele_fractions(S::TumorConfiguration[, t=0, samples=length(S.meta.npops)])
+
+Randomly sample genotypes(!) and calculate frequencies of contained SNPs.
+Return a dictionary `(SNP, freq)`.
+"""
+function sampled_allele_fractions(S::TumorConfiguration, t=0, samples=length(S.meta.npops))
     X = Dict{eltype(eltype(S.meta.snps)), Int64}()
     T = total_population_size(S)
-    pop_samples = sample(1:length(S.meta.npops),
+    pop_samples = sample(1:length(S.meta.genotypes),
         Weights(S.meta.npops ./ T), samples)
     for j in pop_samples
         for snp in S.meta.snps[j]
