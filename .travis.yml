@@ -1,9 +1,9 @@
 language: julia
-os: linux
-before_install:
-  - sudo add-apt-repository ppa:anbe/opencl -y
-  - sudo apt-get update
-  - sudo apt-get install pocl-1.1-5 -y
+os: osx
+# before_install:
+#   - sudo add-apt-repository ppa:anbe/opencl -y
+#   - sudo apt-get update
+#   - sudo apt-get install pocl-1.1-5 -y
 
 julia:
   - 1.2
