@@ -7,7 +7,6 @@ import GeometryTypes: Point2f0, Point3f0
 import LightGraphs: DiGraph, add_vertex!, add_edge!
 import Base: push!, show
 import StatsBase
-import ..TumorObservables
 
 export
     TumorConfiguration,
@@ -245,11 +244,5 @@ function uniform_circle(N::Int,f=1/10,g1=1,g2=2)::TumorConfiguration{Lattices.He
     return state
 end
 
-## Pretty printing
-Base.show(io::IO, C::TumorConfiguration) = begin
-    println(io, typeof(C.lattice))
-    println(io, length(C.meta.genotypes),"\tgenotypes")
-    print(io, TumorObservables.total_population_size(C),"\tpopulation")
-end
 ##--END module--
 end

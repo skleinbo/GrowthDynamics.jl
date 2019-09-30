@@ -42,6 +42,7 @@ include("LatticeTumorDynamics.jl")
 include("TumorObservables.jl")
 include("AnalysisMethods.jl")
 include("FitnessIterators.jl")
+include("PrettyPrinting.jl")
 
 @opencl begin
     include("OffLattice.jl")
