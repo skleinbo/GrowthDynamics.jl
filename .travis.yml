@@ -1,6 +1,6 @@
 language: julia
 os: linux
-  dist: bionic
+dist: bionic
 
 before_install:
   - sudo apt-get -qq update
