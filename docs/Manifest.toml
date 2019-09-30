@@ -138,9 +138,9 @@ version = "0.7.6"
 
 [[GrowthDynamics]]
 deps = ["DataFrames", "Distributed", "Distributions", "FileIO", "GeometryTypes", "IndexedTables", "IterTools", "JLD2", "JSON", "LightGraphs", "LinearAlgebra", "MacroTools", "ObservableCollector", "OpenCL", "OpenCLPicker", "Printf", "ProgressMeter", "Random", "Reexport", "Serialization", "StaticArrays", "StatsBase"]
-git-tree-sha1 = "d31216b92ab8cdf50a692c107e85eaf70e5d2c2f"
+git-tree-sha1 = "b2830a4176cd4c7015eafc7ccecb2e6df6eaee41"
 repo-rev = "master"
-repo-url = "https://github.com/skleinbo/GrowthDynamics.jl"
+repo-url = "https://skleinbo:@github.com/skleinbo/GrowthDynamics.jl"
 uuid = "708a6a61-856c-5d7f-acbf-fcf0902d75eb"
 version = "0.2.1"
 
