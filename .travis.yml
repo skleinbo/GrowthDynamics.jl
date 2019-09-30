@@ -7,6 +7,10 @@ julia:
 notifications:
   email: false
 
+before_install:
+    - sudo apt-get -qq update
+    - sudo apt-get install pocl
+
 jobs:
   include:
     - stage: "Documentation"
