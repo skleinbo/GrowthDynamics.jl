@@ -1,6 +1,5 @@
-dist: bionic
 language: julia
-
+os: linux
 before_install:
   - sudo add-apt-repository ppa:anbe/opencl -y
   - sudo apt-get update
