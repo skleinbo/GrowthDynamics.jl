@@ -46,20 +46,25 @@ export  allele_fractions,
         pairwise,
         mean_pairwise
 
-"Dictionary of `(SNP, freq)`."
-function allele_fractions(S::TumorConfiguration, t=0)
+"Dictionary `(SNP, population count)`"
+function allele_size(S::TumorConfiguration, t=0)
     X = Dict{eltype(eltype(S.meta.snps)), Int64}()
-    T = total_population_size(state)
     for j in 1:length(S.meta.genotypes)
         for snp in S.meta.snps[j]
             if haskey(X, snp)
-                X[snp] += S.meta.npops[j]/T
+                X[snp] += S.meta.npops[j]
             else
-                push!(X, snp => S.meta.npops[j]/T)
+                push!(X, snp => S.meta.npops[j])
             end
         end
     end
     return X
+end
+
+"Dictionary of `(SNP, freq)`."
+allele_fractions(S::TumorConfiguration, t=0) = begin
+    as = allele_size(S, t)
+    Dict(zip(keys(as), values(as) ./ total_population_size(S)))
 end
 
 """
@@ -122,27 +127,27 @@ Return a DataFrame with count, frequency of every polymorphism. Additionally sam
 function allele_spectrum(state::TumorConfiguration; threshold=0.0, read_depth=total_population_size(state))
   popsize = total_population_size(state)
   ## Set state to analyse
-  af = allelic_fractions(state, 0) |> table |> DataFrame
-  names!(af, [:position, :npop])
-  af.fpop = af.npop ./ popsize
+  as = allele_size(state, 0) |> table |> DataFrame
+  names!(as, [:position, :npop])
+  as.fpop = as.npop ./ popsize
 
   ## Detection threshold
-  af = filter(x->x.fpop >= threshold, af) |> DataFrame
+  as = filter(x->x.fpop >= threshold, as) |> DataFrame
 
   ## Sampling
   sample_percent = read_depth / popsize
-  # af.depth = rand(Binomial(popsize, sample_percent), size(af, 1))
-  af.depth = fill(read_depth, size(af,1))
+  # as.depth = rand(Binomial(popsize, sample_percent), size(as, 1))
+  as.depth = fill(read_depth, size(as,1))
 
   if sample_percent < 1.0
-    allele_sample_size = ceil(Int64, sample_percent*size(af,1))
-    af.samples = rand(Multinomial(round(Int64,sample_percent*sum(af.npop)), af.npop/sum(af.npop)))
+    allele_sample_size = ceil(Int64, sample_percent*size(as,1))
+    as.samples = rand(Multinomial(round(Int64,sample_percent*sum(as.npop)), as.npop/sum(as.npop)))
   else
-    allele_sample_size = size(af,1)
-    af.samples = af.npop
+    allele_sample_size = size(as,1)
+    as.samples = as.npop
   end
 
-  return af
+  return as
 end
 
 function total_population_size(L::Lattices.RealLattice{<:Integer})
@@ -294,7 +299,7 @@ end
 
 
 function lone_survivor_condition(L,g::Integer)
-    af = allelic_fractions(L)
+    af = allele_fractions(L)
     for x in af
         if x==(g,1.0)
             return true
@@ -472,9 +477,9 @@ end
 Diversity (mean pairwise difference of mutations) of a population.
 """
 function mean_pairwise(S::TumorConfiguration)
-    af = allelic_fractions(S, 0)
+    af = allele_fractions(S, 0)
     if length(af) > 0
-        return mapreduce(x->2.0*x*(1-x), +, (af |> values |>collect) / total_population_size(S))
+        return mapreduce(x->2.0*x*(1-x), +, (af |> values |>collect))
     else
         return 0.0
     end
