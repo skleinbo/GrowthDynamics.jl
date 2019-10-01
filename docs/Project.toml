@@ -1,8 +1,6 @@
 [deps]
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-GrowthDynamics = "708a6a61-856c-5d7f-acbf-fcf0902d75eb"
-ObservableCollector = "aecdbc30-9f0d-11e8-0949-396c5a157264"
-OpenCLPicker = "b4741b20-32dd-11e9-2e44-23e783dd72cb"
 
 [compat]
-Documenter = "~0.23"
+Documenter = "~0.23.3"
