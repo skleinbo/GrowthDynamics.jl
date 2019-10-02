@@ -315,9 +315,6 @@ function empty!(R::JobRunner)
 	end
 end
 
-
-
-
 function _run_sim_conditional!(
 	global_params,
 	sim_params,
@@ -342,13 +339,12 @@ function _run_sim_conditional!(
     end
 
     k = 2
-    X = []
 
-    obs_callback(s,t) = Base.invokelatest(obs, X,s,t)
+    obs_callback(s,t) = obs(s.observables, s, t)
 
     dyn!(state;dyn_params...,T=max_T,callback=obs_callback,abort=abort)
 
-    if isempty(X)
+    if isempty(state.observables)
         if isdefined(Main,:STRICT) && Main.STRICT
             global state = state
             error("No observables collected!")
@@ -357,7 +353,7 @@ function _run_sim_conditional!(
         end
     end
     put!(results_channel, (:job_id => global_params[:job_id], :N =>sim_params[:N], :s => dyn_params[:s], :mu => dyn_params[:mu],
-     :d => dyn_params[:d], :f => dyn_params[:f], X))
+     :d => dyn_params[:d], :f => dyn_params[:f], copy(state.observables)))
 end
 
 "To be deprecated"
@@ -389,7 +385,11 @@ function collect_results!(df::Ref{DataFrame}, rc::Distributed.RemoteChannel, max
 			## The last entry of the returned tuple contains by convention
 			## the observables
 			parameters = raw[1:end-1]
-			obs = raw[end] |> timeseries
+			if raw[end] isa Dict
+				obs = raw[end]
+			else
+				obs = raw[end] |> timeseries
+			end
 			D = merge(Dict(parameters), obs)
 			if isempty(df[])
 				df[] = DataFrame(typeof.(values(D)), collect(keys(D)), 0)

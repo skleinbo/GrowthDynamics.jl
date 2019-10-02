@@ -51,9 +51,10 @@ mutable struct TumorConfiguration{T<:Lattices.AbstractLattice}
     meta::MetaData
     t::Int
     treal::Float64
+    observables::Dict{Symbol, Any}
 end
 function TumorConfiguration(lattice::Lattices.AnyTypedLattice{T}, Phylogeny::DiGraph) where {T}
-    TumorConfiguration(lattice, Phylogeny, MetaData(T), 0, 0.0)
+    TumorConfiguration(lattice, Phylogeny, MetaData(T), 0, 0.0, Dict{Symbol, Any}())
 end
 Base.getindex(T::TumorConfiguration,ind...) = T.lattice.data[ind...]
 Base.getindex(T::TumorConfiguration) = T.lattice.data
