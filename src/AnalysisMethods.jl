@@ -2,10 +2,7 @@ module AnalysisMethods
 
 using DataFrames
 
-import Base: push!
-export  push!,
-        timeseries,
-        timeserieses,
+export  timeserieses,
         collect_to_dataframe,
         popsize_timeseries_per_genotype,
         ps,
@@ -14,35 +11,6 @@ export  push!,
 
 ## Methods for extraction of observables
 ## like converting to timeseries and reshaping.
-
-function Base.push!(D::Dict{Symbol, T}, m::NamedTuple{(:name, :val), Tuple{Symbol, V}}) where {T,V}
-    if !haskey(D, m.name)
-        push!(D, m.name => Union{V, Missing}[m.val])
-    else
-        push!(D[m.name], m.val)
-    end
-    D
-end
-
-
-
-function timeseries(x::AbstractArray)
-    D = Dict{Symbol,Any}()
-    for m in x
-        if !haskey(D, m.name)
-            push!(D, m.name => Union{typeof(m.val), Missing}[m.val])
-        else
-            push!(D[m.name], m.val)
-        end
-    end
-    # Flatten all arrays of length 1
-    for d in D
-        if length(d[2])==1
-            D[d[1]] = d[2][1]
-        end
-    end
-    D
-end
 
 function timeserieses(X::AbstractArray)
     map(X) do x

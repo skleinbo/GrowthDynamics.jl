@@ -8,7 +8,7 @@ using Distributed
 using JSON
 using FileIO
 using DataFrames
-import GrowthDynamics.AnalysisMethods: timeseries
+import ObservableCollector: timeseries
 
 export  get_last_file_number,
         json_parameters,
