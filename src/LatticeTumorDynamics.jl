@@ -330,6 +330,7 @@ function die_or_proliferate!(
     T=0,
     mu::Float64=0.0,
     d::Float64=1/100,
+    p_grow=1.0,
     constraint=true,
     prune_period=0,
     prune_on_exit=true,
@@ -452,30 +453,37 @@ function die_or_proliferate!(
         elseif action == :proliferate
             #@debug "Live"
             old = selected
+            new = old
             if !constraint
                 new = 0
                 while new != old
                     new = rand1toN(tot_N)
                 end
             else
-                neighbors!(nn, I[old], state.lattice)
-                validneighbor = false
-                for j in shuffle!(neighbor_indices)
-                    if !out_of_bounds(nn[j],lin_N) && state[nn[j]]==0
-                        new_cart = nn[j]
-                        validneighbor = true
-                        break
+                b_grow = rand() < p_grow # Actual growth, or mutation only?
+                if b_grow
+                    neighbors!(nn, I[old], state.lattice)
+                    validneighbor = false
+                    for j in shuffle!(neighbor_indices)
+                        if !out_of_bounds(nn[j],lin_N) && state[nn[j]]==0
+                            new_cart = nn[j]
+                            validneighbor = true
+                            break
+                        end
                     end
-                end
-                if !validneighbor
-                    continue
+                    if !validneighbor
+                        continue
+                    end
+                    nonzeros += 1
+                    new = Lin[new_cart]
                 end
 
-                new = Lin[new_cart]
                 ## Mutation
-                # @assert genotype!=0
                 genotype = state[old]
                 g_id = findfirst(x->x==genotype, genotypes)
+                if !b_grow
+                    npops[g_id] -= 1
+                end
                 if rand()<p_mu
                     new_genotype = maximum(genotypes)+1
                     if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
@@ -493,18 +501,24 @@ function die_or_proliferate!(
                 npops[g_id] += 1
                 fitness_lattice[new] = fitnesses[g_id]
 
+                ##
+
+                if !b_grow
+                    total_rate -= d + br_lattice[new]
+                end
                 br_lattice[new] = (1.0-density!(nn,state.lattice,I[new])) * base_br * fitness_lattice[new]
-                nonzeros += 1
                 total_rate += d + br_lattice[new]
 
-                neighbors!(nn, I[new], state.lattice)
-                for n in nn
-                    if !out_of_bounds(n, lin_N) && state[n]!=0
-                        j = Lin[n]
-                        # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
-                        total_rate -= br_lattice[j]
-                        br_lattice[j] -=  1.0/nneighbors(state.lattice, n,lin_N) * fitness_lattice[j] * base_br
-                        total_rate += br_lattice[j]
+                if b_grow
+                    neighbors!(nn, I[new], state.lattice)
+                    for n in nn
+                        if !out_of_bounds(n, lin_N) && state[n]!=0
+                            j = Lin[n]
+                            # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
+                            total_rate -= br_lattice[j]
+                            br_lattice[j] -=  1.0/nneighbors(state.lattice, n,lin_N) * fitness_lattice[j] * base_br
+                            total_rate += br_lattice[j]
+                        end
                     end
                 end
             end

@@ -353,7 +353,7 @@ function _run_sim_conditional!(
         end
     end
     put!(results_channel, (:job_id => global_params[:job_id], :N =>sim_params[:N], :s => dyn_params[:s], :mu => dyn_params[:mu],
-     :d => dyn_params[:d], :f => dyn_params[:f], copy(state.observables)))
+     :d => dyn_params[:d], :f => dyn_params[:f], :p_grow => dyn_params[:p_grow], copy(state.observables)))
 end
 
 "To be deprecated"
