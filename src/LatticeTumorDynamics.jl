@@ -192,7 +192,7 @@ is reach. After that individuals begin replacing each other.
 """
 function moran!(
     state::TumorConfiguration{NoLattice{Int64}};
-    fitness=g->1.0,
+    fitness=(s,gold,gnew)->1.0,
     T=0,
     mu::Float64=0.0,
     d::Float64=0.0,
@@ -256,10 +256,10 @@ function moran!(
         genotype = genotypes[old]
         if rand()<p_mu
             new_genotype = maximum(genotypes)+1
-            if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
+            if new_genotype != genotype && fitness(state, genotype, new_genotype)!=-Inf # -Inf indicates no mutation possible
                 if true || !in(new_genotype, genotypes)
                     push!(state, new_genotype)
-                    fitnesses[end] = fitness(new_genotype)
+                    fitnesses[end] = fitness(state, genotype, new_genotype)
                     push!(rates, 0.0)
                 end
                 add_edge!(state.Phylogeny,nv(state.Phylogeny),old)
@@ -337,7 +337,7 @@ Birthrate depends linearily on the number of neighbors.
 """
 function die_or_proliferate!(
     state::TumorConfiguration{<:RealLattice};
-    fitness=g->0.0,
+    fitness=(s, gold, gnew)->1.0,
     T=0,
     mu::Float64=0.0,
     d::Float64=1/100,
@@ -497,10 +497,10 @@ function die_or_proliferate!(
                 end
                 if rand()<p_mu
                     new_genotype = maximum(genotypes)+1
-                    if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
+                    if new_genotype != genotype && fitness(state, genotype, new_genotype)!=-Inf # -Inf indicates no mutation possible
                         if true || !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
                             push!(state, new_genotype)
-                            fitnesses[end] = fitness(new_genotype)
+                            fitnesses[end] = fitness(state, genotype, new_genotype)
                         end
                         add_edge!(state.Phylogeny,nv(state.Phylogeny),g_id)
                         genotype = new_genotype
