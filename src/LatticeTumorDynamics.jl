@@ -180,6 +180,7 @@ is reach. After that individuals begin replacing each other.
 # Arguments
 - `T::Int`: the number of steps to advance.
 - `fitness`: function that assigns a fitness value to a genotype `g::Int`.
+- `p_grow=1.0`: Probability with which to actually proliferate. If no proliferation happens, mutation might still occur.
 - `mu`: mutation rate.
 - `d`: death rate.
 - `baserate`: progressing real time is measured in `1/baserate`.
@@ -191,10 +192,11 @@ is reach. After that individuals begin replacing each other.
 """
 function moran!(
     state::TumorConfiguration{NoLattice{Int64}};
-    fitness=g->1.0,
+    fitness=(s,gold,gnew)->1.0,
     T=0,
     mu::Float64=0.0,
     d::Float64=0.0,
+    p_grow=1.0,
     prune_period=0,
     prune_on_exit=true,
     DEBUG=false,
@@ -235,21 +237,29 @@ function moran!(
         genotypes = state.meta.genotypes
         npops = state.meta.npops
         fitnesses = state.meta.fitnesses
-        rates = fitnesses.*npops
+        rates = fitnesses .* npops
         snps = state.meta.snps
         wrates = Weights(rates)
         wnpops = Weights(npops)
         ## Pick one to proliferate
         old = sample(wrates)
         new = sample(wnpops)
-        # @debug old, new
+
+        b_grow = rand() < p_grow
+        if !b_grow
+            rates[old] -= fitnesses[old]
+            total_rate -= fitnesses[old]
+            npops[old] -=1
+            Ntotal -=1
+        end
+
         genotype = genotypes[old]
         if rand()<p_mu
             new_genotype = maximum(genotypes)+1
-            if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
+            if new_genotype != genotype && fitness(state, genotype, new_genotype)!=-Inf # -Inf indicates no mutation possible
                 if true || !in(new_genotype, genotypes)
                     push!(state, new_genotype)
-                    fitnesses[end] = fitness(new_genotype)
+                    fitnesses[end] = fitness(state, genotype, new_genotype)
                     push!(rates, 0.0)
                 end
                 add_edge!(state.Phylogeny,nv(state.Phylogeny),old)
@@ -314,19 +324,20 @@ Birthrate depends linearily on the number of neighbors.
 
 # Arguments
 - `T::Int`: the number of steps to advance.
-- `fitness`: function that assigns a fitness value to a genotype `g::Int`.
-- `mu`: mutation rate.
-- `d`: death rate. Zero halts the dynamics after carrying capacity is reached.
-- `baserate`: progressing real time is measured in `1/baserate`.
-- `prune_period`: prune the phylogeny periodically after no. of steps.
-- `prune_on_exit`: prune before leaving the simulation loop.
+- `fitness`: function that assigns a fitness value to a genotype. Takes arguments `(state, old genotype, new_genotype)`.
+- `p_grow=1.0`: Probability with which to actually proliferate. If no proliferation happens, mutation might still occur.
+- `mu=0.0`: mutation rate.
+- `d=0.0`: death rate. Zero halts the dynamics after carrying capacity is reached.
+- `baserate=1.0`: progressing real time is measured in `1/baserate`.
+- `prune_period=0`: prune the phylogeny periodically after no. of steps.
+- `prune_on_exit=true`: prune before leaving the simulation loop.
 - `callback`: function of `state` and `time` to be called at each iteration.
     Used primarily for collecting observables during the run.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
 function die_or_proliferate!(
     state::TumorConfiguration{<:RealLattice};
-    fitness=g->0.0,
+    fitness=(s, gold, gnew)->1.0,
     T=0,
     mu::Float64=0.0,
     d::Float64=1/100,
@@ -486,10 +497,10 @@ function die_or_proliferate!(
                 end
                 if rand()<p_mu
                     new_genotype = maximum(genotypes)+1
-                    if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
+                    if new_genotype != genotype && fitness(state, genotype, new_genotype)!=-Inf # -Inf indicates no mutation possible
                         if true || !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
                             push!(state, new_genotype)
-                            fitnesses[end] = fitness(new_genotype)
+                            fitnesses[end] = fitness(state, genotype, new_genotype)
                         end
                         add_edge!(state.Phylogeny,nv(state.Phylogeny),g_id)
                         genotype = new_genotype

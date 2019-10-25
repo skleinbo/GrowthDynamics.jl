@@ -3,7 +3,7 @@ parameter_template = Dict(
 		:ROOT => "",
 	),
 	:dyn => Dict(
-		:fitness => g->1.0,
+		:fitness => (s, gold, gnew) -> 1.0,
 		:T => 0,
 		:mu => 0.0,
 		:d => 0.0,
