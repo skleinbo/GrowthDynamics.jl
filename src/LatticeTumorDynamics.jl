@@ -230,7 +230,7 @@ function moran!(
         end
 
         Base.invokelatest(callback,state,state.t)
-        if abort(state)
+        if Base.invokelatest(abort, state)
             break
         end
         # In case we pruned, renew bindings
@@ -397,9 +397,10 @@ function die_or_proliferate!(
             prune_me!(state, mu)
         end
         Base.invokelatest(callback,state,state.t)
-        if abort(state)
+        if Base.invokelatest(abort, state)
             break
         end
+
         # In case we pruned, renew bindings.
         genotypes = state.meta.genotypes
         npops = state.meta.npops
