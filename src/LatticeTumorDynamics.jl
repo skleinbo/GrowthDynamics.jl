@@ -180,6 +180,7 @@ is reach. After that individuals begin replacing each other.
 # Arguments
 - `T::Int`: the number of steps to advance.
 - `fitness`: function that assigns a fitness value to a genotype `g::Int`.
+- `p_grow=1.0`: Probability with which to actually proliferate. If no proliferation happens, mutation might still occur.
 - `mu`: mutation rate.
 - `d`: death rate.
 - `baserate`: progressing real time is measured in `1/baserate`.
@@ -191,10 +192,11 @@ is reach. After that individuals begin replacing each other.
 """
 function moran!(
     state::TumorConfiguration{NoLattice{Int64}};
-    fitness=g->1.0,
+    fitness=(s,gold,gnew)->1.0,
     T=0,
     mu::Float64=0.0,
     d::Float64=0.0,
+    p_grow=1.0,
     prune_period=0,
     prune_on_exit=true,
     DEBUG=false,
@@ -228,28 +230,36 @@ function moran!(
         end
 
         Base.invokelatest(callback,state,state.t)
-        if abort(state)
+        if Base.invokelatest(abort, state)
             break
         end
         # In case we pruned, renew bindings
         genotypes = state.meta.genotypes
         npops = state.meta.npops
         fitnesses = state.meta.fitnesses
-        rates = fitnesses.*npops
+        rates = fitnesses .* npops
         snps = state.meta.snps
         wrates = Weights(rates)
         wnpops = Weights(npops)
         ## Pick one to proliferate
         old = sample(wrates)
         new = sample(wnpops)
-        # @debug old, new
+
+        b_grow = rand() < p_grow
+        if !b_grow
+            rates[old] -= fitnesses[old]
+            total_rate -= fitnesses[old]
+            npops[old] -=1
+            Ntotal -=1
+        end
+
         genotype = genotypes[old]
         if rand()<p_mu
             new_genotype = maximum(genotypes)+1
-            if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
+            if new_genotype != genotype && fitness(state, genotype, new_genotype)!=-Inf # -Inf indicates no mutation possible
                 if true || !in(new_genotype, genotypes)
                     push!(state, new_genotype)
-                    fitnesses[end] = fitness(new_genotype)
+                    fitnesses[end] = fitness(state, genotype, new_genotype)
                     push!(rates, 0.0)
                 end
                 add_edge!(state.Phylogeny,nv(state.Phylogeny),old)
@@ -314,22 +324,24 @@ Birthrate depends linearily on the number of neighbors.
 
 # Arguments
 - `T::Int`: the number of steps to advance.
-- `fitness`: function that assigns a fitness value to a genotype `g::Int`.
-- `mu`: mutation rate.
-- `d`: death rate. Zero halts the dynamics after carrying capacity is reached.
-- `baserate`: progressing real time is measured in `1/baserate`.
-- `prune_period`: prune the phylogeny periodically after no. of steps.
-- `prune_on_exit`: prune before leaving the simulation loop.
+- `fitness`: function that assigns a fitness value to a genotype. Takes arguments `(state, old genotype, new_genotype)`.
+- `p_grow=1.0`: Probability with which to actually proliferate. If no proliferation happens, mutation might still occur.
+- `mu=0.0`: mutation rate.
+- `d=0.0`: death rate. Zero halts the dynamics after carrying capacity is reached.
+- `baserate=1.0`: progressing real time is measured in `1/baserate`.
+- `prune_period=0`: prune the phylogeny periodically after no. of steps.
+- `prune_on_exit=true`: prune before leaving the simulation loop.
 - `callback`: function of `state` and `time` to be called at each iteration.
     Used primarily for collecting observables during the run.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
 function die_or_proliferate!(
     state::TumorConfiguration{<:RealLattice};
-    fitness=g->0.0,
+    fitness=(s, gold, gnew)->1.0,
     T=0,
     mu::Float64=0.0,
     d::Float64=1/100,
+    p_grow=1.0,
     constraint=true,
     prune_period=0,
     prune_on_exit=true,
@@ -385,9 +397,10 @@ function die_or_proliferate!(
             prune_me!(state, mu)
         end
         Base.invokelatest(callback,state,state.t)
-        if abort(state)
+        if Base.invokelatest(abort, state)
             break
         end
+
         # In case we pruned, renew bindings.
         genotypes = state.meta.genotypes
         npops = state.meta.npops
@@ -452,36 +465,43 @@ function die_or_proliferate!(
         elseif action == :proliferate
             #@debug "Live"
             old = selected
+            new = old
             if !constraint
                 new = 0
                 while new != old
                     new = rand1toN(tot_N)
                 end
             else
-                neighbors!(nn, I[old], state.lattice)
-                validneighbor = false
-                for j in shuffle!(neighbor_indices)
-                    if !out_of_bounds(nn[j],lin_N) && state[nn[j]]==0
-                        new_cart = nn[j]
-                        validneighbor = true
-                        break
+                b_grow = rand() < p_grow # Actual growth, or mutation only?
+                if b_grow
+                    neighbors!(nn, I[old], state.lattice)
+                    validneighbor = false
+                    for j in shuffle!(neighbor_indices)
+                        if !out_of_bounds(nn[j],lin_N) && state[nn[j]]==0
+                            new_cart = nn[j]
+                            validneighbor = true
+                            break
+                        end
                     end
-                end
-                if !validneighbor
-                    continue
+                    if !validneighbor
+                        continue
+                    end
+                    nonzeros += 1
+                    new = Lin[new_cart]
                 end
 
-                new = Lin[new_cart]
                 ## Mutation
-                # @assert genotype!=0
                 genotype = state[old]
                 g_id = findfirst(x->x==genotype, genotypes)
+                if !b_grow
+                    npops[g_id] -= 1
+                end
                 if rand()<p_mu
                     new_genotype = maximum(genotypes)+1
-                    if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
+                    if new_genotype != genotype && fitness(state, genotype, new_genotype)!=-Inf # -Inf indicates no mutation possible
                         if true || !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
                             push!(state, new_genotype)
-                            fitnesses[end] = fitness(new_genotype)
+                            fitnesses[end] = fitness(state, genotype, new_genotype)
                         end
                         add_edge!(state.Phylogeny,nv(state.Phylogeny),g_id)
                         genotype = new_genotype
@@ -493,18 +513,24 @@ function die_or_proliferate!(
                 npops[g_id] += 1
                 fitness_lattice[new] = fitnesses[g_id]
 
+                ##
+
+                if !b_grow
+                    total_rate -= d + br_lattice[new]
+                end
                 br_lattice[new] = (1.0-density!(nn,state.lattice,I[new])) * base_br * fitness_lattice[new]
-                nonzeros += 1
                 total_rate += d + br_lattice[new]
 
-                neighbors!(nn, I[new], state.lattice)
-                for n in nn
-                    if !out_of_bounds(n, lin_N) && state[n]!=0
-                        j = Lin[n]
-                        # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
-                        total_rate -= br_lattice[j]
-                        br_lattice[j] -=  1.0/nneighbors(state.lattice, n,lin_N) * fitness_lattice[j] * base_br
-                        total_rate += br_lattice[j]
+                if b_grow
+                    neighbors!(nn, I[new], state.lattice)
+                    for n in nn
+                        if !out_of_bounds(n, lin_N) && state[n]!=0
+                            j = Lin[n]
+                            # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
+                            total_rate -= br_lattice[j]
+                            br_lattice[j] -=  1.0/nneighbors(state.lattice, n,lin_N) * fitness_lattice[j] * base_br
+                            total_rate += br_lattice[j]
+                        end
                     end
                 end
             end

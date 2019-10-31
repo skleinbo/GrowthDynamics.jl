@@ -158,7 +158,7 @@ function setup_simulation_environment(workers::Vector)
 	jr = JobRunner(map(pid->Worker(pid), workers),
 		Job[],
 		false,
-		RemoteChannel(()->Channel{Any}(512)),
+		RemoteChannel(()->Channel{Any}(32)),
 		Task(nothing))
 	jr.feeder_task = feeder(jr)
 	for worker in 1:length(workers)
@@ -240,7 +240,7 @@ function feeder(runner::JobRunner)
 					job[:global][:job_id] = job_id
 					put!(runner.jobs_channel, (job, runner.jobs[job_id].results_channel))
 					runner.jobs[job_id].meta.counter += 1
-					@info "Fed $job_id into queue."
+					# @info "Fed $job_id into queue."
 					yield()
 				end
 				@info "Setting $job_id to :RUNNING"
@@ -353,7 +353,7 @@ function _run_sim_conditional!(
         end
     end
     put!(results_channel, (:job_id => global_params[:job_id], :N =>sim_params[:N], :s => dyn_params[:s], :mu => dyn_params[:mu],
-     :d => dyn_params[:d], :f => dyn_params[:f], copy(state.observables)))
+     :d => dyn_params[:d], :f => dyn_params[:f], :p_grow => dyn_params[:p_grow], copy(state.observables)))
 end
 
 "To be deprecated"
@@ -411,7 +411,7 @@ function save(job::Job)
 		return nothing
 	end
 	try
-		mkdir(joinpath(directory, string(job.id)))
+		mkpath(joinpath(directory, string(job.id)))
 	catch err
 	end
 	filename = string(get_last_file_number(directory*string(job.id)))*".bson"
