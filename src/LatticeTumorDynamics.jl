@@ -293,26 +293,6 @@ function moran!(
     end
 end
 
-## Define density function for different lattice types.
-for LatticeType in [Lattices.LineLattice, Lattices.HexagonalLattice]
-    if LatticeType <: Lattices.HexagonalLattice
-        nn_function = :hex_nneighbors
-    elseif LatticeType <: Lattices.LineLattice
-        nn_function = :line_nneighbors
-    end
-
-    eval(
-    quote
-        function density!(nn,L::$LatticeType,ind::CartesianIndex)
-            lin_N = size(L.data, 1)
-            neighbors!(nn, ind, L)
-            tot = $(nn_function)(ind,lin_N)
-            nz =  count(x->!out_of_bounds(x,lin_N) && L.data[x]!=0, nn)
-            return nz/tot
-        end
-    end)
-end
-
 """
     die_or_proliferate!(state::RealLattice{Int}; <keyword arguments>)
 

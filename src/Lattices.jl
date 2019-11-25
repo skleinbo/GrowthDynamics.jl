@@ -15,7 +15,9 @@ export  AbstractLattice,
         neighbors!,
         LineLatticeNeighbors,
         HexLatticeNeighbors,
-        nneighbors
+        nneighbors,
+        empty_neighbors,
+        density!
 
 import LightGraphs: SimpleDiGraph
 
@@ -23,6 +25,15 @@ abstract type AbstractLattice end
 abstract type AbstractLattice1D{T} <:AbstractLattice end
 abstract type AbstractLattice2D{T} <:AbstractLattice end
 abstract type AbstractLattice3D{T} <:AbstractLattice end
+
+dimension(::NoLattice) = 0
+dimension(::AbstractLattice1D) = 1
+dimension(::AbstractLattice2D) = 2
+dimension(::AbstractLattice3D) = 3
+
+coordination(::LineLattice) = 2
+coordination(::HexagonalLattice) = 6
+coordination(::HCPLattice) = 12
 
 ## --- NO LATTICE --- ##
 ## T is the type of genotypes we will store.
@@ -49,6 +60,7 @@ end
 
 const Neighbors{dim} = Vector{CartesianIndex{dim}}
 
+empty_neighbors(L::RealLattice) = [ CartesianIndex(zeros(Int64, dimension(L))...) for _ in 1:coordination(L)]
 
 
 ## --- BEGIN 1D Lattice OBC -- ##
@@ -231,6 +243,26 @@ for (L,short) in collect(zip([:LineLattice, :HexagonalLattice], [:line, :hex]))
     )
 end
 
+
+## Define density function for different lattice types.
+for LatticeType in [Lattices.LineLattice, Lattices.HexagonalLattice]
+    if LatticeType <: Lattices.HexagonalLattice
+        nn_function = :hex_nneighbors
+    elseif LatticeType <: Lattices.LineLattice
+        nn_function = :line_nneighbors
+    end
+
+    eval(
+    quote
+        function density!(nn,L::$LatticeType,ind::CartesianIndex)
+            lin_N = size(L.data, 1)
+            neighbors!(nn, ind, L)
+            tot = $(nn_function)(ind,lin_N)
+            nz =  count(x->!out_of_bounds(x,lin_N) && L.data[x]!=0, nn)
+            return nz/tot
+        end
+    end)
+end
 
 
 end

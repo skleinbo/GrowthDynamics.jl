@@ -150,6 +150,31 @@ function allele_spectrum(state::TumorConfiguration; threshold=0.0, read_depth=to
   return as
 end
 
+function allele_spectrum(as::DataFrame; threshold=0.0, read_depth=total_population_size(state))
+  # Recover population size
+  popsize = round(Int, as[1, :npop] / as[1, :fpop])
+
+  ## Detection threshold
+  as = filter(x->x.fpop >= threshold, as) |> DataFrame
+
+  ## Sampling
+  sample_percent = read_depth / popsize
+  # as.depth = rand(Binomial(popsize, sample_percent), size(as, 1))
+  as.depth = fill(read_depth, size(as,1))
+
+  if sample_percent < 1.0
+    allele_sample_size = ceil(Int64, sample_percent*size(as,1))
+    as.samples = rand(Multinomial(round(Int64,sample_percent*sum(as.npop)), as.npop/sum(as.npop)))
+  else
+    allele_sample_size = size(as,1)
+    as.samples = as.npop
+  end
+
+  return as
+end
+
+
+
 function total_population_size(L::Lattices.RealLattice{<:Integer})
     countnz(L.data)
 end
@@ -179,6 +204,32 @@ function population_size(S::TumorConfiguration, t)
     zip(S.meta.genotypes, S.meta.npops) |> collect
 end
 
+function genotype_dict(S::TumorConfiguration)
+    G = Dict{eltype(S.meta.genotypes), Int64}()
+    for (k,g) in enumerate(S.meta.genotypes)
+        push!(G, g=>k)
+    end
+    return G
+end
+
+function total_birthrate(S::TumorConfiguration{<:Lattices.RealLattice}; baserate=1.0)
+    L = S.lattice
+    F = S.meta.fitnesses
+    G = genotype_dict(S)
+    nn = Lattices.empty_neighbors(L)
+    total_rate = 0.0
+    for j in CartesianIndices(L.data)
+        if L.data[j] == 0
+            continue
+        end
+        total_rate += (1.0 - Lattices.density!(nn, L, j))*baserate*F[G[L.data[j]]]
+    end
+    total_rate
+end
+
+function total_birthrate(S::TumorConfiguration{<:Lattices.NoLattice}; baserate=1.0)
+    sum(S.meta.npops .* S.meta.fitnesses)
+end
 
 ## SLOW
 @opencl function population_size(L::OffLattice.FreeSpace{<:Integer}, t)
