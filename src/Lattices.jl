@@ -26,14 +26,6 @@ abstract type AbstractLattice1D{T} <:AbstractLattice end
 abstract type AbstractLattice2D{T} <:AbstractLattice end
 abstract type AbstractLattice3D{T} <:AbstractLattice end
 
-dimension(::NoLattice) = 0
-dimension(::AbstractLattice1D) = 1
-dimension(::AbstractLattice2D) = 2
-dimension(::AbstractLattice3D) = 3
-
-coordination(::LineLattice) = 2
-coordination(::HexagonalLattice) = 6
-coordination(::HCPLattice) = 12
 
 ## --- NO LATTICE --- ##
 ## T is the type of genotypes we will store.
@@ -243,6 +235,14 @@ for (L,short) in collect(zip([:LineLattice, :HexagonalLattice], [:line, :hex]))
     )
 end
 
+dimension(::NoLattice) = 0
+dimension(::AbstractLattice1D) = 1
+dimension(::AbstractLattice2D) = 2
+dimension(::AbstractLattice3D) = 3
+
+coordination(::LineLattice) = 2
+coordination(::HexagonalLattice) = 6
+coordination(::HCPLattice) = 12
 
 ## Define density function for different lattice types.
 for LatticeType in [Lattices.LineLattice, Lattices.HexagonalLattice]
