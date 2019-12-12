@@ -15,7 +15,7 @@ import Random: shuffle!
 using ..Lattices
 import ..TumorConfigurations: TumorConfiguration
 
-import ..Phylogenies: annotate_snps!, prune_phylogeny!
+import ..Phylogenies: annotate_snps!, add_snps!, prune_phylogeny!, sample_ztp
 
 # using OffLattice
 
@@ -182,6 +182,8 @@ is reach. After that individuals begin replacing each other.
 - `fitness`: function that assigns a fitness value to a genotype `g::Int`.
 - `p_grow=1.0`: Probability with which to actually proliferate. If no proliferation happens, mutation might still occur.
 - `mu`: mutation rate.
+- `mu_type=[:poisson, :fixed]`: Number of mutations is fixed, or Poisson-distributed.
+- `genome_length=10^9`: Length of the haploid genome.
 - `d`: death rate.
 - `baserate`: progressing real time is measured in `1/baserate`.
 - `prune_period`: prune the phylogeny periodically after no. of steps.
@@ -195,6 +197,10 @@ function moran!(
     fitness=(s,gold,gnew)->1.0,
     T=0,
     mu::Float64=0.0,
+    mu_type=:poisson,
+    genome_length=10^9,
+    replace_mutations=false,
+    allow_multiple=false,
     d::Float64=0.0,
     p_grow=1.0,
     prune_period=0,
@@ -256,9 +262,14 @@ function moran!(
         genotype = genotypes[old]
         if rand()<p_mu
             new_genotype = maximum(genotypes)+1
-            if new_genotype != genotype && fitness(state, genotype, new_genotype)!=-Inf # -Inf indicates no mutation possible
+
+            new_snps = copy(snps[genotype])
+            add_snps!(new_snps, mu, L=genome_length, allow_multiple=allow_multiple, replace=replace_mutations)
+
+            if new_genotype != genotype
                 if true || !in(new_genotype, genotypes)
                     push!(state, new_genotype)
+                    snps[end] = new_snps
                     fitnesses[end] = fitness(state, genotype, new_genotype)
                     push!(rates, 0.0)
                 end
@@ -307,6 +318,8 @@ Birthrate depends linearily on the number of neighbors.
 - `fitness`: function that assigns a fitness value to a genotype. Takes arguments `(state, old genotype, new_genotype)`.
 - `p_grow=1.0`: Probability with which to actually proliferate. If no proliferation happens, mutation might still occur.
 - `mu=0.0`: mutation rate.
+- `mu_type=[:poisson, :fixed]`: Number of mutations is fixed, or Poisson-distributed.
+- `genome_length=10^9`: Length of the haploid genome.
 - `d=0.0`: death rate. Zero halts the dynamics after carrying capacity is reached.
 - `baserate=1.0`: progressing real time is measured in `1/baserate`.
 - `prune_period=0`: prune the phylogeny periodically after no. of steps.
@@ -320,7 +333,12 @@ function die_or_proliferate!(
     fitness=(s, gold, gnew)->1.0,
     T=0,
     mu::Float64=0.0,
+    mu_type=:poisson,
+    genome_length=10^9,
+    replace_mutations=false,
+    allow_multiple=false,
     d::Float64=1/100,
+    baserate=1.0,
     p_grow=1.0,
     constraint=true,
     prune_period=0,
@@ -346,7 +364,7 @@ function die_or_proliferate!(
     br_lattice = zeros(tot_N)
 
     nonzeros = count(x->x!=0, state.lattice.data)
-    base_br = 1.0 - d
+    base_br = 1.0 # - d
 
     nn = neighbors(state.lattice, CartesianIndex{dim}()) # Initialize neighbors to the appr. type
     neighbor_indices = collect(1:length(nn))
@@ -478,9 +496,14 @@ function die_or_proliferate!(
                 end
                 if rand()<p_mu
                     new_genotype = maximum(genotypes)+1
-                    if new_genotype != genotype && fitness(state, genotype, new_genotype)!=-Inf # -Inf indicates no mutation possible
+
+                    new_snps = copy(snps[g_id])
+                    add_snps!(new_snps, mu, L=genome_length, allow_multiple=allow_multiple, replace=replace_mutations)
+
+                    if new_genotype != genotype
                         if true || !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
                             push!(state, new_genotype)
+                            snps[end] = new_snps
                             fitnesses[end] = fitness(state, genotype, new_genotype)
                         end
                         add_edge!(state.Phylogeny,nv(state.Phylogeny),g_id)
