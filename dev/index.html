@@ -9,5 +9,5 @@
 )
 
 show(state)</code></pre><h2><a class="nav-anchor" id="Observables-1" href="#Observables-1">Observables</a></h2><p><strong>Example (cont&#39;d)</strong></p><pre><code class="language-julia"># number of polymorphisms and diversity
-npolymorphisms(state), mean_pairwise(state)</code></pre><pre><code class="language-none">(0, 0.0)</code></pre><pre><code class="language-"># alleles with frequency larger 0.01
-first(allele_spectrum(state, threshold=0.01), 6)</code></pre><footer><hr/><a class="next" href="dynamics.html"><span class="direction">Next</span><span class="title">Dynamics</span></a></footer></article></body></html>
+npolymorphisms(state), mean_pairwise(state)</code></pre><pre><code class="language-none">(1, 0.0)</code></pre><pre><code class="language-julia"># alleles with frequency larger 0.01
+first(allele_spectrum(state, threshold=0.01), 6)</code></pre><table class="data-frame"><thead><tr><th></th><th>position</th><th>npop</th><th>fpop</th><th>depth</th><th>samples</th></tr><tr><th></th><th>Int64</th><th>Int64</th><th>Float64</th><th>Int64</th><th>Int64</th></tr></thead><tbody><p>0 rows × 5 columns</p></tbody></table><footer><hr/><a class="next" href="dynamics.html"><span class="direction">Next</span><span class="title">Dynamics</span></a></footer></article></body></html>
