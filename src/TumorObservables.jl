@@ -128,6 +128,9 @@ function allele_spectrum(state::TumorConfiguration; threshold=0.0, read_depth=to
   popsize = total_population_size(state)
   ## Set state to analyse
   as = allele_size(state, 0) |> table |> DataFrame
+  if isempty(as)
+      return as
+  end
   names!(as, [:position, :npop])
   as.fpop = as.npop ./ popsize
 
