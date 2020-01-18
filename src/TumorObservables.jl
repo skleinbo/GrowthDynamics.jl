@@ -49,7 +49,7 @@ export  allele_fractions,
 "Dictionary `(SNP, population count)`"
 function allele_size(S::TumorConfiguration, t=0)
     X = Dict{eltype(eltype(S.meta.snps)), Int64}()
-    for j in 1:length(S.meta.genotypes)
+    for j in 1:length(S.meta.snps)
         for snp in S.meta.snps[j]
             if haskey(X, snp)
                 X[snp] += S.meta.npops[j]

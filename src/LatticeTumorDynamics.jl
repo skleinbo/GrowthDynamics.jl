@@ -263,7 +263,7 @@ function moran!(
         if rand()<p_mu
             new_genotype = maximum(genotypes)+1
 
-            new_snps = copy(snps[genotype])
+            new_snps = copy(snps[old])
             add_snps!(new_snps, mu, L=genome_length, allow_multiple=allow_multiple, replace=replace_mutations)
 
             if new_genotype != genotype
