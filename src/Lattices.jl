@@ -170,6 +170,21 @@ function hex_nneighbors(I::CartesianIndex, N)
     end
 end
 
+"""
+Distance between two points on a hex lattice.
+"""
+function dist(L::Lattices.HexagonalLattice, I::CartesianIndex, J::CartesianIndex)
+    # cos(pi/6) is the angle between
+    # y-axis and (1,1)-direction
+    dy = L.a * (J[2] - I[2])*cos(pi/6)
+    # Every odd step in y-direction implies half a step
+    # in x-direction
+    dx = L.a * ( J[1]-I[1] - 1/2 * float(isodd(J[2]-I[2])) )
+
+    return sqrt(dx^2+dy^2)
+end
+
+
 ## -- END HexagonalLattice -- ##
 
 mutable struct HCPLattice{T} <: AbstractLattice3D{T}
