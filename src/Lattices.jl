@@ -88,7 +88,13 @@ function line_nneighbors(I::CartesianIndex, N)
     return nn
 end
 
-
+"""
+Distance between two points on a line lattice.
+"""
+function dist(L::Lattices.LineLattice, I::CartesianIndex, J::CartesianIndex)
+    dx = L.a * ( J[1]-I[1] )
+    return abs(dx)
+end
 
 ## --- END 1D Lattice OBC -- ##
 
@@ -102,6 +108,21 @@ mutable struct HexagonalLattice{T} <: AbstractLattice2D{T}
     a::Real # Lattice constant
     data::Array{T,2}
 end
+
+## NOTE: This implementation uses offset-coordinates by default
+##       where every _even_ row is offset by +1/2 lattice spacing.
+##
+
+"""
+Convert offset to cube coordinates.
+"""
+function offset_to_cube(L::Lattices.HexagonalLattice, I::CartesianIndex{2})
+    x = I[1] - (I[2] + (I[2]&1)) / 2
+    z = I[2]
+    y = -x-z
+    return x, y, z
+end
+
 
 # const HexLattices = Neighbors{2}
 HexLatticeNeighbors() = [ CartesianIndex(0,0) for _ in 1:6 ]
@@ -173,7 +194,7 @@ end
 """
 Distance between two points on a hex lattice.
 """
-function dist(L::Lattices.HexagonalLattice, I::CartesianIndex, J::CartesianIndex)
+function euclidean_dist(L::Lattices.HexagonalLattice, I::CartesianIndex, J::CartesianIndex)
     # cos(pi/6) is the angle between
     # y-axis and (1,1)-direction
     dy = L.a * (J[2] - I[2])*cos(pi/6)
@@ -182,6 +203,17 @@ function dist(L::Lattices.HexagonalLattice, I::CartesianIndex, J::CartesianIndex
     dx = L.a * ( J[1]-I[1] - 1/2 * float(isodd(J[2]-I[2])) )
 
     return sqrt(dx^2+dy^2)
+end
+
+"""
+Manhatten distance on the hex lattice.
+Useful for determining rings.
+"""
+function manhatten_dist(L::Lattices.HexagonalLattice, I::CartesianIndex, J::CartesianIndex)
+    I = offset_to_cube(L, I)
+    J = offset_to_cube(L, J)
+
+    return ( abs(I[1]-J[1]) + abs(I[2]-J[2]) + abs(I[3]-J[3]) ) / 2
 end
 
 
@@ -249,6 +281,23 @@ for (L,short) in collect(zip([:LineLattice, :HexagonalLattice], [:line, :hex]))
     end
     )
 end
+
+"""
+Distance between two points on a HCP lattice.
+"""
+function euclidean_dist(L::Lattices.HCPLattice, I::CartesianIndex, J::CartesianIndex)
+    # cos(pi/6) is the angle between
+    # y-axis and (1,1)-direction
+    dy = L.a * (J[2] - I[2])*cos(pi/6)
+    # Every odd step in y-direction implies half a step
+    # in x-direction
+    dx = L.a * ( J[1]-I[1] - 1/2 * float(isodd(J[2]-I[2])) )
+    dz = L.a *(J[3] - I[3])
+    return sqrt(dx^2+dy^2+dz^2)
+end
+
+## -- END HCPLattice --##
+
 
 dimension(::NoLattice) = 0
 dimension(::AbstractLattice1D) = 1
