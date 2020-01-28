@@ -13,7 +13,8 @@ export
     MetaData,
     push!,
     nolattice_state,
-    single_center,
+    single_center2,
+    single_center3,
     uniform_line,
     uniform_circle,
     uniform_circle_free,
@@ -42,6 +43,8 @@ function Base.setindex!(M::MetaData{T}, D::Tuple{T, Int64, Float64, Vector{Int64
     M.ages[i] = D[5]
     D
 end
+
+const DEFAULT_META_DATA = (1, 1.0, Int64[], (0,0.0))
 
 ##--                                                        --##
 
@@ -112,11 +115,11 @@ function uniform_line(L, g=0)
 end
 
 """
-    single_center(N [;g1=1,g2=2])
+    single_center2(N [;g1=1,g2=2])
 
 Initialize a single cell of genotype `g2` at the midpoint of hexagonal lattice filled with `g1`.
 """
-function single_center(N::Int;g1=1,g2=2)
+function single_center2(N::Int;g1=1,g2=2)
     G = DiGraph()
     lattice = Lattices.HexagonalLattice(N,N,1.0,fill(g1,N,N))
     state = TumorConfiguration(lattice, G)
@@ -137,7 +140,33 @@ function single_center(N::Int;g1=1,g2=2)
 
     return state
 end
+"""
+    single_center3(N [;g1=1,g2=2])
 
+Initialize a single cell of genotype `g2` at the midpoint of HCP lattice filled with `g1`.
+"""
+function single_center3(N::Int;g1=1,g2=2)
+    G = DiGraph()
+    lattice = Lattices.HCPLattice(N,N,N,1.0,fill(g1,N,N,N))
+    state = TumorConfiguration(lattice, G)
+    midpoint = CartesianIndex(div(N,2),div(N,2),div(N,2))
+
+    state[midpoint] = g2
+
+    counts = StatsBase.countmap(reshape(lattice.data,N^3))
+    if g1!=0
+        push!(state, (g1, DEFAULT_META_DATA...) )
+        state.meta.npops[1] = counts[g1]
+    end
+    if g2!=0
+        push!(state, (g2,  DEFAULT_META_DATA...) )
+    end
+    if g1!=0 && g2!=0
+         add_edge!(G, 2, 1)
+    end
+
+    return state
+end
 
 function uniform_sphere(N::Int,f=1/10,g1=1,g2=2)::Lattices.HCPLattice{Int}
     state = Lattices.HCPLattice(N,N,N,1.0,fill(g1,N,N,N))

@@ -225,8 +225,8 @@ mutable struct HCPLattice{T} <: AbstractLattice3D{T}
     Nc::Int # Lattice sites in direction c
     a::Real # Lattice constant
     data::Array{T,3}
-    Phylogeny::SimpleDiGraph
 end
+
 HCPNeighbors() = [ CartesianIndex(0,0) for _ in 1:12 ]
 
 neighbors!(nn::Neighbors{3}, I::CartesianIndex, L::HCPLattice) = @inbounds begin
@@ -271,6 +271,20 @@ neighbors(L::HCPLattice{<:Any}, I::CartesianIndex) = begin
 end
 
 ind2coord(L::HCPLattice{T}, I::CartesianIndex) where T<:Any = L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2],I[3])
+
+function hcp_nneighbors(I::CartesianIndex, N)
+    coord_xy = hex_nneighbors(I, N)
+
+    if 2 <= I[3]
+        coord_xy += 1
+    end
+    if I[3] < N
+        coord_xy += 1
+    end
+    coord_xy
+end
+
+
 
 ## -- END HCPLattice -- ##
 
