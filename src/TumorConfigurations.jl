@@ -61,7 +61,27 @@ function TumorConfiguration(lattice::Lattices.AnyTypedLattice{T}, Phylogeny::DiG
 end
 Base.getindex(T::TumorConfiguration,ind...) = T.lattice.data[ind...]
 Base.getindex(T::TumorConfiguration) = T.lattice.data
-Base.setindex!(T::TumorConfiguration,v,ind...) = T.lattice.data[ind...] = v
+
+function Base.setindex!(T::TumorConfiguration,v,ind...)
+    L = T.lattice.data
+    g_old = L[ind...]
+    if L[ind...] == v
+        return v
+    end
+    if g_old != 0
+        g_id = findfirst(x->x==g_old, T.meta.genotypes)
+        T.meta.npops[g_id] -= 1
+    end
+    if !(v in T.meta.genotypes)
+        push!(T, v)
+        T.meta.npops[end] = 1
+    else
+        g_id = findfirst(x->x==v, T.meta.genotypes)
+        T.meta.npops[g_id] += 1
+    end
+    L[ind...] = v
+    v
+end
 
 """
     nolattice_state(N)
@@ -82,7 +102,7 @@ function Base.push!(S::TumorConfiguration{<:Lattices.AnyTypedLattice{T}}, g::T) 
     add_vertex!(S.Phylogeny)
     push!(S.meta.genotypes, g)
     push!(S.meta.npops, 0)
-    push!(S.meta.fitnesses, 0.0)
+    push!(S.meta.fitnesses, 1.0)
     push!(S.meta.snps, Int64[])
     push!(S.meta.ages, (S.t, S.treal))
     nothing
