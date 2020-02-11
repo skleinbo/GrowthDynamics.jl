@@ -19,6 +19,8 @@ export  AbstractLattice,
         empty_neighbors,
         density!
 
+import LinearAlgebra: norm
+
 import LightGraphs: SimpleDiGraph
 
 abstract type AbstractLattice end
@@ -195,14 +197,17 @@ end
 Distance between two points on a hex lattice.
 """
 function euclidean_dist(L::Lattices.HexagonalLattice, I::CartesianIndex, J::CartesianIndex)
-    # cos(pi/6) is the angle between
-    # y-axis and (1,1)-direction
-    dy = L.a * (J[2] - I[2])*cos(pi/6)
-    # Every odd step in y-direction implies half a step
-    # in x-direction
-    dx = L.a * ( J[1]-I[1] - 1/2 * float(isodd(J[2]-I[2])) )
-
-    return sqrt(dx^2+dy^2)
+    Ic = offset_to_cube(L, I)
+    Jc = offset_to_cube(L, J)
+    return sqrt( (Ic[1]-Jc[1])^2 + (Ic[2]-Jc[2])^2 + (Ic[3]-Jc[3])^2)
+    # # cos(pi/6) is the angle between
+    # # y-axis and (1,1)-direction
+    # dy = L.a * (J[2] - I[2])*cos(pi/6)
+    # # Every odd step in y-direction implies half a step
+    # # in x-direction
+    # dx = L.a * ( J[1]-I[1] - 1/2 * float(isodd(J[2]-I[2])) )
+    #
+    # return sqrt(dx^2+dy^2)
 end
 
 """
