@@ -117,8 +117,8 @@ end
 Convert offset to cube coordinates.
 """
 function offset_to_cube(L::Lattices.HexagonalLattice, I::CartesianIndex{2})
-    x = I[1] - (I[2] + (I[2]&1)) / 2
-    z = I[2]
+    x = I[2] - ( I[1] + ( I[1]&1)) / 2
+    z = I[1]
     y = -x-z
     return x, y, z
 end
@@ -145,20 +145,21 @@ neighbors!(nn::Neighbors{2}, I::CartesianIndex, L::HexagonalLattice) = @inbounds
     m,n = Tuple(I)
     if isodd(m)
         nn[1] = CartesianIndex(m-1, n-1)
-        nn[2] = CartesianIndex(m-1, n)
-        nn[3] = CartesianIndex(m, n+1)
-        nn[4] = CartesianIndex(m+1, n)
         nn[5] = CartesianIndex(m+1, n-1)
         nn[6] = CartesianIndex(m, n-1)
+        nn[2] = CartesianIndex(m-1, n)
+        nn[4] = CartesianIndex(m+1, n)
+        nn[3] = CartesianIndex(m, n+1)
     else
+        nn[6] = CartesianIndex(m, n-1)
         nn[1] = CartesianIndex(m-1, n)
+        nn[5] = CartesianIndex(m+1, n)
         nn[2] = CartesianIndex(m-1, n+1)
         nn[3] = CartesianIndex(m, n+1)
         nn[4] = CartesianIndex(m+1, n+1)
-        nn[5] = CartesianIndex(m+1, n)
-        nn[6] = CartesianIndex(m, n-1)
     end
 end
+
 function hex_nneighbors(I::CartesianIndex, N)
     if isodd(I[1])
         if (I[1] == 1 || I[1] == N) && 2<=I[2]<N
