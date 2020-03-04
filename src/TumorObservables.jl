@@ -134,7 +134,6 @@ function allele_spectrum(state::TumorConfiguration; threshold=0.0, read_depth=to
   if isempty(as)
       return as
   end
-  names!(as, [:position, :npop])
   as.fpop = as.npop ./ popsize
 
   ## Detection threshold
