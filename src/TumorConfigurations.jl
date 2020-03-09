@@ -15,6 +15,7 @@ export
     nolattice_state,
     single_center2,
     single_center3,
+    single_center3_cubic,
     uniform_line,
     uniform_circle,
     uniform_circle_free,
@@ -168,6 +169,34 @@ Initialize a single cell of genotype `g2` at the midpoint of HCP lattice filled 
 function single_center3(N::Int;g1=1,g2=2)
     G = DiGraph()
     lattice = Lattices.HCPLattice(N,N,N,1.0,fill(g1,N,N,N))
+    state = TumorConfiguration(lattice, G)
+    midpoint = CartesianIndex(div(N,2),div(N,2),div(N,2))
+
+    state[midpoint] = g2
+
+    counts = StatsBase.countmap(reshape(lattice.data,N^3))
+    if g1!=0
+        push!(state, (g1, DEFAULT_META_DATA...) )
+        state.meta.npops[1] = counts[g1]
+    end
+    if g2!=0
+        push!(state, (g2,  DEFAULT_META_DATA...) )
+    end
+    if g1!=0 && g2!=0
+         add_edge!(G, 2, 1)
+    end
+
+    return state
+end
+
+"""
+    single_center3_cubic(N [;g1=1,g2=2])
+
+Initialize a single cell of genotype `g2` at the midpoint of a cubic lattice filled with `g1`.
+"""
+function single_center3_cubic(N::Int;g1=1,g2=2)
+    G = DiGraph()
+    lattice = Lattices.CubicLattice(N,N,N,1.0,fill(g1,N,N,N))
     state = TumorConfiguration(lattice, G)
     midpoint = CartesianIndex(div(N,2),div(N,2),div(N,2))
 
