@@ -513,7 +513,6 @@ function die_or_proliferate!(
                 end
 
                 state[new] = genotype
-                npops[g_id] += 1
                 fitness_lattice[new] = fitnesses[g_id]
 
                 ##

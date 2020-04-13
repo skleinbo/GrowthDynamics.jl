@@ -10,6 +10,8 @@ using FileIO
 using DataFrames
 import ObservableCollector: timeseries
 
+import Base: empty!
+
 export  get_last_file_number,
         json_parameters,
         _run_sim_conditional!,
@@ -17,7 +19,7 @@ export  get_last_file_number,
 		JobRunner,
 		@parameters,
 		setup_simulation_environment,
-		stop, start, pause, stop!, empty!, run!
+		stop, start, pause, stop!, run!
 
 
 function get_last_file_number(path::AbstractString, suf="bin")

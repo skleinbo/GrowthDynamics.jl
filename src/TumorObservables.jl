@@ -127,11 +127,13 @@ Return a DataFrame with count, frequency of every polymorphism. Additionally sam
 function allele_spectrum(state::TumorConfiguration; threshold=0.0, read_depth=total_population_size(state))
   popsize = total_population_size(state)
   ## Set state to analyse
-  as = allele_size(state, 0) |> table |> DataFrame
+  as = allele_size(state, 0)
+  positions = collect(keys(as))
+  npops = collect(values(as))
+  as = DataFrame(position=positions, npop=npops)
   if isempty(as)
       return as
   end
-  names!(as, [:position, :npop])
   as.fpop = as.npop ./ popsize
 
   ## Detection threshold
