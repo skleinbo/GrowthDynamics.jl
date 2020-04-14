@@ -17,8 +17,6 @@ import ..TumorConfigurations: TumorConfiguration
 
 import ..Phylogenies: annotate_snps!, add_snps!, prune_phylogeny!, sample_ztp
 
-# using OffLattice
-
 
 occupied(m,n,s,N) = @inbounds m<1||m>N||n<1||n>N || s[x,y]!=0
 growth_rate(nw,basebr) = basebr*(1 - 1/6*nw)
