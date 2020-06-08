@@ -6,7 +6,7 @@ export  timeserieses,
         collect_to_dataframe,
         popsize_timeseries_per_genotype,
         ps,
-        padright
+        padright!
 
 
 ## Methods for extraction of observables
@@ -48,7 +48,16 @@ function ps(X,g)
     end
 end
 
-function padright(X::AbstractVector, val)
+"""
+    padright!(X, [val])
+
+Given a collection of vectors `X`, grow each x∈X to the length of the longest
+element in X by right-padding with either
+
+- the final value of x if `val` is not specified
+- with `val` if specified.
+"""
+function padright!(X::AbstractVector, val)
     Y = skipmissing(X)
     maxlen = maximum(length.(Y))
     foreach(Y) do x
@@ -57,6 +66,14 @@ function padright(X::AbstractVector, val)
     X
 end
 
+function padright!(X::AbstractVector)
+    Y = skipmissing(X)
+    maxlen = maximum(length.(Y))
+    foreach(Y) do x
+        append!(x, fill(x[end], maxlen-length(x)))
+    end
+    X
+end
 
 function popsize_timeseries_per_genotype(X)
     tmp = Vector{Tuple{Int,Int,Float64}}(0)
