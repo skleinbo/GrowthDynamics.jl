@@ -280,6 +280,18 @@ function euclidean_dist(L::Lattices.CubicLattice, I::CartesianIndex, J::Cartesia
     return L.a * norm( Tuple(Δ) )
 end
 
+"""
+    function euclidean_dist_matrix(L, p)
+
+Matrix similar to `L.data` filled with euclidean distances wrt. the point `p`.
+"""
+function euclidean_dist_matrix(L::Lattices.CubicLattice, p)
+    N = L.Na
+    map(product(1:N, 1:N, 1:N)) do I
+        norm(I .- p)
+    end
+end
+
 function intersectsplane(L::Lattices.CubicLattice, P::Plane)
     M = map([SVector{3}(1.0,0.0,0.0), SVector{3}(0.0,1.0,0.0), SVector{3}(0.0,0.0,1.0)]) do x
         A = SMatrix{3,3}([x P.u P.v])
