@@ -5,7 +5,6 @@ export  Lattices,
 
 using Reexport
 using Distributed
-using OpenCLPicker
 
 # if !isdefined(Main, :NWORKER)
 #     global const NWORKER = 4
@@ -26,17 +25,10 @@ DEBUG = false
 # end
 # end
 
-@opencl begin
-DEVICE_ID = OpenCLPicker.devicePicker()
-@everywhere begin
-    DEVICE_ID=$DEVICE_ID
-    import OpenCLPicker
-    (cl_device, cl_ctx, cl_queue) = OpenCLPicker.provideContext(DEVICE_ID)
-end
-end
 
 include("Lattices.jl")
 include("TumorConfigurations.jl")
+@reexport using .TumorConfigurations
 include("Phylogenies.jl")
 include("LatticeTumorDynamics.jl")
 include("TumorObservables.jl")
@@ -44,10 +36,6 @@ include("AnalysisMethods.jl")
 include("FitnessIterators.jl")
 include("PrettyPrinting.jl")
 
-@opencl begin
-    include("OffLattice.jl")
-    include("OffLatticeTumorDynamics.jl")
-end
 include("SimulationRunner.jl")
 @reexport using .SimulationRunner
 
@@ -58,11 +46,9 @@ using JSON: json
 import Printf: @sprintf
 using DataFrames
 
-@opencl using .OffLatticeTumorDynamics
 @reexport using ObservableCollector
 
 using .FitnessIterators
-@reexport using .TumorConfigurations
 @reexport using .LatticeTumorDynamics
 @reexport using .TumorObservables
 @reexport using .AnalysisMethods

@@ -6,9 +6,7 @@ import LinearAlgebra: Symmetric
 import StatsBase: Weights, sample
 import Distributions: Multinomial
 
-import OpenCLPicker: @opencl
 
-@opencl import OpenCL
 import LightGraphs: SimpleGraph,
                     SimpleDiGraph,
                     nv, inneighbors, neighborhood, neighborhood_dists,
@@ -23,9 +21,6 @@ import ..LatticeTumorDynamics
 import ..TumorConfigurations: TumorConfiguration
 
 using ..Phylogenies
-
-@opencl import ..OffLattice
-@opencl import ..OffLatticeTumorDynamics
 
 export  allele_fractions,
         sampled_allele_fractions,
@@ -101,20 +96,6 @@ function allele_fractions(L::Lattices.RealLattice{<:Integer})
     Ng = [(g,0.) for g in genotypes]
     for g in genotypes
         Ng[g] = (g,count(x->x==g,L.data)/Ntot)
-    end
-    return Ng
-end
-@opencl function allele_fractions(L::OffLattice.FreeSpace{<:Integer})
-    state = L.genotypes[Bool.(L._mask)]
-    m = maximum(state)
-    if m == 0
-        return []
-    end
-    genotypes = 1:m
-    Ntot = countnz(state)
-    Ng = [(g,0.) for g in genotypes]
-    for g in genotypes
-        Ng[g] = (g,count(x->x==g,state)/Ntot)
     end
     return Ng
 end
@@ -236,25 +217,6 @@ function total_birthrate(S::TumorConfiguration{<:Lattices.NoLattice}; baserate=1
     sum(S.meta.npops .* S.meta.fitnesses)
 end
 
-## SLOW
-@opencl function population_size(L::OffLattice.FreeSpace{<:Integer}, t)
-    state = L.genotypes[Bool.(L._mask)]
-    m = 0
-    try
-        m = maximum(state)
-    catch
-        return [(1,0.)]
-    end
-    if m == 0
-        return [(1,0.)]
-    end
-    genotypes = 1:m
-    Ng = [(g,0.) for g in genotypes]
-    for g in genotypes
-        Ng[g] = (g,count(x->x==g,state))
-    end
-    return Ng
-end
 
 function surface(L::Lattices.RealLattice{<:Integer}, g::Int)
     x = 0
@@ -271,6 +233,7 @@ function surface(L::Lattices.RealLattice{<:Integer}, g::Int)
     end
     return x
 end
+
 function surface2(L::Lattices.RealLattice{<:Integer}, g::Int)
     x = 0
     y = 0
@@ -291,45 +254,6 @@ function surface2(L::Lattices.RealLattice{<:Integer}, g::Int)
     end
     return (x,ifelse(x>0,y/x,0.))
 end
-
-## REQUIRE OpenCL for FreeSpace
-@opencl begin
-function surface2(FS::OffLattice.FreeSpace{<:Integer}, t, g::Integer, sigma)
-    # buf = OpenCL.cl.Buffer(Int32, OffLattice.cl_ctx, (:w,:alloc), FS.MaxPopulation)
-    OpenCL.cl.set_args!(OffLattice.surface_kernel,
-            FS._dMat_buf,
-            FS._genotypes_buf,
-            FS._mask_buf,
-            FS._int_buf,
-            FS.MaxPopulation,
-            Int32(g),
-            Float32(sigma)
-    )
-    OpenCL.cl.enqueue_kernel(OffLattice.cl_queue, OffLattice.surface_kernel, FS.MaxPopulation,min(FS.MaxPopulation,OffLattice.max_work_group_size))|>
-        OpenCL.cl.wait
-    Svec = OpenCL.cl.read(OffLattice.cl_queue, FS._int_buf)
-    S0 = mapreduce(sign,+,0,Svec)|>Float64
-    (S0, ifelse(S0>0.,sum(Svec)/S0,0.))
-end
-
-function surface2CPU(FS::OffLattice.FreeSpace{<:Integer}, g::Integer, sigma)
-    s = 0
-    @inbounds for j in 1:FS.MaxPopulation
-        if FS._mask[j]==0 || FS.genotypes[j]!=g
-            continue
-        end
-        for k in 1:FS.MaxPopulation
-            if FS._mask[k]==0 || FS.genotypes[k]==g || norm(FS.positions[:,j]-FS.positions[:,k])>sigma
-                continue
-            end
-            s +=1
-        end
-    end
-    s
-end
-
-end
-## END requires OpenCL
 
 function boundary(L::Lattices.AbstractLattice1D{<:Any}, g)
     s =  count( x->x==g, view(L.data, 1) )
@@ -371,6 +295,7 @@ end
 ## Pylogenic observables
 ##
 ##
+
 "Number of direct descendends of a genotype."
 function nchildren(S::TumorConfiguration, g)
     vertex = findfirst(x->x==g, S.meta.genotypes)

@@ -1,10 +1,8 @@
 module TumorConfigurations
 
-import OpenCLPicker: @opencl
 import ..Lattices
 import GeometryTypes: Point2f0, Point3f0
-@opencl import .OffLattice: FreeSpace,distMatrix
-import LightGraphs: DiGraph, add_vertex!, add_edge!
+import LightGraphs: SimpleDiGraph, add_vertex!, add_edge!
 import Base: push!, show
 import StatsBase
 
@@ -51,13 +49,13 @@ const DEFAULT_META_DATA = (1, 1.0, Int64[], (0,0.0))
 
 mutable struct TumorConfiguration{T<:Lattices.AbstractLattice}
     lattice::T
-    Phylogeny::DiGraph
+    Phylogeny::SimpleDiGraph
     meta::MetaData
     t::Int
     treal::Float64
     observables::Dict{Symbol, Any}
 end
-function TumorConfiguration(lattice::Lattices.AnyTypedLattice{T}, Phylogeny::DiGraph) where {T}
+function TumorConfiguration(lattice::Lattices.AnyTypedLattice{T}, Phylogeny::SimpleDiGraph) where {T}
     TumorConfiguration(lattice, Phylogeny, MetaData(T), 0, 0.0, Dict{Symbol, Any}())
 end
 Base.getindex(T::TumorConfiguration,ind...) = T.lattice.data[ind...]
@@ -90,7 +88,7 @@ end
 Unstructered model with carrying capacity `N`, one genotype and one individual with fitness 1.0.
 """
 nolattice_state(N::Int) = begin
-    state = TumorConfiguration(Lattices.NoLattice(N), DiGraph())
+    state = TumorConfiguration(Lattices.NoLattice(N), SimpleDiGraph())
     push!(state, 1)
     state.meta.npops[end] = 1
     state.meta.fitnesses[end] = 1.0
@@ -126,7 +124,7 @@ end
 One-dimension system filled with genotype `g`.
 """
 function uniform_line(L, g=0)
-    G = DiGraph()
+    G = SimpleDiGraph()
     lattice = Lattices.LineLattice(L, 1.0, fill(g, L))
     state = TumorConfiguration(lattice, G)
     if g!=0
@@ -141,7 +139,7 @@ end
 Initialize a single cell of genotype `g2` at the midpoint of hexagonal lattice filled with `g1`.
 """
 function single_center2(N::Int;g1=1,g2=2)
-    G = DiGraph()
+    G = SimpleDiGraph()
     lattice = Lattices.HexagonalLattice(N,N,1.0,fill(g1,N,N))
     state = TumorConfiguration(lattice, G)
     midpoint = CartesianIndex(div(N,2),div(N,2))
@@ -167,7 +165,7 @@ end
 Initialize a single cell of genotype `g2` at the midpoint of HCP lattice filled with `g1`.
 """
 function single_center3(N::Int;g1=1,g2=2)
-    G = DiGraph()
+    G = SimpleDiGraph()
     lattice = Lattices.HCPLattice(N,N,N,1.0,fill(g1,N,N,N))
     state = TumorConfiguration(lattice, G)
     midpoint = CartesianIndex(div(N,2),div(N,2),div(N,2))
@@ -195,7 +193,7 @@ end
 Initialize a single cell of genotype `g2` at the midpoint of a cubic lattice filled with `g1`.
 """
 function single_center3_cubic(N::Int;g1=1,g2=2)
-    G = DiGraph()
+    G = SimpleDiGraph()
     lattice = Lattices.CubicLattice(N,N,N,1.0,fill(g1,N,N,N))
     state = TumorConfiguration(lattice, G)
     midpoint = CartesianIndex(div(N,2),div(N,2),div(N,2))
@@ -245,30 +243,7 @@ function uniform_sphere(N::Int,f=1/10,g1=1,g2=2)::Lattices.HCPLattice{Int}
 end
 
 
-@opencl function uniform_circle_free(N::Int, Nmax::Int, f=1/10,g1=1,g2=2,d=0f0)
-    r = sqrt(f/pi)
-    midpoint = Point2f0(0.5,0.5)
 
-    positions = rand(Float32,2,Nmax)
-    dMat = distMatrix(positions)
-    genotypes = zeros(Int32, Nmax)
-    birthrates = zeros(Float32, Nmax)
-    deathrates = fill(Float32(d), Nmax)
-
-    _mask = zeros(UInt32,Nmax)
-    _mask[1:N] .= UInt32(1)
-
-    G = TwoPhylogeny()
-
-    for n in 1:N
-        if norm(positions[:,n]-midpoint) < r
-            genotypes[n] = g2
-        else
-            genotypes[n] = g1
-        end
-    end
-    FreeSpace{eltype(genotypes)}(Nmax, G, positions,genotypes,birthrates,deathrates,dMat,_mask)
-end
 
 """
     uniform_circle(L [,f=1/10,g1=1,g2=2])
@@ -277,7 +252,7 @@ Hexagonal lattice state filled with `g1`.
 Disk of filling fraction `f` with genotype `g2` at the center.
 """
 function uniform_circle(N::Int,f=1/10,g1=1,g2=2)::TumorConfiguration{Lattices.HexagonalLattice{Int}}
-    G = DiGraph()
+    G = SimpleDiGraph()
     lattice = Lattices.HexagonalLattice(N,N,1.0,fill(g1,N,N))
     state = TumorConfiguration(lattice, G)
 
