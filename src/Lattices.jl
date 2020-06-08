@@ -20,10 +20,15 @@ export  AbstractLattice,
         empty_neighbors,
         density!
 
-import LinearAlgebra: norm
+import Base.Iterators: product
+import LinearAlgebra: norm, normalize, cross, det, dot
+using StaticArrays
 
 import LightGraphs: SimpleDiGraph
 
+include("Geometry.jl")
+
+# Lattice type structure
 abstract type AbstractLattice end
 abstract type AbstractLattice1D{T} <:AbstractLattice end
 abstract type AbstractLattice2D{T} <:AbstractLattice end
@@ -275,6 +280,46 @@ function euclidean_dist(L::Lattices.CubicLattice, I::CartesianIndex, J::Cartesia
     return L.a * norm( Tuple(Δ) )
 end
 
+function intersectsplane(L::Lattices.CubicLattice, P::Plane)
+    M = map([SVector{3}(1.0,0.0,0.0), SVector{3}(0.0,1.0,0.0), SVector{3}(0.0,0.0,1.0)]) do x
+        A = SMatrix{3,3}([x P.u P.v])
+        if det(A) != 0.0
+            return (:inv, inv(A))
+        else
+            return (:ninv, SMatrix{3,3}(P.u*P.u' + P.v*P.v'))
+        end
+    end
+    @show M
+    return function(q)
+        if euclidean_dist_to_plane(q, P) > 3
+            return false
+        end
+        bIntersects = false
+        for m in M
+            if m[1] == :inv
+                x = m[2]*(q .- P.p)
+                if 1/2 <= x[1] < 1/2
+                    bIntersects = true
+                    break
+                end
+            else
+                bIntersects = (m[2]*(q - P.p) ≈ (q - P.p))
+                if bIntersects
+                    break
+                end
+            end
+        end
+        bIntersects
+    end
+end
+
+function intersect_lattice_with_plane(L::Lattices.CubicLattice, P::Plane)
+    # starting index
+    #dp, Ip = findmin(euclidean_dist_matrix(L, P.p))
+    indices = product(1:L.Na, 1:L.Na, 1:L.Na)
+    ifunc = intersectsplane(L, P)
+    BitArray(ifunc(SVector{3}(I)) for I in indices)
+end
 
 ## -- END CubicLattice -- ##
 
