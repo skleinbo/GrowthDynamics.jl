@@ -61,7 +61,7 @@ end
 Base.getindex(T::TumorConfiguration,ind...) = T.lattice.data[ind...]
 Base.getindex(T::TumorConfiguration) = T.lattice.data
 
-function Base.setindex!(T::TumorConfiguration,v,ind...)
+function Base.setindex!(T::TumorConfiguration, v, ind...)
     L = T.lattice.data
     g_old = L[ind...]
     if L[ind...] == v
@@ -85,7 +85,8 @@ end
 """
     nolattice_state(N)
 
-Unstructered model with carrying capacity `N`, one genotype and one individual with fitness 1.0.
+Unstructered model with carrying capacity `N`,
+one genotype and one individual with fitness 1.0.
 """
 nolattice_state(N::Int) = begin
     state = TumorConfiguration(Lattices.NoLattice(N), SimpleDiGraph())
@@ -133,6 +134,7 @@ function uniform_line(L, g=0)
     state
 end
 
+
 """
     single_center2(N [;g1=1,g2=2])
 
@@ -159,10 +161,13 @@ function single_center2(N::Int;g1=1,g2=2)
 
     return state
 end
+
+
 """
     single_center3(N [;g1=1,g2=2])
 
-Initialize a single cell of genotype `g2` at the midpoint of HCP lattice filled with `g1`.
+Initialize a single cell of genotype `g2` at the midpoint of HCP lattice
+ filled with `g1`.
 """
 function single_center3(N::Int;g1=1,g2=2)
     G = SimpleDiGraph()
@@ -187,10 +192,12 @@ function single_center3(N::Int;g1=1,g2=2)
     return state
 end
 
+
 """
     single_center3_cubic(N [;g1=1,g2=2])
 
-Initialize a single cell of genotype `g2` at the midpoint of a cubic lattice filled with `g1`.
+Initialize a single cell of genotype `g2` at the midpoint of a cubic lattice
+ filled with `g1`.
 """
 function single_center3_cubic(N::Int;g1=1,g2=2)
     G = SimpleDiGraph()
@@ -198,15 +205,12 @@ function single_center3_cubic(N::Int;g1=1,g2=2)
     state = TumorConfiguration(lattice, G)
     midpoint = CartesianIndex(div(N,2),div(N,2),div(N,2))
 
-    state[midpoint] = g2
-
-    counts = StatsBase.countmap(reshape(lattice.data,N^3))
     if g1!=0
         push!(state, (g1, DEFAULT_META_DATA...) )
-        state.meta.npops[1] = counts[g1]
+        state.meta.npops[1] = N^3
     end
     if g2!=0
-        push!(state, (g2,  DEFAULT_META_DATA...) )
+        state[midpoint] = g2
     end
     if g1!=0 && g2!=0
          add_edge!(G, 2, 1)
@@ -214,6 +218,7 @@ function single_center3_cubic(N::Int;g1=1,g2=2)
 
     return state
 end
+
 
 function uniform_sphere(N::Int,f=1/10,g1=1,g2=2)::Lattices.HCPLattice{Int}
     state = Lattices.HCPLattice(N,N,N,1.0,fill(g1,N,N,N))
@@ -241,8 +246,6 @@ function uniform_sphere(N::Int,f=1/10,g1=1,g2=2)::Lattices.HCPLattice{Int}
 
     return state
 end
-
-
 
 
 """
