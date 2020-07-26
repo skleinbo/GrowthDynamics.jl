@@ -437,11 +437,6 @@ function die_or_proliferate!(
             nonzeros -= 1
             total_rate -= br_lattice[selected] + d
 
-            g = state.lattice.data[selected]
-            g_id = findfirst(x->x==g, genotypes)
-            old_ps = npops[g_id]
-            npops[g_id] = max(0,old_ps-1)
-
             state[selected] = 0
             fitness_lattice[selected] = 0.
             br_lattice[selected] = 0.
@@ -494,7 +489,6 @@ function die_or_proliferate!(
                 end
                 if rand()<p_mu
                     new_genotype = maximum(genotypes)+1
-
                     new_snps = copy(snps[g_id])
                     add_snps!(new_snps, mu, L=genome_length, allow_multiple=allow_multiple, replace=replace_mutations)
 

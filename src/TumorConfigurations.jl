@@ -71,12 +71,14 @@ function Base.setindex!(T::TumorConfiguration, v, ind...)
         g_id = findfirst(x->x==g_old, T.meta.genotypes)
         T.meta.npops[g_id] -= 1
     end
-    if !(v in T.meta.genotypes)
-        push!(T, v)
-        T.meta.npops[end] = 1
-    else
-        g_id = findfirst(x->x==v, T.meta.genotypes)
-        T.meta.npops[g_id] += 1
+    if v!=0
+        if !(v in T.meta.genotypes)
+            push!(T, v)
+            T.meta.npops[end] = 1
+        else
+            g_id = findfirst(x->x==v, T.meta.genotypes)
+            T.meta.npops[g_id] += 1
+        end
     end
     L[ind...] = v
     v
@@ -99,6 +101,9 @@ end
 
 "Add a new _unconnected_ genotype to a TumorConfiguration"
 function Base.push!(S::TumorConfiguration{<:Lattices.AnyTypedLattice{T}}, g::T) where {T}
+    if g==0
+        error("Trying to push genotype 0")
+    end
     add_vertex!(S.Phylogeny)
     push!(S.meta.genotypes, g)
     push!(S.meta.npops, 0)

@@ -9,7 +9,7 @@ function Plane(p, w)
         throw(ArgumentError("Arguments must be vectors of length 3."))
     end
     if iszero(w)
-        throw(ArgumentError("Plane normal cannot not be zero."))
+        throw(ArgumentError("Plane normal cannot be zero."))
     end
     # w is the plane normal
     w = normalize(w)
@@ -28,7 +28,7 @@ function Plane(p, u,v)
         throw(ArgumentError("Arguments must be vectors of length 3."))
     end
     if iszero(u) || iszero(v)
-        throw(ArgumentError("Tangent vectors cannot not be zero."))
+        throw(ArgumentError("Tangent vectors cannot be zero."))
     end
     u = normalize(u)
     v = normalize(v)

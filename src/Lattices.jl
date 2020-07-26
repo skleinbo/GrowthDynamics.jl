@@ -239,6 +239,7 @@ mutable struct CubicLattice{T} <: AbstractLattice3D{T}
     a::Real # Lattice constant
     data::Array{T,3}
 end
+CubicLattice(L::Integer) = CubicLattice(L,L,L, 1.0, fill(0, L,L,L))
 
 CubicLatticeNeighbors() = [ CartesianIndex(0,0,0) for _ in 1:6 ]
 
@@ -331,6 +332,11 @@ function intersect_lattice_with_plane(L::Lattices.CubicLattice, P::Plane)
     indices = product(1:L.Na, 1:L.Na, 1:L.Na)
     ifunc = intersectsplane(L, P)
     BitArray(ifunc(SVector{3}(I)) for I in indices)
+end
+
+function isonplane(L::Lattices.CubicLattice, P::Plane)
+    pts = product(1:L.Na, 1:L.Na, 1:L.Na)
+    BitArray( euclidean_dist(SVector{3}(q), P)<L.a for q in pts )
 end
 
 ## -- END CubicLattice -- ##
