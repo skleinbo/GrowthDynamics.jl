@@ -1,7 +1,7 @@
 module TumorObservables
 
 import IndexedTables: table, join, rename, transform, select, filter
-import DataFrames: DataFrame, names!
+import DataFrames: DataFrame
 import LinearAlgebra: Symmetric
 import StatsBase: Weights, sample
 import Distributions: Multinomial
