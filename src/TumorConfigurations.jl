@@ -30,6 +30,23 @@ mutable struct MetaData{T}
 end
 MetaData(T::DataType) = MetaData(T[], Int64[], Float64[], Vector{Int64}[], Tuple{Int64,Float64}[])
 MetaData(a::Tuple{T, Int64, Float64, Vector{Int64}}) where {T} = MetaData{T}([a[1]],[a[2]],[a[3]],[a[4]])
+function MetaData(g::Vector{T}, n::Vector{<:Integer}) where {T}
+    N = length(n)
+    if length(g)!=N
+        error("Lengths of arguments do not match.")
+    end
+    fitnesses = fill(1.0, N)
+    snps = fill(Int64[], N)
+    ages = fill( (0,0.0), N)
+    MetaData(g, n, fitnesses, snps, ages)
+end
+function Base.getindex(M::MetaData{T}; g) where {T}
+    id = findfirst(x->x==g, M.genotypes)
+    if id===nothing
+        error("Unknown genotype.")
+    end
+    M[id]
+end
 Base.getindex(M::MetaData{T}, i) where {T} = MetaData{T}(M.genotypes[i], M.npops[i], M.fitnesses[i], M.snps[i], M.ages[i])
 Base.getindex(M::MetaData{T}, i::Integer) where {T} =
     (genotype = M.genotypes[i], npop = M.npops[i], fitness = M.fitnesses[i], snps = M.snps[i], age = M.ages[i])
@@ -55,8 +72,12 @@ mutable struct TumorConfiguration{T<:Lattices.AbstractLattice}
     treal::Float64
     observables::Dict{Symbol, Any}
 end
-function TumorConfiguration(lattice::Lattices.AnyTypedLattice{T}, Phylogeny::SimpleDiGraph) where {T}
-    TumorConfiguration(lattice, Phylogeny, MetaData(T), 0, 0.0, Dict{Symbol, Any}())
+function TumorConfiguration(lattice::Lattices.AnyTypedLattice{T}, Phylogeny::SimpleDiGraph=SimpleDiGraph()) where {T}
+    counts_dict = StatsBase.countmap(lattice.data, alg=:dict)
+    genotypes = collect(keys(counts_dict))
+    npops = collect(values(counts_dict))
+    metadata = MetaData(genotypes, npops)
+    TumorConfiguration(lattice, Phylogeny, metadata, 0, 0.0, Dict{Symbol, Any}())
 end
 Base.getindex(T::TumorConfiguration,ind...) = T.lattice.data[ind...]
 Base.getindex(T::TumorConfiguration) = T.lattice.data
