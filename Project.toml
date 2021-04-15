@@ -1,6 +1,6 @@
 name = "GrowthDynamics"
 uuid = "708a6a61-856c-5d7f-acbf-fcf0902d75eb"
-version = "0.4.1"
+version = "0.4.2"
 
 [deps]
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
