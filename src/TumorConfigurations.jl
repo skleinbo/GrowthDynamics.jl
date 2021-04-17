@@ -74,6 +74,9 @@ mutable struct TumorConfiguration{T<:Lattices.AbstractLattice}
 end
 function TumorConfiguration(lattice::Lattices.AnyTypedLattice{T}, Phylogeny::SimpleDiGraph=SimpleDiGraph()) where {T}
     counts_dict = StatsBase.countmap(lattice.data, alg=:dict)
+    if haskey(counts_dict, 0)
+        delete!(counts_dict, 0)
+    end
     genotypes = collect(keys(counts_dict))
     npops = collect(values(counts_dict))
     metadata = MetaData(genotypes, npops)
