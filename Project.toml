@@ -1,3 +1,4 @@
+authors = ["Stephan Kleinbölting <skleinbo@thp.uni-koeln.de"]
 name = "GrowthDynamics"
 uuid = "708a6a61-856c-5d7f-acbf-fcf0902d75eb"
 version = "0.5.1"
