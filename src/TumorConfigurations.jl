@@ -72,7 +72,7 @@ mutable struct TumorConfiguration{T<:Lattices.AbstractLattice}
     treal::Float64
     observables::Dict{Symbol, Any}
 end
-function TumorConfiguration(lattice::Lattices.AnyTypedLattice{T}, Phylogeny::SimpleDiGraph=SimpleDiGraph()) where {T}
+function TumorConfiguration(lattice::Lattices.TypedLattice{T}, Phylogeny::SimpleDiGraph=SimpleDiGraph()) where {T}
     counts_dict = StatsBase.countmap(lattice.data, alg=:dict)
     if haskey(counts_dict, 0)
         delete!(counts_dict, 0)
@@ -124,7 +124,7 @@ nolattice_state(N::Int) = begin
 end
 
 "Add a new _unconnected_ genotype to a TumorConfiguration"
-function Base.push!(S::TumorConfiguration{<:Lattices.AnyTypedLattice{T}}, g::T) where {T}
+function Base.push!(S::TumorConfiguration{<:Lattices.TypedLattice{T}}, g::T) where {T}
     if g==0
         error("Trying to push genotype 0")
     end
@@ -137,7 +137,7 @@ function Base.push!(S::TumorConfiguration{<:Lattices.AnyTypedLattice{T}}, g::T) 
     nothing
 end
 
-function Base.push!(S::TumorConfiguration{<:Lattices.AnyTypedLattice{T}}, M::MetaDatum{T}) where {T}
+function Base.push!(S::TumorConfiguration{<:Lattices.TypedLattice{T}}, M::MetaDatum{T}) where {T}
     add_vertex!(S.Phylogeny)
     push!(S.meta.genotypes, M[1])
     push!(S.meta.npops, M[2])
@@ -155,7 +155,7 @@ One-dimension system filled with genotype `g`.
 """
 function uniform_line(L, g=0)
     G = SimpleDiGraph()
-    lattice = Lattices.LineLattice(L, 1.0, fill(g, L))
+    lattice = Lattices.LineLattice(1.0, fill(g, L))
     state = TumorConfiguration(lattice, G)
     if g!=0
         push!(state, (g, L, 1.0, Int64[], (0,0.0)) )
@@ -171,7 +171,7 @@ Initialize a single cell of genotype `g2` at the midpoint of hexagonal lattice f
 """
 function single_center2(N::Int;g1=1,g2=2)
     G = SimpleDiGraph()
-    lattice = Lattices.HexagonalLattice(N,N,1.0,fill(g1,N,N))
+    lattice = Lattices.HexagonalLattice(1.0,fill(g1,N,N))
     state = TumorConfiguration(lattice, G)
     midpoint = CartesianIndex(div(N,2),div(N,2))
 
@@ -200,7 +200,7 @@ Initialize a single cell of genotype `g2` at the midpoint of HCP lattice
 """
 function single_center3(N::Int;g1=1,g2=2)
     G = SimpleDiGraph()
-    lattice = Lattices.HCPLattice(N,N,N,1.0,fill(g1,N,N,N))
+    lattice = Lattices.HCPLattice(1.0,1.0, fill(g1,N,N,N))
     state = TumorConfiguration(lattice, G)
     midpoint = CartesianIndex(div(N,2),div(N,2),div(N,2))
 
@@ -230,7 +230,7 @@ Initialize a single cell of genotype `g2` at the midpoint of a cubic lattice
 """
 function single_center3_cubic(N::Int;g1=1,g2=2)
     G = SimpleDiGraph()
-    lattice = Lattices.CubicLattice(N,N,N,1.0,fill(g1,N,N,N))
+    lattice = Lattices.CubicLattice(1.0,fill(g1,N,N,N))
     state = TumorConfiguration(lattice, G)
     midpoint = CartesianIndex(div(N,2),div(N,2),div(N,2))
 
@@ -250,11 +250,11 @@ end
 
 
 function uniform_sphere(N::Int,f=1/10,g1=1,g2=2)::Lattices.HCPLattice{Int}
-    state = Lattices.HCPLattice(N,N,N,1.0,fill(g1,N,N,N))
+    state = Lattices.HCPLattice(1.0, 1.0, fill(g1,N,N,N))
     mid = [div(N,2),div(N,2),div(N,2)]
 
-    function fill_neighbors!(state,m,n,l)
-        nn = Lattices.neighbors(state, m,n,l)
+    function fill_neighbors!(state, I)
+        nn = Lattices.neighbors(state, I)
         for neigh in nn
             if Lattices.out_of_bounds(neigh...,state.Na) continue end
             state.data[CartesianIndex(neigh)] = g2
@@ -285,7 +285,7 @@ Disk of filling fraction `f` with genotype `g2` at the center.
 """
 function uniform_circle(N::Int,f=1/10,g1=1,g2=2)::TumorConfiguration{Lattices.HexagonalLattice{Int}}
     G = SimpleDiGraph()
-    lattice = Lattices.HexagonalLattice(N,N,1.0,fill(g1,N,N))
+    lattice = Lattices.HexagonalLattice(1.0,fill(g1,N,N))
     state = TumorConfiguration(lattice, G)
 
 

@@ -4,27 +4,24 @@ export  AbstractLattice,
         RealLattice,
         NoLattice,
         HexagonalLattice,
-        hex_nneighbors,
-        line_nneighbors,
         LineLattice,
         CubicLattice,
         HCPLattice,
         out_of_bounds,
-        ind2coord,
-        coord2ind,
+        coord,
+        index,
         neighbors,
         neighbors!,
-        LineLatticeNeighbors,
-        HexLatticeNeighbors,
         nneighbors,
         empty_neighbors,
-        density!
+        density,
+        density!,
+        dist
 
+import Base: size, length, getindex, setindex!, maybeview, firstindex, lastindex
 import Base.Iterators: product
 import LinearAlgebra: norm, normalize, cross, det, dot
 using StaticArrays
-
-import LightGraphs: SimpleDiGraph
 
 include("Geometry.jl")
 
@@ -35,74 +32,129 @@ abstract type AbstractLattice2D{T} <:AbstractLattice end
 abstract type AbstractLattice3D{T} <:AbstractLattice end
 
 
-## --- NO LATTICE --- ##
-## T is the type of genotypes we will store.
-mutable struct NoLattice{T} <: AbstractLattice
-    N::Int # System size
-end
-"Dummy 'lattice' for systems without spatial structure. Carrying capacity `N`."
-NoLattice(N::Int) = NoLattice{Int64}(N)
+## --- NoLattice --- ##
+## T is the index type for genotypes.
+"""
+    NoLattice{T}
+Dummy 'lattice' for systems without spatial structure. Carrying capacity `N`."
+"""
+struct NoLattice{T} <: AbstractLattice end
+
+NoLattice() = NoLattice{Int64}()
+size(L::NoLattice) = ()
+size(L::NoLattice, i...) = 0
+length(L::NoLattice) = 0
+## -- END NoLattice
 
 const RealLattice{T} = Union{AbstractLattice1D{T}, AbstractLattice2D{T}, AbstractLattice3D{T}}
-const AnyTypedLattice{T} = Union{RealLattice{T}, NoLattice{T}}
-
-out_of_bounds(I::CartesianIndex,N) = mapreduce(m->m<1||m>N,|,Tuple(I))
-
-function latticevectors(L::AbstractLattice3D)
-    org = ind2coord(L, 0,0,0)
-    (ind2coord(L, 1,0,0).-org, ind2coord(L, 0,1,0).-org, ind2coord(L, 0,0,1).-org)
-end
-
-function latticevectors(L::AbstractLattice2D)
-    org = ind2coord(L, 0,0)
-    (ind2coord(L, 1,0).-org, ind2coord(L, 0,1).-org)
-end
+const TypedLattice{T} = Union{RealLattice{T}, NoLattice{T}}
 
 const Neighbors{dim} = Vector{CartesianIndex{dim}}
 
-empty_neighbors(L::RealLattice) = [ CartesianIndex(zeros(Int64, dimension(L))...) for _ in 1:coordination(L)]
-
-
-## --- BEGIN 1D Lattice OBC -- ##
-mutable struct LineLattice{T} <: AbstractLattice1D{T}
-    Na::Int # Lattice sites in direction a
-    a::Real # Lattice constant
-    data::Array{T,1}
+## Indexing
+for method in [:maybeview, :getindex, :setindex!, :firstindex, :lastindex]
+    eval(quote
+        Base.$(method)(L::RealLattice, args...) = $(method)(L.data, args...)
+    end)
 end
 
-LineLatticeNeighbors() = [ CartesianIndex(0) for _ in 1:2 ]
+function out_of_bounds(I::CartesianIndex, N)
+    I = Tuple(I)
+    oob = false
+    for i in 1:length(I)
+        if I[i]<1 || I[i]>N[i]
+            oob = true
+            break
+        end
+    end
+    oob
+end
 
-ind2coord(L::LineLattice{T}, I::CartesianIndex) where T = L.a * I[1]
-coord2ind(L::LineLattice{T}, x) where T = CartesianIndex(round(Int64, x/L.a))
+nneighbors(L::RealLattice, I) = nneighbors(typeof(L), size(L), I)
+
+LatticeNeighbors(L::RealLattice) = LatticeNeighbors(dimension(L), coordination(L))
+LatticeNeighbors(dim, coordination) = [ CartesianIndex(zeros(Int64, dim)...) for _ in 1:coordination ]
 
 
-neighbors(L::LineLattice, m) = begin
-    tmp = LineLatticeNeighbors()
-    neighbors!(tmp, m, L)
+## size & lengths dispatch on the data field of any RealLattice ##
+"""
+    size(L::RealLattice, [i])
+Shape of `L.data` (in direction `i`).
+"""
+size(L::RealLattice) = size(L.data)
+size(L::RealLattice, i...) = size(L.data, i...)
+
+"""
+    length(L::RealLattice)
+Number of elements of `L.data`.
+"""
+length(L::RealLattice) = length(L.data)
+
+"""
+    neighbors(L::RealLattice, I)
+
+Vector of neighbors of index I. Returns Array{CartesianIndex{dimension(L)}}.
+Does not check for bounds.
+"""
+function neighbors(L::RealLattice, I)
+    tmp = LatticeNeighbors(L)
+    neighbors!(tmp, L, I)
     tmp
 end
 
-neighbors!(nn::Neighbors{1}, I::CartesianIndex, L::LineLattice) = @inbounds begin
+"""
+    dist(::RealLattice, I, J)
+
+Euclidean distance between two points on a lattice.
+"""
+function dist(L::RealLattice, I, J)
+    dx = coord(L, I) .- coord(L, J)
+    return norm(dx)
+end
+
+"""
+    function euclidean_dist_matrix(L, p)
+
+Matrix similar to `L.data` filled with euclidean distances wrt. the point `p`.
+"""
+euclidean_dist_matrix(L::RealLattice, p::CartesianIndex) = euclidean_dist_matrix(L, coord(L,p))
+function euclidean_dist_matrix(L::RealLattice, p)
+    N = size(L)
+    map(CartesianIndices(L.data)) do I
+        dist(L, coord(L, I), p)
+    end
+end
+
+
+## --- BEGIN 1D Lattice OBC -- ##
+struct LineLattice{T} <: AbstractLattice1D{T}
+    a::Float64 # Lattice constant
+    data::Array{T,1}
+end
+
+coord(L::LineLattice{T}, I) where T = L.a * I[1]
+
+index(L::LineLattice{T}, x) where T = CartesianIndex(round(Int64, x/L.a))
+
+"""
+In-place version of `neighbors`.
+"""
+function neighbors!(nn::Neighbors{1}, ::LineLattice, I)
+    @inbounds begin
         m = I[1]
         nn[1] = CartesianIndex(m-1)
         nn[2] = CartesianIndex(m+1)
+    end
 end
 
-function line_nneighbors(I::CartesianIndex, N)
+function nneighbors(::Type{LineLattice{T}}, N, I) where T
     nn = 2
-    if I[1] == 1 || I[1] == N
+    if I[1] == 1 || I[1] == N[1]
         nn -= 1
     end
     return nn
 end
 
-"""
-Distance between two points on a line lattice.
-"""
-function dist(L::Lattices.LineLattice, I::CartesianIndex, J::CartesianIndex)
-    dx = L.a * ( J[1]-I[1] )
-    return abs(dx)
-end
 
 ## --- END 1D Lattice OBC -- ##
 
@@ -110,9 +162,7 @@ end
 
 
 ## --- BEGIN Hexagonal lattice -- ##
-mutable struct HexagonalLattice{T} <: AbstractLattice2D{T}
-    Na::Int # Lattice sites in direction a
-    Nb::Int # Lattice sites in direction b
+struct HexagonalLattice{T} <: AbstractLattice2D{T}
     a::Real # Lattice constant
     data::Array{T,2}
 end
@@ -120,36 +170,40 @@ end
 ## NOTE: This implementation uses offset-coordinates by default
 ##       where every _even_ row is offset by +1/2 lattice spacing.
 ##
+## Some methods concerning distances utilize "cube coordinates"
+## (see https://www.redblobgames.com/grids/hexagons/#coordinates)
 
 """
 Convert offset to cube coordinates.
 """
-function offset_to_cube(L::Lattices.HexagonalLattice, I::CartesianIndex{2})
+function offset_to_cube(::Lattices.HexagonalLattice, I)
     x = I[2] - ( I[1] + ( I[1]&1)) / 2
     z = I[1]
     y = -x-z
     return x, y, z
 end
 
+function coord(L::HexagonalLattice, I)
+    x = (I[1]-1)*L.a
+    y = (I[2]-1)*L.a/√3
+    if iseven(I[2])
+        x += 1/2*L.a
+    end
+    x,y
+end
 
-# const HexLattices = Neighbors{2}
-HexLatticeNeighbors() = [ CartesianIndex(0,0) for _ in 1:6 ]
-
-
-ind2coord(L::HexagonalLattice{T}, I::CartesianIndex) where T<:Any = L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2])
-function coord2ind(L::T, x,y) where T<:HexagonalLattice
-    n = round(Int, 2/sqrt(3)*y/(L.a))
-    m = round(Int, (x/L.a-n/2))
+function index(L::T, p) where T<:HexagonalLattice
+    x,y, = p
+    n = round(Int, y*√3/L.a) + 1 
+    if iseven(n)
+        x -= 1/2*L.a
+    end
+    m = round(Int, x/L.a+1)
     return CartesianIndex(m,n)
 end
 
-neighbors(L::HexagonalLattice, I::CartesianIndex) = begin
-    tmp = HexLatticeNeighbors()
-    neighbors!(tmp,I,L)
-    tmp
-end
-
-neighbors!(nn::Neighbors{2}, I::CartesianIndex, L::HexagonalLattice) = @inbounds begin
+function neighbors!(nn::Neighbors{2}, L::HexagonalLattice, I)
+    @inbounds begin
     m,n = Tuple(I)
     if isodd(m)
         nn[1] = CartesianIndex(m-1, n-1)
@@ -166,19 +220,20 @@ neighbors!(nn::Neighbors{2}, I::CartesianIndex, L::HexagonalLattice) = @inbounds
         nn[3] = CartesianIndex(m, n+1)
         nn[4] = CartesianIndex(m+1, n+1)
     end
+    end
 end
 
-function hex_nneighbors(I::CartesianIndex, N)
+function nneighbors(::Type{HexagonalLattice{T}}, N, I) where T
     if isodd(I[1])
-        if (I[1] == 1 || I[1] == N) && 2<=I[2]<N
+        if (I[1] == 1 || I[1] == N[1]) && 2<=I[2]<N[2]
             return 4
-        elseif I[2] == 1 && 2<=I[1]<N
+        elseif I[2] == 1 && 2<=I[1]<N[1]
             return 3
-        elseif I[2] == N && 2<=I[1]<N
+        elseif I[2] == N && 2<=I[1]<N[1]
             return 5
-        elseif (I[1] == N && I[2] == N) || (I[1] == 1 && I[2] == 1)
+        elseif (I[1] == N[1] && I[2] == N[2]) || (I[1] == 1 && I[2] == 1)
             return 2
-        elseif I[1] == 1 && I[2] == N
+        elseif I[1] == 1 && I[2] == N[2]
             return 3
         else
             return 6
@@ -201,49 +256,33 @@ function hex_nneighbors(I::CartesianIndex, N)
 end
 
 """
-Distance between two points on a hex lattice.
-"""
-function euclidean_dist(L::Lattices.HexagonalLattice, I::CartesianIndex, J::CartesianIndex)
-    Ic = offset_to_cube(L, I)
-    Jc = offset_to_cube(L, J)
-    return sqrt( (Ic[1]-Jc[1])^2 + (Ic[2]-Jc[2])^2 + (Ic[3]-Jc[3])^2)
-    # # cos(pi/6) is the angle between
-    # # y-axis and (1,1)-direction
-    # dy = L.a * (J[2] - I[2])*cos(pi/6)
-    # # Every odd step in y-direction implies half a step
-    # # in x-direction
-    # dx = L.a * ( J[1]-I[1] - 1/2 * float(isodd(J[2]-I[2])) )
-    #
-    # return sqrt(dx^2+dy^2)
-end
-
-"""
 Manhatten distance on the hex lattice.
-Useful for determining rings.
 """
-function manhatten_dist(L::Lattices.HexagonalLattice, I::CartesianIndex, J::CartesianIndex)
+function manhatten_dist(L::HexagonalLattice, I, J)
     I = offset_to_cube(L, I)
     J = offset_to_cube(L, J)
 
     return ( abs(I[1]-J[1]) + abs(I[2]-J[2]) + abs(I[3]-J[3]) ) / 2
 end
 
-
 ## -- END HexagonalLattice -- ##
 
-## -- BEGIN CubicLattice -- ##
-mutable struct CubicLattice{T} <: AbstractLattice3D{T}
-    Na::Int # Lattice sites in direction a
-    Nb::Int # Lattice sites in direction b
-    Nc::Int # Lattice sites in direction c
+## -------------------------- ##
+
+## -- BEGIN CubicLattice --   ##
+struct CubicLattice{T} <: AbstractLattice3D{T}
     a::Real # Lattice constant
     data::Array{T,3}
 end
-CubicLattice(L::Integer) = CubicLattice(L,L,L, 1.0, fill(0, L,L,L))
+CubicLattice(L::Integer) = CubicLattice(1.0, fill(0, L,L,L))
 
-CubicLatticeNeighbors() = [ CartesianIndex(0,0,0) for _ in 1:6 ]
+coord(L::CubicLattice{T}, I) where T<:Any = L.a .* (Tuple(I) .- 1)
 
-neighbors!(nn::Neighbors{3}, I::CartesianIndex, L::CubicLattice) = @inbounds begin
+function index(L::CubicLattice, p)
+    return  round.(Int, p ./ L.a)
+end
+
+neighbors!(nn::Neighbors{3}, L::CubicLattice, I) = @inbounds begin
     m,n,l = Tuple(I)
     nn[1] = CartesianIndex(m-1, n, l)
     nn[2] = CartesianIndex(m+1, n, l)
@@ -253,45 +292,21 @@ neighbors!(nn::Neighbors{3}, I::CartesianIndex, L::CubicLattice) = @inbounds beg
     nn[6] = CartesianIndex(m, n, l+1)
 end
 
-neighbors(L::CubicLattice{<:Any}, I::CartesianIndex) = begin
-    tmp = CubicLatticeNeighbors()
-    neighbors!(tmp,I,L)
-    tmp
-end
-
-ind2coord(L::CubicLattice{T}, I::CartesianIndex) where T<:Any = L.a .* Tuple(I)
-
-function cubic_nneighbors(I::CartesianIndex, N)
+function nneighbors(::Type{CubicLattice{T}}, N, I) where T
     coord = 6
-    if I[1]<=1 || I[1]>=N
+    if I[1]<=1 || I[1]>=N[1]
         coord -= 1
     end
-    if I[2]<=1 || I[2]>=N
+    if I[2]<=1 || I[2]>=N[2]
         coord -= 1
     end
-    if I[3]<=1 || I[3]>=N
+    if I[3]<=1 || I[3]>=N[3]
         coord -= 1
     end
     coord
 end
 
-import LinearAlgebra: norm
-function euclidean_dist(L::Lattices.CubicLattice, I::CartesianIndex, J::CartesianIndex)
-    Δ = (I - J)
-    return L.a * norm( Tuple(Δ) )
-end
-
-"""
-    function euclidean_dist_matrix(L, p)
-
-Matrix similar to `L.data` filled with euclidean distances wrt. the point `p`.
-"""
-function euclidean_dist_matrix(L::Lattices.CubicLattice, p)
-    N = L.Na
-    map(product(1:N, 1:N, 1:N)) do I
-        norm(I .- p)
-    end
-end
+## Special routines for the CubicLattice outside the RealLattice interface ##
 
 function intersectsplane(L::Lattices.CubicLattice, P::Plane)
     M = map([SVector{3}(1.0,0.0,0.0), SVector{3}(0.0,1.0,0.0), SVector{3}(0.0,0.0,1.0)]) do x
@@ -344,61 +359,57 @@ end
 
 ## -- BEGIN HCPLattice -- ##
 
-mutable struct HCPLattice{T} <: AbstractLattice3D{T}
-    Na::Int # Lattice sites in direction a
-    Nb::Int # Lattice sites in direction b
-    Nc::Int # Lattice sites in direction c
-    a::Real # Lattice constant
+struct HCPLattice{T} <: AbstractLattice3D{T}
+    a::Float64
+    b::Float64
     data::Array{T,3}
 end
 
-HCPNeighbors() = [ CartesianIndex(0,0) for _ in 1:12 ]
+coord(L::HCPLattice, I::CartesianIndex) = L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2],I[3])
+## TODO: index(::HCPLattice)
+function index(L::HCPLattice)
+end
 
-neighbors!(nn::Neighbors{3}, I::CartesianIndex, L::HCPLattice) = @inbounds begin
+function neighbors!(nn::Neighbors{3}, ::HCPLattice, I)
+    @inbounds begin
     m,n,l = Tuple(I)
-    if isodd(n)
-        nn[1] = CartesianIndex(m-1, n-1, l)
-        nn[2] = CartesianIndex(m-1, n+1, l)
-        nn[5] = CartesianIndex(m-1, n, l)
-        nn[6] = CartesianIndex(m+1, n, l)
+        if isodd(n)
+            nn[1] = CartesianIndex(m-1, n-1, l)
+            nn[2] = CartesianIndex(m-1, n+1, l)
+            nn[5] = CartesianIndex(m-1, n, l)
+            nn[6] = CartesianIndex(m+1, n, l)
 
-        nn[3] = CartesianIndex(m, n+1, l)
-        nn[4] = CartesianIndex(m, n-1, l)
+            nn[3] = CartesianIndex(m, n+1, l)
+            nn[4] = CartesianIndex(m, n-1, l)
 
-        nn[7] = CartesianIndex(m-1, n-1, l+1)
-        nn[8] = CartesianIndex(m, n-1, l+1)
-        nn[9] = CartesianIndex(m, n, l+1)
+            nn[7] = CartesianIndex(m-1, n-1, l+1)
+            nn[8] = CartesianIndex(m, n-1, l+1)
+            nn[9] = CartesianIndex(m, n, l+1)
 
-        nn[10] = CartesianIndex(m-1, n-1, l-1)
-        nn[11] = CartesianIndex(m, n-1, l-1)
-        nn[12] = CartesianIndex(m, n, l-1)
-    else
-        nn[1] = CartesianIndex(m, n-1, l)
-        nn[2] = CartesianIndex(m, n+1, l)
-        nn[5] = CartesianIndex(m-1, n, l)
-        nn[6] = CartesianIndex(m+1, n, l)
-        nn[3] = CartesianIndex(m+1, n+1, l)
-        nn[4] = CartesianIndex(m+1, n-1, l)
+            nn[10] = CartesianIndex(m-1, n-1, l-1)
+            nn[11] = CartesianIndex(m, n-1, l-1)
+            nn[12] = CartesianIndex(m, n, l-1)
+        else
+            nn[1] = CartesianIndex(m, n-1, l)
+            nn[2] = CartesianIndex(m, n+1, l)
+            nn[5] = CartesianIndex(m-1, n, l)
+            nn[6] = CartesianIndex(m+1, n, l)
+            nn[3] = CartesianIndex(m+1, n+1, l)
+            nn[4] = CartesianIndex(m+1, n-1, l)
 
-        nn[7] = CartesianIndex(m, n-1, l+1)
-        nn[8] = CartesianIndex(m+1, n-1, l+1)
-        nn[9] = CartesianIndex(m, n, l+1)
+            nn[7] = CartesianIndex(m, n-1, l+1)
+            nn[8] = CartesianIndex(m+1, n-1, l+1)
+            nn[9] = CartesianIndex(m, n, l+1)
 
-        nn[10] = CartesianIndex(m, n-1, l-1)
-        nn[11] = CartesianIndex(m+1, n-1, l-1)
-        nn[12] = CartesianIndex(m, n, l-1)
-    end
-end
-neighbors(L::HCPLattice{<:Any}, I::CartesianIndex) = begin
-    tmp = HCPNeighbors()
-    neighbors!(tmp,I,L)
-    tmp
+            nn[10] = CartesianIndex(m, n-1, l-1)
+            nn[11] = CartesianIndex(m+1, n-1, l-1)
+            nn[12] = CartesianIndex(m, n, l-1)
+        end
+    end 
 end
 
-ind2coord(L::HCPLattice{T}, I::CartesianIndex) where T<:Any = L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2],I[3])
-
-function hcp_nneighbors(I::CartesianIndex, N)
-    coord_xy = hex_nneighbors(I, N)
+function nneighbors(::Type{HCPLattice{T}}, N, I) where T
+    coord_xy = nneighbors(HexagonalLattice, N[1:2], I[1:2])
 
     if 2 <= I[3]
         coord_xy += 1
@@ -408,22 +419,6 @@ function hcp_nneighbors(I::CartesianIndex, N)
     end
     coord_xy
 end
-
-
-"""
-Distance between two points on a HCP lattice.
-"""
-function euclidean_dist(L::Lattices.HCPLattice, I::CartesianIndex, J::CartesianIndex)
-    # cos(pi/6) is the angle between
-    # y-axis and (1,1)-direction
-    dy = L.a * (J[2] - I[2])*cos(pi/6)
-    # Every odd step in y-direction implies half a step
-    # in x-direction
-    dx = L.a * ( J[1]-I[1] - 1/2 * float(isodd(J[2]-I[2])) )
-    dz = L.a *(J[3] - I[3])
-    return sqrt(dx^2+dy^2+dz^2)
-end
-
 ## -- END HCPLattice --##
 
 dimension(::NoLattice) = 0
@@ -431,41 +426,27 @@ dimension(::AbstractLattice1D) = 1
 dimension(::AbstractLattice2D) = 2
 dimension(::AbstractLattice3D) = 3
 
-coordination(::LineLattice) = 2
-coordination(::HexagonalLattice) = 6
-coordination(::CubicLattice) = 6
-coordination(::HCPLattice) = 12
+coordination(L::RealLattice) = coordination(typeof(L))
+coordination(::Type{LineLattice{T}}) where T = 2
+coordination(::Type{HexagonalLattice{T}}) where T = 6
+coordination(::Type{CubicLattice{T}}) where T = 6
+coordination(::Type{HCPLattice{T}}) where T = 12
 
-## Generic nearest neighbor functions
-for (L,short) in collect(zip([:LineLattice, :HexagonalLattice, :CubicLattice], [:line, :hex, :cubic]))
-    eval(
-    quote
-        nneighbors(l::$L,n,N) = Lattices.$(Symbol(short,"_nneighbors"))(n,N)
-    end
-    )
+"""
+    density(L::RealLattice, I)
+
+Calculates `(occupied sites)/(no. of neighbors)`
+
+"Occupied" means != zero(eltype(L.data))
+"""
+density(L::RealLattice, I) = density!(LatticeNeighbors(L), L, I)
+function density!(nn::Neighbors, L::RealLattice, I)
+    tot = nneighbors(L, I)
+    neighbors!(nn, L, I)
+    nz =  count(x->!out_of_bounds(x, size(L)) && L.data[x]!=0, nn) ## TODO: makes assumption about the numerical value that repr. unoccupied
+    return nz/tot
 end
 
 
-## Define density function for different lattice types.
-for LatticeType in [Lattices.LineLattice, Lattices.HexagonalLattice, Lattices.CubicLattice]
-    if LatticeType <: Lattices.HexagonalLattice
-        nn_function = :hex_nneighbors
-    elseif LatticeType <: Lattices.LineLattice
-        nn_function = :line_nneighbors
-    elseif LatticeType <: Lattices.CubicLattice
-        nn_function = :cubic_nneighbors
-    end
-    eval(
-    quote
-        function density!(nn,L::$LatticeType,ind::CartesianIndex)
-            lin_N = size(L.data, 1)
-            neighbors!(nn, ind, L)
-            tot = $(nn_function)(ind,lin_N)
-            nz =  count(x->!out_of_bounds(x,lin_N) && L.data[x]!=0, nn)
-            return nz/tot
-        end
-    end)
-end
-
-
+## END MODULE ##
 end
