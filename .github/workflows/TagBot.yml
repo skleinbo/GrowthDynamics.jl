@@ -2,8 +2,6 @@ name: TagBot
 on:
   issue_comment:
     types: [created]
-  schedule:
-    - cron: '10 7 * * *'
   workflow_dispatch:
 jobs:
   TagBot:
