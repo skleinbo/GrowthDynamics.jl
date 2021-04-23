@@ -129,7 +129,7 @@ end
 ## --- BEGIN 1D Lattice OBC -- ##
 struct LineLattice{T} <: AbstractLattice1D{T}
     a::Float64 # Lattice constant
-    data::Array{T,1}
+    data::AbstractArray{T, 1}
 end
 
 coord(L::LineLattice{T}, I) where T = L.a * I[1]
@@ -164,7 +164,7 @@ end
 ## --- BEGIN Hexagonal lattice -- ##
 struct HexagonalLattice{T} <: AbstractLattice2D{T}
     a::Real # Lattice constant
-    data::Array{T,2}
+    data::AbstractArray{T,2}
 end
 
 ## NOTE: This implementation uses offset-coordinates by default
@@ -272,7 +272,7 @@ end
 ## -- BEGIN CubicLattice --   ##
 struct CubicLattice{T} <: AbstractLattice3D{T}
     a::Real # Lattice constant
-    data::Array{T,3}
+    data::AbstractArray{T,3}
 end
 CubicLattice(L::Integer) = CubicLattice(1.0, fill(0, L,L,L))
 
@@ -362,7 +362,7 @@ end
 struct HCPLattice{T} <: AbstractLattice3D{T}
     a::Float64
     b::Float64
-    data::Array{T,3}
+    data::AbstractArray{T,3}
 end
 
 coord(L::HCPLattice, I::CartesianIndex) = L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2],I[3])
