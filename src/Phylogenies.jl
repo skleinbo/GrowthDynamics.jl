@@ -69,7 +69,7 @@ of its parent, plus (on average) `μ` new ones.
 function annotate_snps!(S::TumorConfigurations.TumorConfiguration, μ;
     L=10^9, allow_multiple=false, kind=:poisson, replace=false)
 
-    P = S.Phylogeny
+    P = S.phylogeny
     SNPS = S.meta.snps
     # D = Poisson(μ)
 
@@ -151,7 +151,7 @@ end
 Remove unpopulated genotypes from the graph.
 """
 function prune_phylogeny!(S::TumorConfigurations.TumorConfiguration)
-    P = S.Phylogeny
+    P = S.phylogeny
     npops = S.meta.npops
 
     function bridge!(s, d)
@@ -188,16 +188,16 @@ function prune_phylogeny!(S::TumorConfigurations.TumorConfiguration)
         # @debug "Removing vertex" v
         # rem_vertex!(P, v)
     end
-    S.Phylogeny = induced_subgraph(P, subvertices)[1]
+    S.phylogeny = induced_subgraph(P, subvertices)[1]
     S.meta = S.meta[subvertices]
-    return S.Phylogeny, S.meta
+    return S.phylogeny, S.meta
 end
 
 """
 Return index of the most recent common ancestor between `(i,j)` in a phylogeny.
 """
 function MRCA(S::TumorConfiguration, i::Integer, j::Integer)
-    P = S.Phylogeny
+    P = S.phylogeny
     @assert 1<=i<=nv(P) && 1<=j<=nv(P)
 
     mrca = 1 ## 'Worst' case: MRCA is the root
@@ -219,7 +219,7 @@ end
 Return index of the most recent common ancestor between in a phylogeny.
 """
 function MRCA(S::TumorConfiguration)
-    P = S.Phylogeny
+    P = S.phylogeny
 
     mrca = nv(P)
 

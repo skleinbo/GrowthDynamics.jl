@@ -106,3 +106,32 @@ Euclidean distance `| (q-p).w |` of point `q` from plane `P`.
 function euclidean_dist(q, P::Plane)
     abs(dot((q - P.p), P.w))
 end
+
+## 
+
+function volume(r, dim::Int) 
+    if dim == 1
+        return 2*r
+    elseif dim == 2
+        return π*r^2
+    elseif dim == 3
+        return 4π/3*r^3
+    else
+        throw(ArgumentError("dim >=4 not supported"))
+    end
+end
+
+function radius(v, dim::Int)
+    if dim == 1
+        return v/2
+    elseif dim == 2
+        return sqrt(v/π)
+    elseif dim == 3
+        return (3/4/π*v)^(1//3)
+    else
+        throw(ArgumentError("dim >=4 not supported"))
+    end
+end
+
+
+

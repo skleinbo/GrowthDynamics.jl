@@ -16,7 +16,13 @@ export  AbstractLattice,
         empty_neighbors,
         density,
         density!,
-        dist
+        dist,
+        dimension,
+        coordination,
+        midpoint,
+        spacings,
+        volume,
+        radius
 
 import Base: size, length, getindex, setindex!, maybeview, firstindex, lastindex
 import Base.Iterators: product
@@ -103,6 +109,15 @@ function neighbors(L::RealLattice, I)
 end
 
 """
+    midpoint(L)
+
+Return the index of the geometeric center of the lattice `L`.
+"""
+function midpoint(L::RealLattice) 
+    index(L, realsize(L)./2)
+end
+
+"""
     dist(::RealLattice, I, J)
 
 Euclidean distance between two points on a lattice.
@@ -123,6 +138,10 @@ function euclidean_dist_matrix(L::RealLattice, p)
     map(CartesianIndices(L.data)) do I
         dist(L, coord(L, I), p)
     end
+end
+
+function realsize(L::RealLattice)
+    coord(L, size(L)) .- coord(L, first(CartesianIndices(L.data)))
 end
 
 
@@ -192,7 +211,7 @@ function coord(L::HexagonalLattice, I)
     x,y
 end
 
-function index(L::T, p) where T<:HexagonalLattice
+function index(L::HexagonalLattice, p)
     x,y, = p
     n = round(Int, y*√3/L.a) + 1 
     if iseven(n)
@@ -279,7 +298,7 @@ CubicLattice(L::Integer) = CubicLattice(1.0, fill(0, L,L,L))
 coord(L::CubicLattice{T}, I) where T<:Any = L.a .* (Tuple(I) .- 1)
 
 function index(L::CubicLattice, p)
-    return  round.(Int, p ./ L.a)
+    return  CartesianIndex(round.(Int, p ./ L.a))
 end
 
 neighbors!(nn::Neighbors{3}, L::CubicLattice, I) = @inbounds begin
@@ -425,12 +444,18 @@ dimension(::NoLattice) = 0
 dimension(::AbstractLattice1D) = 1
 dimension(::AbstractLattice2D) = 2
 dimension(::AbstractLattice3D) = 3
+dimension(::Type{T}) where T<:NoLattice = 0
+dimension(::Type{T}) where T<:AbstractLattice1D = 1
+dimension(::Type{T}) where T<:AbstractLattice2D = 2
+dimension(::Type{T}) where T<:AbstractLattice3D = 3
 
 coordination(L::RealLattice) = coordination(typeof(L))
 coordination(::Type{LineLattice{T}}) where T = 2
 coordination(::Type{HexagonalLattice{T}}) where T = 6
 coordination(::Type{CubicLattice{T}}) where T = 6
 coordination(::Type{HCPLattice{T}}) where T = 12
+
+spacings(L::Union{LineLattice, HexagonalLattice, CubicLattice}) = (L.a,)
 
 """
     density(L::RealLattice, I)

@@ -61,7 +61,7 @@ function exponential!(
     abort=s->false,
     kwargs...)
 
-    # P = state.Phylogeny
+    # P = state.phylogeny
     K = state.lattice.N # Carrying capacity
 
     genotypes = state.meta.genotypes
@@ -140,7 +140,7 @@ function exponential!(
                         fitnesses[end] = fitness(new_genotype)
                         push!(rates, 0.0)
                     end
-                    add_edge!(state.Phylogeny,nv(state.Phylogeny),j)
+                    add_edge!(state.phylogeny,nv(state.phylogeny),j)
                     new = length(genotypes)
                     rates[new] += fitnesses[new]
                     total_rate += fitnesses[new]
@@ -156,14 +156,14 @@ function exponential!(
     if prune_on_exit
         prune_me!(state, mu)
     end
-    # state.Phylogeny = P
+    # state.phylogeny = P
     nothing
 end
 
 function prune_me!(state,mu)
     annotate_snps!(state, mu)
     prune_phylogeny!(state)
-    # state.Phylogeny = newP
+    # state.phylogeny = newP
     # state.meta = newMeta
     nothing
 end
@@ -271,7 +271,7 @@ function moran!(
                     fitnesses[end] = fitness(state, genotype, new_genotype)
                     push!(rates, 0.0)
                 end
-                add_edge!(state.Phylogeny,nv(state.Phylogeny),old)
+                add_edge!(state.phylogeny,nv(state.phylogeny),old)
                 old = length(genotypes)
             end
         end
@@ -498,7 +498,7 @@ function die_or_proliferate!(
                             snps[end] = new_snps
                             fitnesses[end] = fitness(state, genotype, new_genotype)
                         end
-                        add_edge!(state.Phylogeny,nv(state.Phylogeny),g_id)
+                        add_edge!(state.phylogeny,nv(state.phylogeny),g_id)
                         genotype = new_genotype
                         g_id = length(genotypes)
                     end

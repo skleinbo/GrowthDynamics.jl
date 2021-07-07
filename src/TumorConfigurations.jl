@@ -1,57 +1,155 @@
 module TumorConfigurations
 
+import Base: getindex, length, push!, resize!, setindex!, show, zero
+import Base.Iterators: product
+import LightGraphs: SimpleDiGraph, add_vertex!, add_vertices!, add_edge!, nv
 import ..Lattices
+import ..Lattices: coord, dimension, index, radius, realsize, midpoint, dist, spacings
 import GeometryTypes: Point2f0, Point3f0
-import LightGraphs: SimpleDiGraph, add_vertex!, add_edge!
-import Base: push!, show
 import StatsBase
 
-export
-    TumorConfiguration,
+export TumorConfiguration,
     MetaData,
     push!,
     nolattice_state,
-    single_center2,
-    single_center3,
-    single_center3_cubic,
-    uniform_line,
-    uniform_circle,
-    uniform_circle_free,
-    uniform_sphere
+    single_center,
+    uniform,
+    half_space,
+    spheref, spherer,
+    sphere_with_diverse_outer_shell,
+    sphere_with_single_mutant_on_outer_shell
 
 ##-- METADATA for efficiently storing population information --##
-const MetaDatum{T} = Tuple{T, Int64, Float64, Vector{Int64}, Tuple{Int64,Float64}}
+const MetaDatumFields = (:genotype, :npop, :fitness, :snps, :age)
+const MetaDatumFieldTypes{T} = Tuple{T,Int64,Float64,Vector{Int64},Tuple{Int64,Float64}}
+const MetaDatum{T} = NamedTuple{MetaDatumFields,Tuple{T,Int64,Float64,Vector{Int64},Tuple{Int64,Float64}}}
+const DEFAULT_META_DATA = (0, 1.0, Int64[], (0, 0.0))
+"""
+    MetaDatum
+
+NamedTuple to store information about one genotype.
+"""
+function MetaDatum(A::MetaDatumFieldTypes)
+    NamedTuple{MetaDatumFields}(A)
+end
+
+function MetaDatum(g)
+    MetaDatum((g, DEFAULT_META_DATA...))
+end
+
 mutable struct MetaData{T}
     genotypes::Vector{T}
     npops::Vector{Int64}
     fitnesses::Vector{Float64}
     snps::Vector{Vector{Int64}}
-    ages::Vector{Tuple{Int64, Float64}}  ## (simulation t, real t) when a genotype entered.
+    ages::Vector{Tuple{Int64,Float64}}  ## (simulation t, real t) when a genotype entered.
+    misc::Dict{Any,Any} # store anything else in here.
 end
-MetaData(T::DataType) = MetaData(T[], Int64[], Float64[], Vector{Int64}[], Tuple{Int64,Float64}[])
-MetaData(a::Tuple{T, Int64, Float64, Vector{Int64}}) where {T} = MetaData{T}([a[1]],[a[2]],[a[3]],[a[4]])
+
+"""
+    MetaData(T::DataType)
+
+Empty MetaData for genotype-type T.
+"""
+MetaData(T::DataType) = MetaData(T[], Int64[], Float64[], Vector{Int64}[], Tuple{Int64,Float64}[], Dict())
+"""
+    MetaData(M::Union{MetaDatum, Tuple})
+
+Construct MetaData from single datum. Argument can be an appropriate tuple or named tuple.
+"""
+MetaData(M::MetaDatum) = MetaData(values(M))
+MetaData(a::MetaDatumFieldTypes{T}) where {T} = MetaData{T}([a[1]], [a[2]], [a[3]], [a[4]], [a[5]], Dict())
+"""
+    MetaData(g::Vector{T}, n::Vector{<:Integer})
+
+Construct MetaData from vectors of genotypes and population sizes.
+* Fitnesses default to 1.0
+* SNPs default to empty.
+* Ages default to (0, 0.0)
+* misc defaults to an empty dictionary.
+"""
 function MetaData(g::Vector{T}, n::Vector{<:Integer}) where {T}
     N = length(n)
-    if length(g)!=N
-        error("Lengths of arguments do not match.")
+    if length(g) != N
+        throw(ArgumentError("Lengths of arguments do not match."))
     end
     fitnesses = fill(1.0, N)
     snps = fill(Int64[], N)
-    ages = fill( (0,0.0), N)
-    MetaData(g, n, fitnesses, snps, ages)
+    ages = fill((0, 0.0), N)
+    MetaData(g, n, fitnesses, snps, ages, Dict())
 end
-function Base.getindex(M::MetaData{T}; g) where {T}
-    id = findfirst(x->x==g, M.genotypes)
-    if id===nothing
-        error("Unknown genotype.")
+
+length(M::MetaData) = length(M.genotypes)
+
+function _pluralize(field::Symbol)
+    if field == :genotype
+        return :genotypes
+    elseif field == :npop
+        return :npops
+    elseif field == :fitness
+        return :fitnesses
+    elseif field == :snps
+        return :snps
+    elseif field == :age
+        return :ages
+    else
+        throw(ArgumentError("Unkown field $field"))
+    end    
+end
+
+function gindex(M::MetaData{T}, g::T) where T
+    id = findfirst(x -> x == g, M.genotypes)
+    if id === nothing
+        throw(ArgumentError("Unknown genotype."))
     end
-    M[id]
+    id
 end
-Base.getindex(M::MetaData{T}, i) where {T} = MetaData{T}(M.genotypes[i], M.npops[i], M.fitnesses[i], M.snps[i], M.ages[i])
+
+function Base.getindex(M::MetaData{T}; g) where {T}
+    M[gindex(M, g)]
+end
 Base.getindex(M::MetaData{T}, i::Integer) where {T} =
     (genotype = M.genotypes[i], npop = M.npops[i], fitness = M.fitnesses[i], snps = M.snps[i], age = M.ages[i])
-Base.lastindex(M::MetaData{T}) where {T} = length(M.genotypes)
-function Base.setindex!(M::MetaData{T}, D::Tuple{T, Int64, Float64, Vector{Int64}, Tuple{Int64,Float64}}, i) where {T}
+function getindex(M::MetaData, i::Integer, field::Symbol)
+    mfield = _pluralize(field)
+    getindex(getproperty(M, mfield), i)
+end
+function getindex(M::MetaData{T}, field::Symbol; g::T) where T
+    M[gindex(M, g), field]
+end
+
+function resize!(M::MetaData, n::Integer)
+    if n<=length(M)
+        throw(BoundsError("Requested size is less than current size."))
+    end
+    for field in fieldnames(MetaData)
+        if field == :misc
+            continue
+        else
+            resize!(getproperty(M, field), n)
+        end
+    end
+    M
+end
+
+Base.lastindex(M::MetaData{T}) where {T} = length(M)
+
+Base.push!(M::MetaData{T}, g::T) where T = push!(M, MetaDatum(g))
+Base.push!(M::MetaData, D::MetaDatum) = push!(M, values(D))
+function Base.push!(M::MetaData{T}, D::MetaDatumFieldTypes{T}) where T
+    if D[1] == zero(T) || D[1] in M.genotypes
+        throw(ArgumentError("invalid genotype; either already present or zero."))
+    end
+    i = lastindex(M)+1
+    resize!(M, i)
+    setindex!(M, D, i)
+end
+
+Base.setindex!(M::MetaData, D::MetaDatum, i::Integer) = setindex!(M, values(D), i)
+function Base.setindex!(M::MetaData{T}, D::MetaDatumFieldTypes{T}, i::Integer) where {T}
+    if i > length(M)
+        throw(BoundsError("Trying to access index $i of $(length(M)) element object."))
+    end
     M.genotypes[i] = D[1]
     M.npops[i] = D[2]
     M.fitnesses[i] = D[3]
@@ -60,275 +158,252 @@ function Base.setindex!(M::MetaData{T}, D::Tuple{T, Int64, Float64, Vector{Int64
     D
 end
 
-const DEFAULT_META_DATA = (1, 1.0, Int64[], (0,0.0))
+function setindex!(M::MetaData, v, i::Integer, field::Symbol)
+    if i > length(M)
+        throw(BoundsError("Trying to access index $i of $(length(M)) element object."))
+    end 
+    mfield = _pluralize(field)
+    setindex!(getproperty(M, mfield), v, i)
+    return v
+end
+function setindex!(M::MetaData, v, field::Symbol; g)
+    i = gindex(M, g)
+    setindex!(M, v, i, field)
+end
+    
 
 ##--                                                        --##
 
-mutable struct TumorConfiguration{T<:Lattices.AbstractLattice}
+## Certain values on the lattice are special. 
+## For example, we need a way to identify the empty site.
+## We use `zero` for that. If zero is undefined for the 
+## type you are using, define it, e.g
+zero(::Type{String}) = "0"
+
+mutable struct TumorConfiguration{T <: Lattices.AbstractLattice}
     lattice::T
-    Phylogeny::SimpleDiGraph
+    phylogeny::SimpleDiGraph
     meta::MetaData
     t::Int
     treal::Float64
     observables::Dict{Symbol, Any}
 end
-function TumorConfiguration(lattice::Lattices.TypedLattice{T}, Phylogeny::SimpleDiGraph=SimpleDiGraph()) where {T}
-    counts_dict = StatsBase.countmap(lattice.data, alg=:dict)
-    if haskey(counts_dict, 0)
-        delete!(counts_dict, 0)
+
+"""
+    TumorConfiguration(lattice, [phylogeny])
+
+Wraps an existing lattice in a TumorConfiguration. Calculates meta.npops automatically.
+
+If `phylogeny` is not given, it defaults to an empty graph.
+"""
+function TumorConfiguration(lattice::Lattices.RealLattice{T}, phylogeny::SimpleDiGraph = SimpleDiGraph()) where {T}
+    counts_dict = StatsBase.countmap(lattice.data, alg = :dict)
+    if haskey(counts_dict, zero(T))
+        delete!(counts_dict, zero(T))
     end
     genotypes = collect(keys(counts_dict))
     npops = collect(values(counts_dict))
     metadata = MetaData(genotypes, npops)
-    TumorConfiguration(lattice, Phylogeny, metadata, 0, 0.0, Dict{Symbol, Any}())
+    add_vertices!(phylogeny, length(genotypes))
+    TumorConfiguration(lattice, phylogeny, metadata, 0, 0.0, Dict{Symbol,Any}())
 end
-Base.getindex(T::TumorConfiguration,ind...) = T.lattice.data[ind...]
-Base.getindex(T::TumorConfiguration) = T.lattice.data
+function TumorConfiguration(nolattice::Lattices.NoLattice{T}) where T
+    metadata = MetaData(T)
+    phylogeny = SimpleDiGraph()
+    TumorConfiguration(nolattice, phylogeny, metadata, 0, 0.0, Dict{Symbol,Any}())
+end
 
-function Base.setindex!(T::TumorConfiguration, v, ind...)
+Base.getindex(T::TumorConfiguration, ind...) = T.lattice[ind...]
+
+Base.setindex!(T::TumorConfiguration, v, ind::CartesianIndex) = setindex!(T, v, Tuple(ind)...)
+function Base.setindex!(T::TumorConfiguration, v, ind::Vararg{Int64})
+    z = zero(eltype(T.lattice.data))
     L = T.lattice.data
     g_old = L[ind...]
     if L[ind...] == v
         return v
     end
-    if g_old != 0
-        g_id = findfirst(x->x==g_old, T.meta.genotypes)
-        T.meta.npops[g_id] -= 1
-    end
-    if v!=0
+    if v != z
         if !(v in T.meta.genotypes)
             push!(T, v)
             T.meta.npops[end] = 1
         else
-            g_id = findfirst(x->x==v, T.meta.genotypes)
-            T.meta.npops[g_id] += 1
+            T.meta[g=v, :npop] += 1
         end
+    end
+    if g_old != z
+        T.meta[g=g_old, :npop] -= 1
     end
     L[ind...] = v
     v
 end
 
-"""
-    nolattice_state(N)
-
-Unstructered model with carrying capacity `N`,
-one genotype and one individual with fitness 1.0.
-"""
-nolattice_state(N::Int) = begin
-    state = TumorConfiguration(Lattices.NoLattice(N), SimpleDiGraph())
-    push!(state, 1)
-    state.meta.npops[end] = 1
-    state.meta.fitnesses[end] = 1.0
-    state.meta.ages[end] = (0, 0.0)
-    state
-end
-
-"Add a new _unconnected_ genotype to a TumorConfiguration"
+"Add a new _unconnected_ genotype to a TumorConfiguration."
 function Base.push!(S::TumorConfiguration{<:Lattices.TypedLattice{T}}, g::T) where {T}
-    if g==0
-        error("Trying to push genotype 0")
-    end
-    add_vertex!(S.Phylogeny)
-    push!(S.meta.genotypes, g)
-    push!(S.meta.npops, 0)
-    push!(S.meta.fitnesses, 1.0)
-    push!(S.meta.snps, Int64[])
-    push!(S.meta.ages, (S.t, S.treal))
-    nothing
+    push!(S.meta, (g, 0, 1.0, Int64[], (S.t, S.treal)))
+    add_vertex!(S.phylogeny)
+    lastindex(S.meta)
 end
 
 function Base.push!(S::TumorConfiguration{<:Lattices.TypedLattice{T}}, M::MetaDatum{T}) where {T}
-    add_vertex!(S.Phylogeny)
-    push!(S.meta.genotypes, M[1])
-    push!(S.meta.npops, M[2])
-    push!(S.meta.fitnesses, M[3])
-    push!(S.meta.snps, M[4])
-    push!(S.meta.ages, M[5])
-    nothing
+    push!(S.meta, M)
+    add_vertex!(S.phylogeny)
+    lastindex(S.meta)
 end
 
-
+## -- Convenience constructors for different initial geometries -- ##
 """
-    uniform_line(L [, g=0])
+    nolattice_state()
 
-One-dimension system filled with genotype `g`.
+Unstructered model.
+One genotype 1::Int64 with one individual with fitness 1.0.
 """
-function uniform_line(L, g=0)
-    G = SimpleDiGraph()
-    lattice = Lattices.LineLattice(1.0, fill(g, L))
-    state = TumorConfiguration(lattice, G)
-    if g!=0
-        push!(state, (g, L, 1.0, Int64[], (0,0.0)) )
-    end
+nolattice_state() = begin
+    state = TumorConfiguration(Lattices.NoLattice())
+    push!(state, 1)
+    state.meta.npops[end] = 1
+    state.meta.fitnesses[end] = 1.0
     state
 end
 
 
 """
-    single_center2(N [;g1=1,g2=2])
+    uniform(::Type{LT<:RealLattice}, L; g=0, a=1.0)
 
-Initialize a single cell of genotype `g2` at the midpoint of hexagonal lattice filled with `g1`.
+Return system on a lattice of type `LT` with linear extension `L`, filled with genotype `g`.
+
+# Example
+
+    uniform(HexagonalLattice, 128; g=1)
 """
-function single_center2(N::Int;g1=1,g2=2)
-    G = SimpleDiGraph()
-    lattice = Lattices.HexagonalLattice(1.0,fill(g1,N,N))
-    state = TumorConfiguration(lattice, G)
-    midpoint = CartesianIndex(div(N,2),div(N,2))
-
-    state[midpoint] = g2
-
-    counts = StatsBase.countmap(reshape(lattice.data,N^2))
-    if g1!=0
-        push!(state, (g1, counts[g1], 1.0, Int64[]))
-    end
-    if g2!=0
-        push!(state, (g2, counts[g2], 1.0, Int64[]))
-    end
-    if g1!=0 && g2!=0
-         add_edge!(G, 2, 1)
-    end
+function uniform(T::Type{LT}, L::Int; g=0) where LT<:Lattices.RealLattice
+    dim = Lattices.dimension(T)
+    lattice = LT(1.0, fill(g, fill(L, dim)...))
+    state = TumorConfiguration(lattice)
 
     return state
 end
 
-
 """
-    single_center3(N [;g1=1,g2=2])
+    single_center(::Type{RealLattice}, L; g1=1,g2=2)
 
-Initialize a single cell of genotype `g2` at the midpoint of HCP lattice
- filled with `g1`.
+Initialize a single cell of genotype `g2` at the midpoint of the given lattice type, filled with `g1`.
 """
-function single_center3(N::Int;g1=1,g2=2)
-    G = SimpleDiGraph()
-    lattice = Lattices.HCPLattice(1.0,1.0, fill(g1,N,N,N))
-    state = TumorConfiguration(lattice, G)
-    midpoint = CartesianIndex(div(N,2),div(N,2),div(N,2))
-
-    state[midpoint] = g2
-
-    counts = StatsBase.countmap(reshape(lattice.data,N^3))
-    if g1!=0
-        push!(state, (g1, DEFAULT_META_DATA...) )
-        state.meta.npops[1] = counts[g1]
-    end
-    if g2!=0
-        push!(state, (g2,  DEFAULT_META_DATA...) )
-    end
-    if g1!=0 && g2!=0
-         add_edge!(G, 2, 1)
-    end
+function single_center(::Type{LT}, L::Int; g1=0, g2=1) where LT<:Lattices.RealLattice
+    state = uniform(LT, L; g=g1)
+    mid = midpoint(state.lattice)
+    state[mid] = g2
 
     return state
 end
 
-
-"""
-    single_center3_cubic(N [;g1=1,g2=2])
-
-Initialize a single cell of genotype `g2` at the midpoint of a cubic lattice
- filled with `g1`.
-"""
-function single_center3_cubic(N::Int;g1=1,g2=2)
-    G = SimpleDiGraph()
-    lattice = Lattices.CubicLattice(1.0,fill(g1,N,N,N))
-    state = TumorConfiguration(lattice, G)
-    midpoint = CartesianIndex(div(N,2),div(N,2),div(N,2))
-
-    if g1!=0
-        push!(state, (g1, DEFAULT_META_DATA...) )
-        state.meta.npops[1] = N^3
+function half_space(::Type{LT}, L::Int; f=1/2, g1=0, g2=1) where LT<:Lattices.RealLattice
+    if !(0.0<=f<=1)
+        throw(ArgumentError("filling fraction must be between 0 and 1."))
     end
-    if g2!=0
-        state[midpoint] = g2
+    state = uniform(LT, L; g=g1)
+    fill_to = round(Int, f*size(state.lattice)[end])
+    for ind in product(axes(state.lattice.data)[1:end-1]..., 1:fill_to)
+        state[ind...] = g2
     end
-    if g1!=0 && g2!=0
-         add_edge!(G, 2, 1)
-    end
-
-    return state
+    state
 end
-
-
-function uniform_sphere(N::Int,f=1/10,g1=1,g2=2)::Lattices.HCPLattice{Int}
-    state = Lattices.HCPLattice(1.0, 1.0, fill(g1,N,N,N))
-    mid = [div(N,2),div(N,2),div(N,2)]
-
-    function fill_neighbors!(state, I)
-        nn = Lattices.neighbors(state, I)
-        for neigh in nn
-            if Lattices.out_of_bounds(neigh...,state.Na) continue end
-            state.data[CartesianIndex(neigh)] = g2
-            if count(x->x==g2, state.data)/N^3 >= f
-                return nn
-            end
-        end
-        return nn
+function spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
+    if !(0.0<=r)
+        throw(ArgumentError("radius must be positive."))
     end
-
-    state.data[mid...] = g2
-    while count(x->x==g2, state.data)/N^3 < f
-        for nn in findall(x->x==g2,state.data)
-            # println(nn)
-            fill_neighbors!(state,nn)
-        end
-    end
-
-    return state
-end
-
-
-"""
-    uniform_circle(L [,f=1/10,g1=1,g2=2])
-
-Hexagonal lattice state filled with `g1`.
-Disk of filling fraction `f` with genotype `g2` at the center.
-"""
-function uniform_circle(N::Int,f=1/10,g1=1,g2=2)::TumorConfiguration{Lattices.HexagonalLattice{Int}}
-    G = SimpleDiGraph()
-    lattice = Lattices.HexagonalLattice(1.0,fill(g1,N,N))
-    state = TumorConfiguration(lattice, G)
-
-
-    if f==0.
+    state = uniform(LT, L; g=g1)
+    if g2==g1 || r==0.0
         return state
     end
+    N = length(state.lattice)
+    a = spacings(state.lattice)[1]
 
-    mid = CartesianIndex(div(N,2),div(N,2))
+    mid = midpoint(state.lattice)
 
-    function fill_neighbors!(lattice,ind::CartesianIndex)
-        m,n = Tuple(ind)
-        nn = Lattices.neighbors(lattice, ind)
-        for neigh in nn
-            if Lattices.out_of_bounds(neigh,lattice.Na) continue end
-            lattice.data[neigh] = g2
-            if count(x->x==g2, lattice.data)/N^2 >= f
-                return nn
-            end
-        end
-        return nn
-    end
+    all_indices = CartesianIndices(state.lattice.data)
+    dist_matrix = map(x->dist(state.lattice, x, mid)<=r, all_indices)
 
-    lattice.data[mid] = g2
-    while count(x->x==g2, lattice.data)/N^2 < f
-        for nn in findall(x->x==g2,lattice.data)
-            # println(nn)
-            fill_neighbors!(lattice,nn)
+    for I in eachindex(dist_matrix)
+        if dist_matrix[I]
+            state[I] = g2
         end
     end
-
-    counts = StatsBase.countmap(reshape(lattice.data,N^2))
-    if g1!=0
-        push!(state, (g1, counts[g1], 1.0, Int64[], (0,0.0)))
-    end
-    if g2!=0
-        push!(state, (g2, counts[g2], 1.0, Int64[], (0,0.0)))
-    end
-    if g1!=0 && g2!=0
-         add_edge!(G, 2, 1)
-    end
-
-    return state
+    state
 end
+
+function spheref(::Type{LT}, L::Int; f = 1 / 10, g1=1, g2=2) where LT<:Lattices.RealLattice
+    if !(0.0<=f<=1)
+        throw(ArgumentError("f must be between 0 and 1."))
+    end
+    state = uniform(LT, L; g=g1)
+    if g2==g1 || f==0.0
+        return state
+    end
+    N = length(state.lattice)
+    a = spacings(state.lattice)[1]
+    r_old = radius(f*N*a, dimension(state.lattice)) # start with radius implied by the real-space volume Nfa
+    r_new = r_old
+
+    mid = midpoint(state.lattice)
+
+    all_indices = CartesianIndices(state.lattice.data)
+    dist_matrix = map(x->dist(state.lattice, x, mid), all_indices)
+
+    n, n_old = count(I->I < r_new, dist_matrix), 0
+    while n/length(state.lattice) < f
+        r_old = r_new
+        r_new += a
+        n_old = n
+        n = count(I->I < r_new, dist_matrix)
+        if n-n_old == 0
+            break
+        end
+    end
+    sphere = findall(I->I < r_new, dist_matrix)
+    for ind in sphere
+        state[ind] = g2
+    end
+    state, sphere
+end
+
+function sphere_with_diverse_outer_shell(::Type{LT}, L::Int; r) where LT<:Lattices.RealLattice
+    state, _ = sphere(LT, L; g1=0, g2=1)
+    N = length(state.lattice)
+    a = spacings(state.lattice)[1]
+    mid = midpoint(state.lattice)
+    # all indices with distance m
+    all_indices = CartesianIndices(state.lattice.data)
+    shell = findall(I-> r <= dist(state.lattice, I, mid) < (r+a), all_indices)
+    g = 2
+    for i in shell
+        state[i] = g
+        add_edge!(state.phylogeny, nv(state.phylogeny), 1)
+        push!(state.meta.snps[end], g)
+        g += 1
+    end
+    state, shell
+end
+
+function sphere_with_single_mutant_on_outer_shell(::Type{LT}, L::Int; r, s=1.0) where LT<:Lattices.RealLattice
+    state = sphere(LT, L; g1=0, g2=1)
+    N = length(state.lattice)
+    a = spacings(state.lattice)[1]
+    mid = midpoint(state.lattice)
+    # all indices with distance m
+    all_indices = CartesianIndices(state.lattice.data)
+    shell = findall(I-> r <= dist(state.lattice, I, mid) < (r+a), all_indices)
+    
+    g = 2
+    i = rand(shell)
+    state[i] = g
+    add_edge!(state.phylogeny, nv(state.phylogeny), 1)
+    push!(state.meta.snps[end], g)
+
+    state.meta.fitnesses[2] = s
+    state, ring, i
+end
+
 
 ##--END module--
 end

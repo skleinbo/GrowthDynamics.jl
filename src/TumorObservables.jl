@@ -299,16 +299,16 @@ end
 "Number of direct descendends of a genotype."
 function nchildren(S::TumorConfiguration, g)
     vertex = findfirst(x->x==g, S.meta.genotypes)
-    length(inneighbors(S.Phylogeny, vertex))
+    length(inneighbors(S.phylogeny, vertex))
 end
 
 "Does a genotype have any children?"
 has_children(S, g) = nchildren(S, g) > 0
 
 function phylo_hist(state::TumorConfiguration)
-    nb = neighborhood_dists(state.Phylogeny, 1, nv(state.Phylogeny), dir=:in)
+    nb = neighborhood_dists(state.phylogeny, 1, nv(state.phylogeny), dir=:in)
     nb_table = table(map(nb) do x
-        (get_prop(state.Phylogeny, x[1], :genotype),x[2])
+        (get_prop(state.phylogeny, x[1], :genotype),x[2])
     end, pkey=[1])
     nb_table = renamecol(nb_table, 1=>:g, 2=>:dist)
     # dists = getindex.(nb,2)
@@ -320,7 +320,7 @@ function phylo_hist(state::TumorConfiguration)
 end
 
 function cphylo_hist(state::TumorConfiguration)
-    P = state.Phylogeny
+    P = state.phylogeny
     nb = neighborhood_dists(P, 1, nv(P), dir=:in)
     ps_table = table(population_size(state, 0), pkey=[1])
     nb_table = table(map(nb) do x
@@ -374,8 +374,8 @@ Vector of polymorphisms (segregating sites).
 """
 function polymorphisms(S::TumorConfiguration)
     SNPS = Set(S.meta.snps[1])
-    for v in vertices(S.Phylogeny)
-        if !is_leaf(S.Phylogeny, v)
+    for v in vertices(S.phylogeny)
+        if !is_leaf(S.phylogeny, v)
             continue
         end
         union!(SNPS, S.meta.snps[v])
@@ -447,8 +447,8 @@ end
 Matrix of pairwise differences.
 """
 function pairwise(S::TumorConfiguration)
-    X = fill(0, nv(S.Phylogeny), nv(S.Phylogeny))
-    for i in 1:nv(S.Phylogeny), j in i+1:nv(S.Phylogeny)
+    X = fill(0, nv(S.phylogeny), nv(S.phylogeny))
+    for i in 1:nv(S.phylogeny), j in i+1:nv(S.phylogeny)
         X[i,j] = pairwise(S, i, j)
     end
     Symmetric(X)
