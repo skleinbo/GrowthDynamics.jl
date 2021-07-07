@@ -7,3 +7,6 @@ end
 @testset "Geometry" begin
     include("geometrytests.jl")
 end
+@testset "TumorConfigurations" begin
+    include("tumorconfigurations.jl")
+end
