@@ -1,4 +1,7 @@
 import LinearAlgebra: det
+import StaticArrays: SVector, @SVector
+
+include("../src/Geometry.jl")
 
 @testset "Plane" begin
     @test_throws ArgumentError Plane((1,1,1), (2,2))
