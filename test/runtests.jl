@@ -10,3 +10,6 @@ end
 @testset "TumorConfigurations" begin
     include("tumorconfigurations.jl")
 end
+@testset "LatticeTumorDynamics" begin
+    include("latticetumordynamics.jl")
+end
