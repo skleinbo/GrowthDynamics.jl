@@ -13,7 +13,6 @@ export  AbstractLattice,
         neighbors,
         neighbors!,
         nneighbors,
-        empty_neighbors,
         density,
         density!,
         dist,
@@ -32,10 +31,7 @@ using StaticArrays
 include("Geometry.jl")
 
 # Lattice type structure
-abstract type AbstractLattice end
-abstract type AbstractLattice1D{T} <:AbstractLattice end
-abstract type AbstractLattice2D{T} <:AbstractLattice end
-abstract type AbstractLattice3D{T} <:AbstractLattice end
+abstract type AbstractLattice{T, N} end
 
 
 ## --- NoLattice --- ##
@@ -44,7 +40,7 @@ abstract type AbstractLattice3D{T} <:AbstractLattice end
     NoLattice{T}
 Dummy 'lattice' for systems without spatial structure. Carrying capacity `N`."
 """
-struct NoLattice{T} <: AbstractLattice end
+struct NoLattice{T} <: AbstractLattice{T, 0} end
 
 NoLattice() = NoLattice{Int64}()
 size(L::NoLattice) = ()
@@ -52,7 +48,7 @@ size(L::NoLattice, i...) = 0
 length(L::NoLattice) = 0
 ## -- END NoLattice
 
-const RealLattice{T} = Union{AbstractLattice1D{T}, AbstractLattice2D{T}, AbstractLattice3D{T}}
+const RealLattice{T} = Union{AbstractLattice{T, 1}, AbstractLattice{T, 2}, AbstractLattice{T, 3}}
 const TypedLattice{T} = Union{RealLattice{T}, NoLattice{T}}
 
 const Neighbors{dim} = Vector{CartesianIndex{dim}}
@@ -64,11 +60,10 @@ for method in [:maybeview, :getindex, :setindex!, :firstindex, :lastindex]
     end)
 end
 
-function out_of_bounds(I::CartesianIndex, N)
-    I = Tuple(I)
+@inline function out_of_bounds(I::CartesianIndex{D}, sz) where D
     oob = false
-    for i in 1:length(I)
-        if I[i]<1 || I[i]>N[i]
+    @inbounds for i in 1:D
+        if I[i]<1 || I[i]>sz[i]
             oob = true
             break
         end
@@ -76,7 +71,9 @@ function out_of_bounds(I::CartesianIndex, N)
     oob
 end
 
-nneighbors(L::RealLattice, I) = nneighbors(typeof(L), size(L), I)
+@inline out_of_bounds(I::CartesianIndex, N::Integer) = mapreduce(m->m<1||m>N,|,Tuple(I))
+
+@inline nneighbors(L::RealLattice, I) = nneighbors(typeof(L), size(L), I)
 
 LatticeNeighbors(L::RealLattice) = LatticeNeighbors(dimension(L), coordination(L))
 LatticeNeighbors(dim, coordination) = [ CartesianIndex(zeros(Int64, dim)...) for _ in 1:coordination ]
@@ -146,9 +143,9 @@ end
 
 
 ## --- BEGIN 1D Lattice OBC -- ##
-struct LineLattice{T} <: AbstractLattice1D{T}
+struct LineLattice{T, A<:AbstractArray{T, 1}} <: AbstractLattice{T, 1}
     a::Float64 # Lattice constant
-    data::AbstractArray{T, 1}
+    data::A
 end
 
 coord(L::LineLattice{T}, I) where T = L.a * I[1]
@@ -166,7 +163,7 @@ function neighbors!(nn::Neighbors{1}, ::LineLattice, I)
     end
 end
 
-function nneighbors(::Type{LineLattice{T}}, N, I) where T
+function nneighbors(::Type{LineLattice{T, A}}, N, I) where {T, A}
     nn = 2
     if I[1] == 1 || I[1] == N[1]
         nn -= 1
@@ -181,9 +178,9 @@ end
 
 
 ## --- BEGIN Hexagonal lattice -- ##
-struct HexagonalLattice{T} <: AbstractLattice2D{T}
+struct HexagonalLattice{T, A<:AbstractArray{T, 2}} <: AbstractLattice{T, 2}
     a::Real # Lattice constant
-    data::AbstractArray{T,2}
+    data::A
 end
 
 ## NOTE: This implementation uses offset-coordinates by default
@@ -242,7 +239,7 @@ function neighbors!(nn::Neighbors{2}, L::HexagonalLattice, I)
     end
 end
 
-function nneighbors(::Type{HexagonalLattice{T}}, N, I) where T
+function nneighbors(::Type{HexagonalLattice{T, A}}, N, I) where {T, A}
     if isodd(I[1])
         if (I[1] == 1 || I[1] == N[1]) && 2<=I[2]<N[2]
             return 4
@@ -289,9 +286,9 @@ end
 ## -------------------------- ##
 
 ## -- BEGIN CubicLattice --   ##
-struct CubicLattice{T} <: AbstractLattice3D{T}
+struct CubicLattice{T, A<:AbstractArray{T,3}} <: AbstractLattice{T, 3}
     a::Real # Lattice constant
-    data::AbstractArray{T,3}
+    data::A
 end
 CubicLattice(L::Integer) = CubicLattice(1.0, fill(0, L,L,L))
 
@@ -311,7 +308,7 @@ neighbors!(nn::Neighbors{3}, L::CubicLattice, I) = @inbounds begin
     nn[6] = CartesianIndex(m, n, l+1)
 end
 
-function nneighbors(::Type{CubicLattice{T}}, N, I) where T
+@inline function nneighbors(::Type{CubicLattice{T, A}}, N, I) where {T, A}
     coord = 6
     if I[1]<=1 || I[1]>=N[1]
         coord -= 1
@@ -320,6 +317,19 @@ function nneighbors(::Type{CubicLattice{T}}, N, I) where T
         coord -= 1
     end
     if I[3]<=1 || I[3]>=N[3]
+        coord -= 1
+    end
+    coord
+end
+function nneighbors(::Type{CubicLattice{T, A}}, N::Integer, I) where {T, A}
+    coord = 6
+    if I[1]<=1 || I[1]>=N
+        coord -= 1
+    end
+    if I[2]<=1 || I[2]>=N
+        coord -= 1
+    end
+    if I[3]<=1 || I[3]>=N
         coord -= 1
     end
     coord
@@ -378,10 +388,10 @@ end
 
 ## -- BEGIN HCPLattice -- ##
 
-struct HCPLattice{T} <: AbstractLattice3D{T}
+struct HCPLattice{T, A<:AbstractArray{T,3}} <: AbstractLattice{T, 3}
     a::Float64
     b::Float64
-    data::AbstractArray{T,3}
+    data::A
 end
 
 coord(L::HCPLattice, I::CartesianIndex) = L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2],I[3])
@@ -427,7 +437,7 @@ function neighbors!(nn::Neighbors{3}, ::HCPLattice, I)
     end 
 end
 
-function nneighbors(::Type{HCPLattice{T}}, N, I) where T
+function nneighbors(::Type{HCPLattice{T, A}}, N, I) where {T, A}
     coord_xy = nneighbors(HexagonalLattice, N[1:2], I[1:2])
 
     if 2 <= I[3]
@@ -440,20 +450,18 @@ function nneighbors(::Type{HCPLattice{T}}, N, I) where T
 end
 ## -- END HCPLattice --##
 
-dimension(::NoLattice) = 0
-dimension(::AbstractLattice1D) = 1
-dimension(::AbstractLattice2D) = 2
-dimension(::AbstractLattice3D) = 3
-dimension(::Type{T}) where T<:NoLattice = 0
-dimension(::Type{T}) where T<:AbstractLattice1D = 1
-dimension(::Type{T}) where T<:AbstractLattice2D = 2
-dimension(::Type{T}) where T<:AbstractLattice3D = 3
+dimension(::AbstractLattice{T, N}) where {T,N} = N
+dimension(::Type{LT}) where LT<:AbstractLattice{T, N} where {T,N} = N
+dimension(::Type{LineLattice}) = 1
+dimension(::Type{HexagonalLattice}) = 2
+dimension(::Type{CubicLattice}) = 3
+dimension(::Type{HCPLattice}) = 3
 
 coordination(L::RealLattice) = coordination(typeof(L))
-coordination(::Type{LineLattice{T}}) where T = 2
-coordination(::Type{HexagonalLattice{T}}) where T = 6
-coordination(::Type{CubicLattice{T}}) where T = 6
-coordination(::Type{HCPLattice{T}}) where T = 12
+coordination(::Type{LineLattice{T, A}}) where {T, A} = 2
+coordination(::Type{HexagonalLattice{T, A}}) where {T, A} = 6
+coordination(::Type{CubicLattice{T, A}}) where {T, A} = 6
+coordination(::Type{HCPLattice{T, A}}) where {T, A} = 12
 
 spacings(L::Union{LineLattice, HexagonalLattice, CubicLattice}) = (L.a,)
 

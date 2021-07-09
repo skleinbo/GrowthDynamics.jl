@@ -1,6 +1,6 @@
 module LatticeTumorDynamics
 
-export  prune_me!,
+export prune_me!,
         moran!,
         independent_death_birth!,
         die_or_proliferate!
@@ -18,8 +18,8 @@ import ..TumorConfigurations: TumorConfiguration
 import ..Phylogenies: annotate_snps!, add_snps!, prune_phylogeny!, sample_ztp
 
 
-occupied(m,n,s,N) = @inbounds m<1||m>N||n<1||n>N || s[x,y]!=0
-growth_rate(nw,basebr) = basebr*(1 - 1/6*nw)
+occupied(m,n,s,N) = @inbounds m < 1 || m > N || n < 1 || n > N || s[x,y] != 0
+growth_rate(nw,basebr) = basebr * (1 - 1 / 6 * nw)
 
 
 
@@ -27,7 +27,7 @@ growth_rate(nw,basebr) = basebr*(1 - 1/6*nw)
 ## ~3x speedup
 @inline rand1toN(N) = rand(1:N)
 
-const MutationProfile = Tuple{Symbol, Float64, Int64} # (rate, :poisson/:fixed, genome length)
+const MutationProfile = Tuple{Symbol,Float64,Int64} # (rate, :poisson/:fixed, genome length)
 
 ###--- Start of simulation methods ---###
 
@@ -49,16 +49,16 @@ Run exponential growth on an unstructered population.
 """
 function exponential!(
     state::TumorConfiguration{NoLattice{Int64}};
-    fitness=g->1.0,
-    T=0,
-    mu::Float64=0.0,
-    d::Float64=0.0,
-    baserate=1.0,
-    prune_period=0,
-    prune_on_exit=true,
-    DEBUG=false,
-    callback=(s,t)->begin end,
-    abort=s->false,
+    fitness = g -> 1.0,
+    T = 0,
+    mu::Float64 = 0.0,
+    d::Float64 = 0.0,
+    baserate = 1.0,
+    prune_period = 0,
+    prune_on_exit = true,
+    DEBUG = false,
+    callback = (s, t) -> begin end,
+    abort = s -> false,
     kwargs...)
 
     # P = state.phylogeny
@@ -67,7 +67,7 @@ function exponential!(
     genotypes = state.meta.genotypes
     npops = state.meta.npops
     fitnesses = state.meta.fitnesses
-    rates = fitnesses.*npops
+    rates = fitnesses .* npops
     snps = state.meta.snps
 
     Ntotal = sum(npops)
@@ -86,12 +86,12 @@ function exponential!(
     selected = 0
 
     for step in 0:T
-        if prune_period > 0 && state.t > 0 && (state.t)%prune_period==0
+        if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
             @debug "Pruning..."
             prune_me!(state, mu)
         end
 
-        Base.invokelatest(callback,state,state.t)
+        Base.invokelatest(callback, state, state.t)
         if abort(state)
             break
         end
@@ -99,14 +99,14 @@ function exponential!(
         genotypes = state.meta.genotypes
         npops = state.meta.npops
         fitnesses = state.meta.fitnesses
-        rates = fitnesses.*npops
+        rates = fitnesses .* npops
         snps = state.meta.snps
         wrates = Weights(rates)
         wnpops = Weights(npops)
 
         # @debug "Step $step/$T"
         told = state.treal
-        state.treal += 1.0/(baserate*mean(fitnesses))
+        state.treal += 1.0 / (baserate * mean(fitnesses))
         dt = state.treal - told
 
         # If carrying capacity is reached, we exit.
@@ -114,7 +114,7 @@ function exponential!(
             break
         end
 
-        for (j,genotype) in enumerate(genotypes)|>collect
+        for (j, genotype) in enumerate(genotypes) |> collect
             # @debug "Genotype: $j,$genotype"
             if npops[j] == 0
                 # @debug "g$genotype is empty; skipping"
@@ -122,25 +122,25 @@ function exponential!(
             end
             if haskey(kwargs, :det_growth) && kwargs[:det_growth] == true
                 pgrow = 1.0 # grow with certainty
-                nplus = min(K-Ntotal, ceil(Int, npops[j]*baserate))
+                nplus = min(K - Ntotal, ceil(Int, npops[j] * baserate))
             else
-                pgrow = 1.0 - exp(-fitnesses[j]/mean(fitnesses)) #CDF of exponential with s/<s>
-                nplus = min(rand(Binomial(npops[j], pgrow)), K-Ntotal) # How many proliferate?
+                pgrow = 1.0 - exp(-fitnesses[j] / mean(fitnesses)) # CDF of exponential with s/<s>
+                nplus = min(rand(Binomial(npops[j], pgrow)), K - Ntotal) # How many proliferate?
             end
             # @debug "Pgrow = $pgrow"
-            if nplus<=0
+            if nplus <= 0
                 continue
             end
             nmutants = rand(Binomial(nplus, p_mu)) # How many of those mutate?
             for _ in 1:nmutants
                 new_genotype = genotypes[end] + 1
-                if new_genotype != genotype && fitness(new_genotype)!=-Inf # -Inf indicates no mutation possible
+                if new_genotype != genotype && fitness(new_genotype) != -Inf # -Inf indicates no mutation possible
                     if true || !in(new_genotype, genotypes)
                         push!(state, new_genotype)
                         fitnesses[end] = fitness(new_genotype)
                         push!(rates, 0.0)
                     end
-                    add_edge!(state.phylogeny,nv(state.phylogeny),j)
+                    add_edge!(state.phylogeny, nv(state.phylogeny), j)
                     new = length(genotypes)
                     rates[new] += fitnesses[new]
                     total_rate += fitnesses[new]
@@ -160,7 +160,7 @@ function exponential!(
     nothing
 end
 
-function prune_me!(state,mu)
+function prune_me!(state, mu)
     annotate_snps!(state, mu)
     prune_phylogeny!(state)
     # state.phylogeny = newP
@@ -192,28 +192,27 @@ is reach. After that individuals begin replacing each other.
 """
 function moran!(
     state::TumorConfiguration{NoLattice{Int64}};
-    fitness=(s,gold,gnew)->1.0,
-    T=0,
-    mu::Float64=0.0,
-    mu_type=:poisson,
-    genome_length=10^9,
-    replace_mutations=false,
-    allow_multiple=false,
-    d::Float64=0.0,
-    p_grow=1.0,
-    prune_period=0,
-    prune_on_exit=true,
-    DEBUG=false,
-    callback=(s,t)->begin end,
-    abort=s->false,
+    fitness = (s, gold, gnew) -> 1.0,
+    T = 0,
+    mu::Float64 = 0.0,
+    mu_type = :poisson,
+    genome_length = 10^9,
+    replace_mutations = false,
+    allow_multiple = false,
+    d::Float64 = 0.0,
+    p_grow = 1.0,
+    prune_period = 0,
+    prune_on_exit = true,
+    DEBUG = false,
+    callback = (s, t) -> begin end,
+    abort = s -> false,
+    K::Int64, # carrying capacity
     kwargs...)
-
-    K = state.lattice.N # Carrying capacity
 
     genotypes = state.meta.genotypes
     npops = state.meta.npops
     fitnesses = state.meta.fitnesses
-    rates = fitnesses.*npops
+    rates = fitnesses .* npops
     snps = state.meta.snps
 
     Ntotal = sum(npops)
@@ -228,12 +227,12 @@ function moran!(
     selected = 0
 
     for t in 0:T
-        if prune_period > 0 && state.t > 0 && (state.t)%prune_period==0
+        if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
             @debug "Pruning..."
             prune_me!(state, mu)
         end
 
-        Base.invokelatest(callback,state,state.t)
+        Base.invokelatest(callback, state, state.t)
         if Base.invokelatest(abort, state)
             break
         end
@@ -253,16 +252,16 @@ function moran!(
         if !b_grow
             rates[old] -= fitnesses[old]
             total_rate -= fitnesses[old]
-            npops[old] -=1
-            Ntotal -=1
+            npops[old] -= 1
+            Ntotal -= 1
         end
 
         genotype = genotypes[old]
-        if rand()<p_mu
-            new_genotype = maximum(genotypes)+1
+        if rand() < p_mu
+            new_genotype = maximum(genotypes) + 1
 
             new_snps = copy(snps[old])
-            add_snps!(new_snps, mu, L=genome_length, allow_multiple=allow_multiple, replace=replace_mutations)
+            add_snps!(new_snps, mu, L = genome_length, allow_multiple = allow_multiple, replace = replace_mutations)
 
             if new_genotype != genotype
                 if true || !in(new_genotype, genotypes)
@@ -271,7 +270,7 @@ function moran!(
                     fitnesses[end] = fitness(state, genotype, new_genotype)
                     push!(rates, 0.0)
                 end
-                add_edge!(state.phylogeny,nv(state.phylogeny),old)
+                add_edge!(state.phylogeny, nv(state.phylogeny), old)
                 old = length(genotypes)
             end
         end
@@ -288,10 +287,10 @@ function moran!(
             Ntotal -= 1
             ## If the carrying capacity is reached, the process is
             ## d-limited
-            state.treal += -1.0/(Ntotal*d)*log(1.0-rand())
-            state.treal += -1.0/total_rate*log(1.0-rand())
+            state.treal += -1.0 / (Ntotal * d) * log(1.0 - rand())
+            state.treal += -1.0 / total_rate * log(1.0 - rand())
         else
-            state.treal += -1.0/total_rate*log(1.0-rand())
+            state.treal += -1.0 / total_rate * log(1.0 - rand())
         end
 
 
@@ -328,22 +327,22 @@ Birthrate depends linearily on the number of neighbors.
 """
 function die_or_proliferate!(
     state::TumorConfiguration{<:RealLattice};
-    fitness=(s, gold, gnew)->1.0,
-    T=0,
-    mu::Float64=0.0,
-    mu_type=:poisson,
-    genome_length=10^9,
-    replace_mutations=false,
-    allow_multiple=false,
-    d::Float64=1/100,
-    baserate=1.0,
-    p_grow=1.0,
-    constraint=true,
-    prune_period=0,
-    prune_on_exit=true,
-    DEBUG=false,
-    callback=(s,t)->begin end,
-    abort=s->false,
+    fitness = (s, gold, gnew) -> 1.0,
+    T = 0,
+    mu::Float64 = 0.0,
+    mu_type = :poisson,
+    genome_length = 10^9,
+    replace_mutations = false,
+    allow_multiple = false,
+    d::Float64 = 1 / 100,
+    baserate = 1.0,
+    p_grow = 1.0,
+    constraint = true,
+    prune_period = 0,
+    prune_on_exit = true,
+    DEBUG = false,
+    callback = (s, t) -> begin end,
+    abort = s -> false,
     kwargs...)
 
     genotypes = state.meta.genotypes
@@ -351,24 +350,26 @@ function die_or_proliferate!(
     fitnesses = state.meta.fitnesses
     snps = state.meta.snps
 
-    I = CartesianIndices(state.lattice.data)
-    Lin = LinearIndices(state.lattice.data)
+    lattice = state.lattice
+    I = CartesianIndices(lattice.data)
+    Lin = LinearIndices(lattice.data)
 
-    dim = length(size(state.lattice.data))
-    lin_N = size(state.lattice.data,1)
-    tot_N = length(state.lattice.data)
+    dim = dimension(lattice)
+    sz = size(lattice)
+    lin_N = sz[1]
+    tot_N = length(lattice)
 
-    fitness_lattice = vec([k!=0 ? fitnesses[findfirst(x->x==k, genotypes)] : 0. for k in state.lattice.data])
+    fitness_lattice = vec([k != 0 ? fitnesses[findfirst(x -> x == k, genotypes)] : 0. for k in lattice.data])
     br_lattice = zeros(tot_N)
 
-    nonzeros = count(x->x!=0, state.lattice.data)
+    nonzeros = count(x -> x != 0, lattice.data)
     base_br = 1.0 # - d
 
-    nn = neighbors(state.lattice, CartesianIndex{dim}()) # Initialize neighbors to the appr. type
+    nn = neighbors(lattice, CartesianIndex{dim}()) # Initialize neighbors to the appr. type
     neighbor_indices = collect(1:length(nn))
 
     for k in 1:tot_N
-        br_lattice[k] = (1.0-density!(nn,state.lattice,I[k])) * base_br * fitness_lattice[k]
+        br_lattice[k] = (1.0 - density!(nn, lattice, I[k])) * base_br * fitness_lattice[k]
     end
 
     p_mu = 1.0 - exp(-mu)
@@ -381,20 +382,22 @@ function die_or_proliferate!(
     cumrate = 0.
     validneighbor = false
     action = :none
-    total_rate = mapreduce(+, enumerate(state.lattice.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0. end
+    total_rate::Float64 = mapreduce(+, enumerate(lattice.data)) do x
+         x[2] > 0 ? d + br_lattice[x[1]] : 0.0
+    end
     @debug total_rate
 
     @debug "Prune period is $prune_period"
     @inbounds for t in 0:T
-        #prune_me!()
-        #@debug "t=$(state.t)"
-        if prune_period > 0 && state.t > 0 && (state.t)%prune_period==0
-            #@debug "Pruning..."
+        # prune_me!()
+        # @debug "t=$(state.t)"
+        if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
+            # @debug "Pruning..."
             prune_me!(state, mu)
         end
-        Base.invokelatest(callback,state,state.t)
+        Base.invokelatest(callback, state, state.t)
         if Base.invokelatest(abort, state)
-            break
+        break
         end
 
         # In case we pruned, renew bindings.
@@ -404,13 +407,13 @@ function die_or_proliferate!(
         snps = state.meta.snps
         ## Much cheaper than checking the whole lattice each iteration
         ## Leave the loop if lattice is empty
-        if nonzeros==0
+        if nonzeros == 0
             @info "Lattice empty. Exiting."
-            break
+        break
         end
 
         ## Die, proliferate or be dormant
-        who_and_what = rand()*total_rate
+        who_and_what = rand() * total_rate
 
         cumrate = 0.
         selected = 0
@@ -431,9 +434,9 @@ function die_or_proliferate!(
             end
         end
 
-        #@debug br_lattice
+        # @debug br_lattice
         if action == :die
-            #@debug "Die"
+            # @debug "Die"
             nonzeros -= 1
             total_rate -= br_lattice[selected] + d
 
@@ -441,20 +444,20 @@ function die_or_proliferate!(
             fitness_lattice[selected] = 0.
             br_lattice[selected] = 0.
             ## Update birth-rates
-            neighbors!(nn, I[selected], state.lattice)
+            neighbors!(nn, lattice, I[selected])
             for n in nn
-                if !out_of_bounds(n, lin_N) && state[n]!=0
+                if !out_of_bounds(n, sz) && state[n] != 0
                     j = Lin[n]
                     # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
-                    #@debug "adjusting rates on $j by $(fitness_lattice[j])"
+                    # @debug "adjusting rates on $j by $(fitness_lattice[j])"
                     total_rate -= br_lattice[j]
-                    br_lattice[j] +=  1.0/nneighbors(state.lattice, n, lin_N) * fitness_lattice[j] * base_br
+                    br_lattice[j] +=  1.0 / nneighbors(lattice, n) * fitness_lattice[j] * base_br
                     total_rate += br_lattice[j]
                 end
             end
             ##
         elseif action == :proliferate
-            #@debug "Live"
+            # @debug "Live"
             old = selected
             new = old
             if !constraint
@@ -465,10 +468,10 @@ function die_or_proliferate!(
             else
                 b_grow = rand() < p_grow # Actual growth, or mutation only?
                 if b_grow
-                    neighbors!(nn, I[old], state.lattice)
+                    neighbors!(nn, lattice, I[old])
                     validneighbor = false
                     for j in shuffle!(neighbor_indices)
-                        if !out_of_bounds(nn[j],lin_N) && state[nn[j]]==0
+                        if !out_of_bounds(nn[j], sz) && state[nn[j]] == 0
                             new_cart = nn[j]
                             validneighbor = true
                             break
@@ -483,14 +486,14 @@ function die_or_proliferate!(
 
                 ## Mutation
                 genotype = state[old]
-                g_id = findfirst(x->x==genotype, genotypes)
+                g_id = findfirst(x -> x == genotype, genotypes)
                 if !b_grow
                     npops[g_id] -= 1
                 end
-                if rand()<p_mu
-                    new_genotype = maximum(genotypes)+1
+                if rand() < p_mu
+                    new_genotype = maximum(genotypes) + 1
                     new_snps = copy(snps[g_id])
-                    add_snps!(new_snps, mu, L=genome_length, allow_multiple=allow_multiple, replace=replace_mutations)
+                    add_snps!(new_snps, mu, L = genome_length, allow_multiple = allow_multiple, replace = replace_mutations)
 
                     if new_genotype != genotype
                         if true || !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
@@ -498,7 +501,7 @@ function die_or_proliferate!(
                             snps[end] = new_snps
                             fitnesses[end] = fitness(state, genotype, new_genotype)
                         end
-                        add_edge!(state.phylogeny,nv(state.phylogeny),g_id)
+                        add_edge!(state.phylogeny, nv(state.phylogeny), g_id)
                         genotype = new_genotype
                         g_id = length(genotypes)
                     end
@@ -512,17 +515,17 @@ function die_or_proliferate!(
                 if !b_grow
                     total_rate -= d + br_lattice[new]
                 end
-                br_lattice[new] = (1.0-density!(nn,state.lattice,I[new])) * base_br * fitness_lattice[new]
+                br_lattice[new] = (1.0 - density!(nn, lattice, I[new])) * base_br * fitness_lattice[new]
                 total_rate += d + br_lattice[new]
 
                 if b_grow
-                    neighbors!(nn, I[new], state.lattice)
+                    neighbors!(nn, lattice, I[new])
                     for n in nn
-                        if !out_of_bounds(n, lin_N) && state[n]!=0
+                        if !out_of_bounds(n, sz) && state[n] != 0
                             j = Lin[n]
                             # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
                             total_rate -= br_lattice[j]
-                            br_lattice[j] -=  1.0/nneighbors(state.lattice, n,lin_N) * fitness_lattice[j] * base_br
+                            br_lattice[j] -=  1.0 / nneighbors(lattice, n) * fitness_lattice[j] * base_br
                             total_rate += br_lattice[j]
                         end
                     end
@@ -532,7 +535,7 @@ function die_or_proliferate!(
             @debug "Noone"
         end
         state.t += 1
-        state.treal += -1.0/total_rate*log(1.0-rand())
+        state.treal += -1.0 / total_rate * log(1.0 - rand())
 
         # global flattice = fitness_lattice
         # global brlattice = br_lattice

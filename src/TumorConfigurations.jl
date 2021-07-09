@@ -117,6 +117,9 @@ end
 function getindex(M::MetaData{T}, field::Symbol; g::T) where T
     M[gindex(M, g), field]
 end
+function Base.getindex(M::MetaData{T}, i) where {T}
+    MetaData{T}(M.genotypes[i], M.npops[i], M.fitnesses[i], M.snps[i], M.ages[i], M.misc)
+end
 
 function resize!(M::MetaData, n::Integer)
     if n<=length(M)
@@ -213,7 +216,7 @@ function TumorConfiguration(nolattice::Lattices.NoLattice{T}) where T
     TumorConfiguration(nolattice, phylogeny, metadata, 0, 0.0, Dict{Symbol,Any}())
 end
 
-Base.getindex(T::TumorConfiguration, ind...) = T.lattice[ind...]
+Base.getindex(T::TumorConfiguration, ind) = getindex(T.lattice.data, ind)
 
 Base.setindex!(T::TumorConfiguration, v, ind::CartesianIndex) = setindex!(T, v, Tuple(ind)...)
 function Base.setindex!(T::TumorConfiguration, v, ind::Vararg{Int64})

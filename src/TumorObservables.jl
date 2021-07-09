@@ -255,19 +255,19 @@ function surface2(L::Lattices.RealLattice{<:Integer}, g::Int)
     return (x,ifelse(x>0,y/x,0.))
 end
 
-function boundary(L::Lattices.AbstractLattice1D{<:Any}, g)
+function boundary(L::Lattices.AbstractLattice{T, 1}, g) where T
     s =  count( x->x==g, view(L.data, 1) )
     s += count( x->x==g, view(L.data, L.Na) )
     return s
 end
-function boundary(L::Lattices.AbstractLattice2D{<:Any}, g)
+function boundary(L::Lattices.AbstractLattice{T, 2}, g) where T
     s =  count( x->x==g, view(L.data, :,1) )
     s += count( x->x==g, view(L.data, :,L.Nb) )
     s += count( x->x==g, view(L.data, 1,:) )
     s += count( x->x==g, view(L.data, L.Na,:) )
     return s
 end
-function boundary(L::Lattices.AbstractLattice3D{<:Any}, g)
+function boundary(L::Lattices.AbstractLattice{T, 3}, g) where T
     s =  count( x->x==g, view(L.data, :,:,1) )
     s += count( x->x==g, view(L.data, :,:,L.Nc) )
     s += count( x->x==g, view(L.data, :,1,:) )
