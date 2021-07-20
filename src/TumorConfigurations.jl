@@ -1,6 +1,6 @@
 module TumorConfigurations
 
-import Base: getindex, length, push!, resize!, setindex!, show, zero
+import Base: getindex, length, push!, resize!, setindex!, show, zero, @propagate_inbounds
 import Base.Iterators: product
 import LightGraphs: SimpleDiGraph, add_vertex!, add_vertices!, add_edge!, nv
 import ..Lattices
@@ -81,7 +81,7 @@ end
 
 length(M::MetaData) = length(M.genotypes)
 
-function _pluralize(field::Symbol)
+@inline function _pluralize(field::Symbol)
     if field == :genotype
         return :genotypes
     elseif field == :npop
@@ -99,25 +99,29 @@ end
 
 function gindex(M::MetaData{T}, g::T) where T
     id = findfirst(x -> x == g, M.genotypes)
-    if id === nothing
+    @boundscheck if id === nothing
         throw(ArgumentError("Unknown genotype."))
     end
     id
 end
 
-function Base.getindex(M::MetaData{T}; g) where {T}
+@propagate_inbounds function Base.getindex(M::MetaData{T}; g) where {T}
     M[gindex(M, g)]
 end
-Base.getindex(M::MetaData{T}, i::Integer) where {T} =
+
+@propagate_inbounds Base.getindex(M::MetaData{T}, i::Integer) where {T} =
     (genotype = M.genotypes[i], npop = M.npops[i], fitness = M.fitnesses[i], snps = M.snps[i], age = M.ages[i])
-function getindex(M::MetaData, i::Integer, field::Symbol)
+
+@propagate_inbounds function getindex(M::MetaData, i::Integer, field::Symbol)
     mfield = _pluralize(field)
     getindex(getproperty(M, mfield), i)
 end
-function getindex(M::MetaData{T}, field::Symbol; g::T) where T
+
+@propagate_inbounds function getindex(M::MetaData{T}, field::Symbol; g::T) where T
     M[gindex(M, g), field]
 end
-function Base.getindex(M::MetaData{T}, i) where {T}
+
+@propagate_inbounds function Base.getindex(M::MetaData{T}, i) where {T}
     MetaData{T}(M.genotypes[i], M.npops[i], M.fitnesses[i], M.snps[i], M.ages[i], M.misc)
 end
 
@@ -148,11 +152,9 @@ function Base.push!(M::MetaData{T}, D::MetaDatumFieldTypes{T}) where T
     setindex!(M, D, i)
 end
 
-Base.setindex!(M::MetaData, D::MetaDatum, i::Integer) = setindex!(M, values(D), i)
-function Base.setindex!(M::MetaData{T}, D::MetaDatumFieldTypes{T}, i::Integer) where {T}
-    if i > length(M)
-        throw(BoundsError("Trying to access index $i of $(length(M)) element object."))
-    end
+@propagate_inbounds Base.setindex!(M::MetaData, D::MetaDatum, i::Integer) = setindex!(M, values(D), i)
+
+@propagate_inbounds function Base.setindex!(M::MetaData{T}, D::MetaDatumFieldTypes{T}, i::Integer) where {T}
     M.genotypes[i] = D[1]
     M.npops[i] = D[2]
     M.fitnesses[i] = D[3]
@@ -161,15 +163,16 @@ function Base.setindex!(M::MetaData{T}, D::MetaDatumFieldTypes{T}, i::Integer) w
     D
 end
 
-function setindex!(M::MetaData, v, i::Integer, field::Symbol)
-    if i > length(M)
+@propagate_inbounds function setindex!(M::MetaData, v, i::Integer, field::Symbol)
+    @boundscheck if i > length(M)
         throw(BoundsError("Trying to access index $i of $(length(M)) element object."))
     end 
     mfield = _pluralize(field)
     setindex!(getproperty(M, mfield), v, i)
     return v
 end
-function setindex!(M::MetaData, v, field::Symbol; g)
+
+@propagate_inbounds function setindex!(M::MetaData, v, field::Symbol; g)
     i = gindex(M, g)
     setindex!(M, v, i, field)
 end
@@ -216,10 +219,11 @@ function TumorConfiguration(nolattice::Lattices.NoLattice{T}) where T
     TumorConfiguration(nolattice, phylogeny, metadata, 0, 0.0, Dict{Symbol,Any}())
 end
 
-Base.getindex(T::TumorConfiguration, ind) = getindex(T.lattice.data, ind)
+@propagate_inbounds Base.getindex(T::TumorConfiguration, ind...) = getindex(T.lattice.data, ind...)
 
-Base.setindex!(T::TumorConfiguration, v, ind::CartesianIndex) = setindex!(T, v, Tuple(ind)...)
-function Base.setindex!(T::TumorConfiguration, v, ind::Vararg{Int64})
+@propagate_inbounds Base.setindex!(T::TumorConfiguration, v, ind::CartesianIndex) = setindex!(T, v, Tuple(ind)...)
+
+@propagate_inbounds function Base.setindex!(T::TumorConfiguration, v, ind::Vararg{Int64})
     z = zero(eltype(T.lattice.data))
     L = T.lattice.data
     g_old = L[ind...]
@@ -371,7 +375,7 @@ function spheref(::Type{LT}, L::Int; f = 1 / 10, g1=1, g2=2) where LT<:Lattices.
 end
 
 function sphere_with_diverse_outer_shell(::Type{LT}, L::Int; r) where LT<:Lattices.RealLattice
-    state, _ = sphere(LT, L; g1=0, g2=1)
+    state, _ = spherer(LT, L; r, g1=0, g2=1)
     N = length(state.lattice)
     a = spacings(state.lattice)[1]
     mid = midpoint(state.lattice)
@@ -388,12 +392,17 @@ function sphere_with_diverse_outer_shell(::Type{LT}, L::Int; r) where LT<:Lattic
     state, shell
 end
 
+"""
+    sphere_with_single_mutant_on_outer_shell(::Type{LT}, L::Int; r, s=1.0)
+
+Fill a ball of radius `r` with genotype `1`. Place a single cell of genotype `2` on the outermost sphere at random.
+"""
 function sphere_with_single_mutant_on_outer_shell(::Type{LT}, L::Int; r, s=1.0) where LT<:Lattices.RealLattice
-    state = sphere(LT, L; g1=0, g2=1)
+    state = spherer(LT, L; r, g1=0, g2=1)
     N = length(state.lattice)
     a = spacings(state.lattice)[1]
     mid = midpoint(state.lattice)
-    # all indices with distance m
+    # all indices with distance r
     all_indices = CartesianIndices(state.lattice.data)
     shell = findall(I-> r <= dist(state.lattice, I, mid) < (r+a), all_indices)
     
@@ -404,7 +413,7 @@ function sphere_with_single_mutant_on_outer_shell(::Type{LT}, L::Int; r, s=1.0) 
     push!(state.meta.snps[end], g)
 
     state.meta.fitnesses[2] = s
-    state, ring, i
+    state, shell, i
 end
 
 

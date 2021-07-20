@@ -38,7 +38,7 @@ abstract type AbstractLattice{T, N} end
 ## T is the index type for genotypes.
 """
     NoLattice{T}
-Dummy 'lattice' for systems without spatial structure. Carrying capacity `N`."
+Dummy 'lattice' for systems without spatial structure."
 """
 struct NoLattice{T} <: AbstractLattice{T, 0} end
 
@@ -60,9 +60,11 @@ for method in [:maybeview, :getindex, :setindex!, :firstindex, :lastindex]
     end)
 end
 
-@inline function out_of_bounds(I::CartesianIndex{D}, sz) where D
+Base.@propagate_inbounds out_of_bounds(L::Lattices.RealLattice, I) = out_of_bounds(I, size(L))
+
+Base.@propagate_inbounds function out_of_bounds(I::CartesianIndex{D}, sz) where D
     oob = false
-    @inbounds for i in 1:D
+    for i in 1:D
         if I[i]<1 || I[i]>sz[i]
             oob = true
             break
@@ -99,7 +101,7 @@ length(L::RealLattice) = length(L.data)
 Vector of neighbors of index I. Returns Array{CartesianIndex{dimension(L)}}.
 Does not check for bounds.
 """
-function neighbors(L::RealLattice, I)
+Base.@propagate_inbounds function neighbors(L::RealLattice, I)
     tmp = LatticeNeighbors(L)
     neighbors!(tmp, L, I)
     tmp
@@ -155,15 +157,13 @@ index(L::LineLattice{T}, x) where T = CartesianIndex(round(Int64, x/L.a))
 """
 In-place version of `neighbors`.
 """
-function neighbors!(nn::Neighbors{1}, ::LineLattice, I)
-    @inbounds begin
-        m = I[1]
-        nn[1] = CartesianIndex(m-1)
-        nn[2] = CartesianIndex(m+1)
-    end
+Base.@propagate_inbounds function neighbors!(nn::Neighbors{1}, ::LineLattice, I)
+    m = I[1]
+    nn[1] = CartesianIndex(m-1)
+    nn[2] = CartesianIndex(m+1)
 end
 
-function nneighbors(::Type{LineLattice{T, A}}, N, I) where {T, A}
+Base.@propagate_inbounds function nneighbors(::Type{LineLattice{T, A}}, N, I) where {T, A}
     nn = 2
     if I[1] == 1 || I[1] == N[1]
         nn -= 1
@@ -218,8 +218,7 @@ function index(L::HexagonalLattice, p)
     return CartesianIndex(m,n)
 end
 
-function neighbors!(nn::Neighbors{2}, L::HexagonalLattice, I)
-    @inbounds begin
+Base.@propagate_inbounds function neighbors!(nn::Neighbors{2}, ::HexagonalLattice, I)
     m,n = Tuple(I)
     if isodd(m)
         nn[1] = CartesianIndex(m-1, n-1)
@@ -235,7 +234,6 @@ function neighbors!(nn::Neighbors{2}, L::HexagonalLattice, I)
         nn[2] = CartesianIndex(m-1, n+1)
         nn[3] = CartesianIndex(m, n+1)
         nn[4] = CartesianIndex(m+1, n+1)
-    end
     end
 end
 
@@ -298,7 +296,7 @@ function index(L::CubicLattice, p)
     return  CartesianIndex(round.(Int, p ./ L.a))
 end
 
-neighbors!(nn::Neighbors{3}, L::CubicLattice, I) = @inbounds begin
+Base.@propagate_inbounds function neighbors!(nn::Neighbors{3}, L::CubicLattice, I)
     m,n,l = Tuple(I)
     nn[1] = CartesianIndex(m-1, n, l)
     nn[2] = CartesianIndex(m+1, n, l)
@@ -399,42 +397,40 @@ coord(L::HCPLattice, I::CartesianIndex) = L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2]
 function index(L::HCPLattice)
 end
 
-function neighbors!(nn::Neighbors{3}, ::HCPLattice, I)
-    @inbounds begin
+Base.@propagate_inbounds function neighbors!(nn::Neighbors{3}, ::HCPLattice, I)
     m,n,l = Tuple(I)
-        if isodd(n)
-            nn[1] = CartesianIndex(m-1, n-1, l)
-            nn[2] = CartesianIndex(m-1, n+1, l)
-            nn[5] = CartesianIndex(m-1, n, l)
-            nn[6] = CartesianIndex(m+1, n, l)
+    if isodd(n)
+        nn[1] = CartesianIndex(m-1, n-1, l)
+        nn[2] = CartesianIndex(m-1, n+1, l)
+        nn[5] = CartesianIndex(m-1, n, l)
+        nn[6] = CartesianIndex(m+1, n, l)
 
-            nn[3] = CartesianIndex(m, n+1, l)
-            nn[4] = CartesianIndex(m, n-1, l)
+        nn[3] = CartesianIndex(m, n+1, l)
+        nn[4] = CartesianIndex(m, n-1, l)
 
-            nn[7] = CartesianIndex(m-1, n-1, l+1)
-            nn[8] = CartesianIndex(m, n-1, l+1)
-            nn[9] = CartesianIndex(m, n, l+1)
+        nn[7] = CartesianIndex(m-1, n-1, l+1)
+        nn[8] = CartesianIndex(m, n-1, l+1)
+        nn[9] = CartesianIndex(m, n, l+1)
 
-            nn[10] = CartesianIndex(m-1, n-1, l-1)
-            nn[11] = CartesianIndex(m, n-1, l-1)
-            nn[12] = CartesianIndex(m, n, l-1)
-        else
-            nn[1] = CartesianIndex(m, n-1, l)
-            nn[2] = CartesianIndex(m, n+1, l)
-            nn[5] = CartesianIndex(m-1, n, l)
-            nn[6] = CartesianIndex(m+1, n, l)
-            nn[3] = CartesianIndex(m+1, n+1, l)
-            nn[4] = CartesianIndex(m+1, n-1, l)
+        nn[10] = CartesianIndex(m-1, n-1, l-1)
+        nn[11] = CartesianIndex(m, n-1, l-1)
+        nn[12] = CartesianIndex(m, n, l-1)
+    else
+        nn[1] = CartesianIndex(m, n-1, l)
+        nn[2] = CartesianIndex(m, n+1, l)
+        nn[5] = CartesianIndex(m-1, n, l)
+        nn[6] = CartesianIndex(m+1, n, l)
+        nn[3] = CartesianIndex(m+1, n+1, l)
+        nn[4] = CartesianIndex(m+1, n-1, l)
 
-            nn[7] = CartesianIndex(m, n-1, l+1)
-            nn[8] = CartesianIndex(m+1, n-1, l+1)
-            nn[9] = CartesianIndex(m, n, l+1)
+        nn[7] = CartesianIndex(m, n-1, l+1)
+        nn[8] = CartesianIndex(m+1, n-1, l+1)
+        nn[9] = CartesianIndex(m, n, l+1)
 
-            nn[10] = CartesianIndex(m, n-1, l-1)
-            nn[11] = CartesianIndex(m+1, n-1, l-1)
-            nn[12] = CartesianIndex(m, n, l-1)
-        end
-    end 
+        nn[10] = CartesianIndex(m, n-1, l-1)
+        nn[11] = CartesianIndex(m+1, n-1, l-1)
+        nn[12] = CartesianIndex(m, n, l-1)
+    end
 end
 
 function nneighbors(::Type{HCPLattice{T, A}}, N, I) where {T, A}
