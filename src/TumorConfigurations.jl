@@ -375,7 +375,7 @@ function spheref(::Type{LT}, L::Int; f = 1 / 10, g1=1, g2=2) where LT<:Lattices.
 end
 
 function sphere_with_diverse_outer_shell(::Type{LT}, L::Int; r) where LT<:Lattices.RealLattice
-    state, _ = spherer(LT, L; r, g1=0, g2=1)
+    state = spherer(LT, L; r, g1=0, g2=1)
     N = length(state.lattice)
     a = spacings(state.lattice)[1]
     mid = midpoint(state.lattice)
