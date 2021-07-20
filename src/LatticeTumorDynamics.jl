@@ -13,7 +13,7 @@ import Distributions: Binomial, Exponential, cdf
 import Random: shuffle!
 
 using ..Lattices
-import ..TumorConfigurations: TumorConfiguration
+import ..TumorConfigurations: TumorConfiguration, gindex
 
 import ..Phylogenies: annotate_snps!, add_snps!, prune_phylogeny!, sample_ztp
 
@@ -21,6 +21,7 @@ import ..Phylogenies: annotate_snps!, add_snps!, prune_phylogeny!, sample_ztp
 occupied(m,n,s,N) = @inbounds m < 1 || m > N || n < 1 || n > N || s[x,y] != 0
 growth_rate(nw,basebr) = basebr * (1 - 1 / 6 * nw)
 
+@enum Action none=0 proliferate=1 mutate=2 die=3
 
 
 ## Weird method to generate rand(1:N)
@@ -334,13 +335,12 @@ function die_or_proliferate!(
     genome_length = 10^9,
     replace_mutations = false,
     allow_multiple = false,
-    d::Float64 = 1 / 100,
+    d::Float64 = 0.0,
     baserate = 1.0,
     p_grow = 1.0,
     constraint = true,
     prune_period = 0,
     prune_on_exit = true,
-    DEBUG = false,
     callback = (s, t) -> begin end,
     abort = s -> false,
     kwargs...)
@@ -359,18 +359,21 @@ function die_or_proliferate!(
     lin_N = sz[1]
     tot_N = length(lattice)
 
-    fitness_lattice = vec([k != 0 ? fitnesses[findfirst(x -> x == k, genotypes)] : 0. for k in lattice.data])
-    br_lattice = zeros(tot_N)
+    fitness_lattice = [k != 0 ? state.meta[g=k, :fitness] : 0.0 for k in lattice.data]
+    br_lattice = zeros(Float64, size(lattice.data))
 
     nonzeros = count(x -> x != 0, lattice.data)
     base_br = 1.0 # - d
 
-    nn = neighbors(lattice, CartesianIndex{dim}()) # Initialize neighbors to the appr. type
+    nn = Lattices.LatticeNeighbors(lattice) # Initialize neighbors to the appr. type
     neighbor_indices = collect(1:length(nn))
 
     for k in 1:tot_N
-        br_lattice[k] = (1.0 - density!(nn, lattice, I[k])) * base_br * fitness_lattice[k]
+        br_lattice[k]::Float64 = (1.0 - density!(nn, lattice, I[k])) * base_br * fitness_lattice[k]
     end
+    br_summary = reshape(sum(br_lattice, dims=1:dimension(lattice)-1), :)
+
+    size_cross = prod(size(lattice)[1:end-1]) # number of elements in one slice
 
     p_mu = 1.0 - exp(-mu)
 
@@ -378,10 +381,9 @@ function die_or_proliferate!(
     new_cart = nn[1]
     old = 0
     selected = 0
-    br = 0.
-    cumrate = 0.
+    cumrate::Float64 = 0.0
     validneighbor = false
-    action = :none
+    action::Action = none
     total_rate::Float64 = mapreduce(+, enumerate(lattice.data)) do x
          x[2] > 0 ? d + br_lattice[x[1]] : 0.0
     end
@@ -389,15 +391,15 @@ function die_or_proliferate!(
 
     @debug "Prune period is $prune_period"
     @inbounds for t in 0:T
-        # prune_me!()
-        # @debug "t=$(state.t)"
         if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
             # @debug "Pruning..."
             prune_me!(state, mu)
         end
-        Base.invokelatest(callback, state, state.t)
-        if Base.invokelatest(abort, state)
-        break
+        # Base.invokelatest(callback, state, state.t)
+        # if Base.invokelatest(abort, state)
+        callback(state, state.t)
+        if abort(state)
+            break
         end
 
         # In case we pruned, renew bindings.
@@ -409,36 +411,42 @@ function die_or_proliferate!(
         ## Leave the loop if lattice is empty
         if nonzeros == 0
             @info "Lattice empty. Exiting."
-        break
+            break
+        end
+        if total_rate == 0.0
+            continue
+        end
+        if total_rate < 0.0
+            @warn("Total propensity became negative ($total_rate) after $(state.t) steps.")
+            total_rate = 0.0
+            continue
         end
 
+        ########################
+        ## REACTION SELECTION ##      
+        ########################
+        
         ## Die, proliferate or be dormant
         who_and_what = rand() * total_rate
 
-        cumrate = 0.
+        cumrate = 0.0
         selected = 0
-        action = :none
-        while selected < tot_N
-            selected += 1
-            if state[selected] != 0
-                cumrate += d
-                if cumrate > who_and_what
-                    action = :die
-                    break
-                end
-                cumrate += br_lattice[selected]
-                if cumrate > who_and_what
-                    action = :proliferate
-                    break
+        action = none        
+        
+        ## DEATH ##
+        if who_and_what < d*nonzeros # death
+            action = die
+            _idx = floor(Int, who_and_what/d) # non-zero to die.
+            while selected != _idx
+                while state[selected]==0
+                    selected += 1
                 end
             end
-        end
-
-        # @debug br_lattice
-        if action == :die
-            # @debug "Die"
+            z::Int = (selected-1)÷size_cross + 1 # `slice' coordinate
+            ## DIE ##
             nonzeros -= 1
             total_rate -= br_lattice[selected] + d
+            br_summary[z] -= br_lattice[selected]
 
             state[selected] = 0
             fitness_lattice[selected] = 0.
@@ -448,16 +456,34 @@ function die_or_proliferate!(
             for n in nn
                 if !out_of_bounds(n, sz) && state[n] != 0
                     j = Lin[n]
-                    # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
-                    # @debug "adjusting rates on $j by $(fitness_lattice[j])"
+                    local z::Int = (j-1)÷size_cross + 1
                     total_rate -= br_lattice[j]
+                    br_summary[z] -= br_lattice[j]
                     br_lattice[j] +=  1.0 / nneighbors(lattice, n) * fitness_lattice[j] * base_br
                     total_rate += br_lattice[j]
+                    br_summary[z] += br_lattice[j]
                 end
             end
-            ##
-        elseif action == :proliferate
-            # @debug "Live"
+            ## END DIE ##
+        ## PROLIFERATE ##
+        else # birth/mutation
+            who_and_what -= d*nonzeros
+            action = proliferate
+            i = 1
+            while cumrate + br_summary[i] < who_and_what
+                selected += size_cross
+                cumrate += br_summary[i]
+                i += 1
+            end
+            while cumrate < who_and_what && selected < tot_N
+                selected += 1
+                cumrate += br_lattice[selected]
+            end
+            if selected > tot_N
+                error("selected too large: $selected")
+            end
+            z = selected÷size_cross + 1 # `slice' coordinate
+            ## BIRTH & MUTATE ##
             old = selected
             new = old
             if !constraint
@@ -471,8 +497,9 @@ function die_or_proliferate!(
                     neighbors!(nn, lattice, I[old])
                     validneighbor = false
                     for j in shuffle!(neighbor_indices)
-                        if !out_of_bounds(nn[j], sz) && state[nn[j]] == 0
-                            new_cart = nn[j]
+                        nnj = nn[j]
+                        if !out_of_bounds(nnj, sz) && state[nnj] == 0
+                            new_cart = nnj
                             validneighbor = true
                             break
                         end
@@ -483,17 +510,18 @@ function die_or_proliferate!(
                     nonzeros += 1
                     new = Lin[new_cart]
                 end
+                znew::Int = (new-1)÷size_cross + 1 # `slice' coordinate
 
-                ## Mutation
+                ## Mutation ##
                 genotype = state[old]
-                g_id = findfirst(x -> x == genotype, genotypes)
+                g_id::Int = findfirst(x -> x == genotype, genotypes)
                 if !b_grow
                     npops[g_id] -= 1
                 end
                 if rand() < p_mu
                     new_genotype = maximum(genotypes) + 1
                     new_snps = copy(snps[g_id])
-                    add_snps!(new_snps, mu, L = genome_length, allow_multiple = allow_multiple, replace = replace_mutations)
+                    add_snps!(new_snps, mu, L = genome_length, kind=mu_type, allow_multiple = allow_multiple, replace = replace_mutations)
 
                     if new_genotype != genotype
                         if true || !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
@@ -510,43 +538,47 @@ function die_or_proliferate!(
                 state[new] = genotype
                 fitness_lattice[new] = fitnesses[g_id]
 
-                ##
-
                 if !b_grow
                     total_rate -= d + br_lattice[new]
                 end
+                br_summary[znew] -= br_lattice[new]
                 br_lattice[new] = (1.0 - density!(nn, lattice, I[new])) * base_br * fitness_lattice[new]
+                br_summary[znew] += br_lattice[new]
                 total_rate += d + br_lattice[new]
 
                 if b_grow
-                    neighbors!(nn, lattice, I[new])
                     for n in nn
                         if !out_of_bounds(n, sz) && state[n] != 0
                             j = Lin[n]
-                            # br_lattice[j] = max(0., (1.-density(lattice,j)) * 1. * fitness_lattice[j] )
+                            local z::Int = (j-1)÷size_cross + 1
                             total_rate -= br_lattice[j]
+                            br_summary[z] -= br_lattice[j]
                             br_lattice[j] -=  1.0 / nneighbors(lattice, n) * fitness_lattice[j] * base_br
+                            br_summary[z] += br_lattice[j]
                             total_rate += br_lattice[j]
                         end
                     end
                 end
             end
-        else
-            @debug "Noone"
+            ## END BIRTH & MUTATE ##
         end
-        state.t += 1
-        state.treal += -1.0 / total_rate * log(1.0 - rand())
+        if action === none
+            @debug "No reaction occured."
+        end
+        ##################
+        ## END REACTION ##
+        ##################
 
-        # global flattice = fitness_lattice
-        # global brlattice = br_lattice
-        # global mystate = state
+
+        state.t += 1
+        state.treal += -1.0 / (baserate*total_rate) * log(1.0 - rand())
     end
+
     ## Update the phylogeny
     if prune_on_exit
         prune_me!(state, mu)
     end
     @debug "Done at $(state.t)"
-    # @assert (mapreduce(+, enumerate(state.lattice.data)) do x x[2]>0 ? d + br_lattice[x[1]] : 0.; end) ≈ total_rate
 end
 
 
