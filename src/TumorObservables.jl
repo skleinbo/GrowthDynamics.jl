@@ -3,7 +3,7 @@ module TumorObservables
 import IndexedTables: table, join, rename, transform, select, filter
 import DataFrames: DataFrame
 import LinearAlgebra: Symmetric
-import StatsBase: Weights, sample
+import StatsBase: Weights, sample, countmap
 import Distributions: Multinomial
 
 
@@ -39,7 +39,8 @@ export  allele_fractions,
         npolymorphisms,
         common_snps,
         pairwise,
-        mean_pairwise
+        mean_pairwise,
+        extract_shells
 
 "Dictionary `(SNP, population count)`"
 function allele_size(S::TumorConfiguration, t=0)
@@ -218,6 +219,11 @@ function total_birthrate(S::TumorConfiguration{<:Lattices.NoLattice}; baserate=1
 end
 
 
+#########################
+## Spatial observables ##
+#########################
+
+
 function surface(L::Lattices.RealLattice{<:Integer}, g::Int)
     x = 0
     I = CartesianIndices(L.data)
@@ -292,9 +298,69 @@ function lone_survivor_condition(L)
     return 0 in u && length(u)==2 || length(u)==1
 end
 
-## Pylogenic observables
-##
-##
+## Helper function to merge dictionaries with vectors as values
+## appends new value to old value
+function mymerge(A,B)
+    K = keys(A)
+    C = map(collect(K)) do k
+        if haskey(B, k)
+            return k => vcat(A[k], B[k])
+        else
+            if typeof(A[k]) <: AbstractVector
+                return k => A[k]
+            else
+                return k => [A[k]]
+            end
+        end
+    end |> Dict
+    K = keys(B)
+    try
+        for k in K
+            if !haskey(C, k)
+                if typeof(B[k]) <: AbstractVector
+                    push!(C, k => B[k])
+                else
+                    push!(C, k => [B[k]])
+                end
+
+            end
+        end
+    catch err
+        @show A,B,C
+        throw(err)
+    end
+
+    C
+end
+
+"""
+    extract_shells(A::TumorConfiguration{<:Lattices.CubicLattice}, outer)
+
+Explode tumor configuration into shells [r, r+a) with radii between r in [1..outer].
+Return dictionary with trajectory of every genotype but 0 and 1 (set `deleteone=false` to keep the wildtype).
+"""
+function extract_shells(state::TumorConfiguration{<:Lattices.CubicLattice}, outer; deleteone=true)
+    a = Lattices.spacings(state.lattice)[1]
+    dist_mat = Lattices.euclidean_dist_matrix(state.lattice, Lattices.midpoint(state.lattice))
+    shell_inds = map(1:outer) do r; findall(x-> r-a < x <= r, dist_mat ); end
+
+    mapreduce((a,b)->mymerge(a,b), 1:outer) do r #radius
+        inds = shell_inds[r]
+        shell = state[inds]
+        c = countmap(reshape(shell, :))
+        # @show c
+        delete!(c, 0)
+        if deleteone
+            delete!(c, 1)
+        end
+        c
+    end
+end
+
+
+#############################
+## Pylogenetic observables ##
+#############################
 
 "Number of direct descendends of a genotype."
 function nchildren(S::TumorConfiguration, g)
