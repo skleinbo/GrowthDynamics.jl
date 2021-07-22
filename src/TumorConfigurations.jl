@@ -381,7 +381,7 @@ function sphere_with_diverse_outer_shell(::Type{LT}, L::Int; r) where LT<:Lattic
     mid = midpoint(state.lattice)
     # all indices with distance m
     all_indices = CartesianIndices(state.lattice.data)
-    shell = findall(I-> r <= dist(state.lattice, I, mid) < (r+a), all_indices)
+    shell = findall(I-> r-a <= dist(state.lattice, I, mid) <= r, all_indices)
     g = 2
     for i in shell
         state[i] = g
@@ -404,7 +404,7 @@ function sphere_with_single_mutant_on_outer_shell(::Type{LT}, L::Int; r, s=1.0) 
     mid = midpoint(state.lattice)
     # all indices with distance r
     all_indices = CartesianIndices(state.lattice.data)
-    shell = findall(I-> r <= dist(state.lattice, I, mid) < (r+a), all_indices)
+    shell = findall(I-> r-a < dist(state.lattice, I, mid) <= r, all_indices)
     
     g = 2
     i = rand(shell)
