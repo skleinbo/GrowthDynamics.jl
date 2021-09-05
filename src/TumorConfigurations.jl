@@ -5,7 +5,7 @@ import Base.Iterators: product
 import LightGraphs: SimpleDiGraph, add_vertex!, add_vertices!, add_edge!, nv
 import ..Lattices
 import ..Lattices: coord, dimension, index, radius, realsize, midpoint, dist, spacings
-import GeometryTypes: Point2f0, Point3f0
+import GeometryBasics: Point2f0, Point3f0
 import StatsBase
 
 export TumorConfiguration,

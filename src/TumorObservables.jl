@@ -5,6 +5,7 @@ import DataFrames: DataFrame
 import LinearAlgebra: Symmetric
 import StatsBase: Weights, sample, countmap
 import Distributions: Multinomial
+import GeometryBasics: Pointf0
 
 
 import LightGraphs: SimpleGraph,
@@ -40,7 +41,9 @@ export  allele_fractions,
         common_snps,
         pairwise,
         mean_pairwise,
-        extract_shells
+        extract_shells,
+        positions,
+        explode_into_shells
 
 "Dictionary `(SNP, population count)`"
 function allele_size(S::TumorConfiguration, t=0)
@@ -331,6 +334,32 @@ function mymerge(A,B)
     end
 
     C
+end
+
+######################
+# Positions & Shells #
+######################
+
+"""
+    function positions(state, g)
+
+Returns coordinates of cells of genotype `g`.
+"""
+function positions(state::TumorConfiguration{<:Lattices.RealLattice}, g)
+    idx = findall(x->x==g, state.lattice.data)
+    dim = Lattices.dimension(state.lattice)
+    map(I->Pointf0{dim}(Lattices.coord(state.lattice, I)), idx)
+end
+
+"""
+    function explode_into_shells(v, mid, a; a0=)
+
+Take a vector of cartesian coordinates `v`, center them around the midpoint `mid`, and return
+a dictionary `radius=>coordinates` where `a0<= radius <= max(||v||)` in increments of `a`. 
+"""
+function explode_into_shells(v::Vector{<:Pointf0}, mid, a; a0=0f0)
+    maxr = maximum(x->norm(x-mid), v)
+    Dict(r => filter(x->r-a<norm(x-mid)<=r, v) for r in a0:a:maxr+a) |> sort
 end
 
 """

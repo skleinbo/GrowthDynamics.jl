@@ -4,7 +4,8 @@
 ## `u,v,w` are not independent, but filled in by the constructors.
 
 import Base: ==
-import LinearAlgebra: cross, dot, norm, normalize
+import LinearAlgebra: cross, dot, norm, norm2, normalize
+import GeometryBasics: Pointf0
 
 struct Plane
     p
