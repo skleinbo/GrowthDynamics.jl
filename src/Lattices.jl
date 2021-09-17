@@ -393,13 +393,10 @@ end
     Wigner-Seitz-cell around `p` exactly once.
 """
 function isonshell(L::CubicLattice, p, r, o=coord(L, midpoint(L)))
-    a = spacings(L)
+    a = spacings(L)[1]
 
     p′ = p .- o
-    normp′ = norm(p′)
-    mapreduce(&, eachindex(p)) do i
-        abs( (r/normp′-1)*p′[i] ) ≤ a[i]/2
-    end
+    r-a < norm(p′) ≤ r
 end
 
 function shell(L::CubicLattice, r, o=coord(L, midpoint(L)))

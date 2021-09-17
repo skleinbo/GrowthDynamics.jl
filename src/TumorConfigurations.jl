@@ -437,7 +437,7 @@ function spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealL
 
     for I in eachindex(all_indices)
         p = coord(state.lattice, I)
-        if norm(p-mid)<=r || isonshell(state.lattice, p, r, mid)
+        if norm(p-mid)<=r #|| isonshell(state.lattice, p, r, mid)
             state[I] = g2
         end
     end
