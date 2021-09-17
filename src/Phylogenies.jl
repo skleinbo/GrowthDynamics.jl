@@ -3,12 +3,18 @@ module Phylogenies
 using   Distributions,
         LightGraphs
 
+import ..Lattices: AbstractLattice
 import ..TumorConfigurations
 import ..TumorConfigurations: TumorConfiguration
 
 export  annotate_snps!,
+        annotate_lineage!,
         add_snps!,
         df_traversal,
+        children,
+        parent,
+        nchildren,
+        has_children,
         harm,
         harm2,
         prune_phylogeny!,
@@ -55,10 +61,34 @@ Zero-truncated Poisson sampler with rate `λ`.
   k
 end
 
+"Parent of a genotype."
+function parent(S::TumorConfiguration, g)
+    vertex = gindex(S.meta, g)
+    n = outneighbors(S.phylogeny, vertex)
+    if length(n)!=1
+        return nothing
+    end
+    return (id=n[1], g=S.meta[n[1], :genotype])
+end
+
+"Direct descendends of a genotype."
+function children(S::TumorConfiguration, g)
+    vertex = gindex(S.meta, g)
+    inneighbors(S.phylogeny, vertex)
+end
+
+"Number of direct descendends of a genotype."
+nchildren(S::TumorConfiguration, g) = length(children(S, g))
+
+"Does a genotype have any children?"
+has_children(S, g) = nchildren(S, g) > 0
 
 """
 Annotate a phylogeny with SNPs. Every vertex in the phylogeny inherits the SNPs
 of its parent, plus (on average) `μ` new ones.
+
+annotate\\_snps!(S::TumorConfiguration, μ;
+    [L, allow_multiple=false, kind=:poisson, replace=false])
 
 * `μ`: genome wide rate (Poisson) / count (uniform)
 * `L=10^9`: length of the genome
@@ -104,7 +134,39 @@ function annotate_snps!(S::TumorConfigurations.TumorConfiguration, μ;
     end
 end
 
+"""
+Annotate a _lineage_ with SNPs. Every vertex in the phylogeny inherits the SNPs
+of its parent, plus (on average) `μ` new ones.
 
+Ends prematurely if a vertex with annotation is found on the way from tip to root.
+
+annotate\\_lineage!(S::TumorConfiguration, μ;
+    [L, allow_multiple=false, kind=:poisson, replace=false])
+
+* `v``: vertex
+* `root`: begin of lineage. Defaults to root (1) of tree.
+* `μ`: genome wide rate (Poisson) / count (uniform)
+* `L=10^9`: length of the genome
+* `allow_multiple=false`: Allow for a site to mutate more than once.
+* `kind=:poisson`: `:poisson` or `:fixed`
+* `replace=false`: Replace existing SNPs.
+"""
+function annotate_lineage!(S::TumorConfigurations.TumorConfiguration{<:AbstractLattice{T}}, μ, v::Int, root=1;
+    L=10^9, allow_multiple=false, kind=:poisson, replace=false) where {T}
+    path = []
+    while !isnothing(v) && v!=root && isempty(S.meta[v, :snps])
+        push!(path, v)
+        p = outneighbors(S.phylogeny, v)
+        v = isempty(p) ? nothing : p[1]
+    end
+    reverse!(path)
+    psnps = T[]
+    for v in path
+        S.meta[v, :snps] = add_snps!(psnps, μ; L, allow_multiple, kind, replace)           
+        psnps = copy(S.meta[v, :snps])
+    end
+    return path
+end
 
 """
 Take a vector of SNPS and add new ones, or replace them. Typically called from
@@ -152,7 +214,7 @@ Remove unpopulated genotypes from the graph.
 """
 function prune_phylogeny!(S::TumorConfigurations.TumorConfiguration)
     P = S.phylogeny
-    npops = S.meta.npops
+    npops = @view S.meta.npops[1:S.meta._len]
 
     function bridge!(s, d)
         children = inneighbors(P, d)

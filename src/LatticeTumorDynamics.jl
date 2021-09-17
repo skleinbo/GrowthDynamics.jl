@@ -3,7 +3,8 @@ module LatticeTumorDynamics
 export prune_me!,
         moran!,
         independent_death_birth!,
-        die_or_proliferate!
+        die_or_proliferate!,
+        twonew!
 
 import LightGraphs: nv, vertices, add_vertex!, add_edge!
 
@@ -13,10 +14,11 @@ import Distributions: Binomial, Exponential, cdf
 import Random: shuffle!
 
 using ..Lattices
-import ..TumorConfigurations: TumorConfiguration, gindex
+import ..TumorConfigurations: TumorConfiguration, gindex, _resize!
 
 import ..Phylogenies: annotate_snps!, add_snps!, prune_phylogeny!, sample_ztp
 
+import ..TumorObservables: total_population_size
 
 occupied(m,n,s,N) = @inbounds m < 1 || m > N || n < 1 || n > N || s[x,y] != 0
 growth_rate(nw,basebr) = basebr * (1 - 1 / 6 * nw)
@@ -197,6 +199,7 @@ function moran!(
     T = 0,
     mu::Float64 = 0.0,
     mu_type = :poisson,
+    makesnps = true,
     genome_length = 10^9,
     replace_mutations = false,
     allow_multiple = false,
@@ -207,94 +210,112 @@ function moran!(
     DEBUG = false,
     callback = (s, t) -> begin end,
     abort = s -> false,
-    K::Int64, # carrying capacity
+    K::Int64 = typemax(Int64), # carrying capacity
+    sizehint=0, # initially resize state.meta to `sizehint`. do nothing if 0.
     kwargs...)
 
-    genotypes = state.meta.genotypes
-    npops = state.meta.npops
-    fitnesses = state.meta.fitnesses
-    rates = fitnesses .* npops
-    snps = state.meta.snps
+    # genotypes = state.meta.genotypes
+    # npops = state.meta.npops
+    # fitnesses = state.meta.fitnesses
+    rates = state.meta[:, :fitnesses] .* state.meta[:, :npops]
+    # snps = state.meta.snps
 
-    Ntotal = sum(npops)
-    total_rate = sum(rates)
+    ## sizehint ##
+    if sizehint > length(state.meta.genotypes)
+        _resize!(state.meta, sizehint)
+    end
+
+    Ntotal = total_population_size(state)
+    total_rate = sum(rates) + d*Ntotal
 
     p_mu = 1.0 - exp(-mu)
 
-    wrates = Weights(rates)
-    wnpops = Weights(npops)
+
     new = 0
     old = 0
     selected = 0
 
-    for t in 0:T
+    @inbounds for t in 0:T
         if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
             @debug "Pruning..."
             prune_me!(state, mu)
+            # # Renew bindings
+            # genotypes = state.meta.genotypes
+            # npops = state.meta.npops
+            # fitnesses = state.meta.fitnesses
+            # rates = fitnesses .* npops
+            # snps = state.meta.snps
+            # wrates = Weights(rates)
+            # wnpops = Weights(npops)
         end
 
-        Base.invokelatest(callback, state, state.t)
-        if Base.invokelatest(abort, state)
+        callback(state, state.t)
+        if abort(state)
             break
         end
-        # In case we pruned, renew bindings
-        genotypes = state.meta.genotypes
-        npops = state.meta.npops
-        fitnesses = state.meta.fitnesses
-        rates = fitnesses .* npops
-        snps = state.meta.snps
-        wrates = Weights(rates)
-        wnpops = Weights(npops)
-        ## Pick one to proliferate
-        old = sample(wrates)
-        new = sample(wnpops)
 
-        b_grow = rand() < p_grow
-        if !b_grow
-            rates[old] -= fitnesses[old]
-            total_rate -= fitnesses[old]
-            npops[old] -= 1
+        wrates = Weights(rates, total_rate - d*Ntotal)
+        wnpops = Weights((@view state.meta.npops[begin:state.meta._len]), Ntotal)
+
+        b_die = rand() < d / (total_rate/Ntotal)
+
+        if b_die
+            die = sample(wnpops)
+            rates[die] -= state.meta[die, :fitness]
+            total_rate -= state.meta[die, :fitness] + d
+            state.meta[die, :npop] -= 1
             Ntotal -= 1
-        end
+        else
+            ## Pick one to proliferate
+            old = sample(wrates)
+            # rate = 0.0
+            # target = rand()*total_rate
+            # old = 0
+            # while rate < target
+            #     old += 1
+            #     @inbounds rate += rates[old]
+            # end
 
-        genotype = genotypes[old]
-        if rand() < p_mu
-            new_genotype = maximum(genotypes) + 1
-
-            new_snps = copy(snps[old])
-            add_snps!(new_snps, mu, L = genome_length, allow_multiple = allow_multiple, replace = replace_mutations)
-
-            if new_genotype != genotype
-                if true || !in(new_genotype, genotypes)
+            b_grow = p_grow==1.0 || rand() < p_grow
+            if !b_grow
+                rates[old] -= state.meta[old, :fitness]
+                total_rate -= state.meta[old, :fitness] + d
+                state.meta[old, :npop] -= 1
+                Ntotal -= 1
+            end
+    
+            genotype = state.meta[old, :genotype]
+            if rand() < p_mu
+                new_genotype = state.meta[end, :genotype] + 1
+                if new_genotype != genotype
                     push!(state, new_genotype)
-                    snps[end] = new_snps
-                    fitnesses[end] = fitness(state, genotype, new_genotype)
+                    if makesnps
+                        new_snps = copy(state.meta[old, :snps])
+                        add_snps!(new_snps, mu, L = genome_length, allow_multiple = allow_multiple, replace = replace_mutations)
+                        state.meta[end, :snps] = new_snps
+                    end
+                    state.meta[end, :fitness] = fitness(state, genotype, new_genotype)
                     push!(rates, 0.0)
+                    add_edge!(state.phylogeny, nv(state.phylogeny), old)
+                    old = length(state.meta)
                 end
-                add_edge!(state.phylogeny, nv(state.phylogeny), old)
-                old = length(genotypes)
+            end
+            rates[old] += state.meta[old, :fitness]
+            total_rate += state.meta[old, :fitness] + d
+            state.meta[old, :npop] += 1
+            Ntotal += 1
+
+            # If carrying capacity is reached, one needs to die.
+            if K < Ntotal
+                while (die=sample(wnpops))!=old end
+                rates[die] -= state.meta[die, :fitness]
+                total_rate -= state.meta[die, :fitness] + d
+                state.meta[die, :npop] -= 1
+                Ntotal -= 1
             end
         end
-        rates[old] += fitnesses[old]
-        total_rate += fitnesses[old]
-        npops[old] += 1
-        Ntotal += 1
 
-        # If carrying capacity is reached, one needs to die.
-        if K < Ntotal
-            rates[new] -= fitnesses[new]
-            total_rate += fitnesses[new]
-            npops[new] -= 1
-            Ntotal -= 1
-            ## If the carrying capacity is reached, the process is
-            ## d-limited
-            state.treal += -1.0 / (Ntotal * d) * log(1.0 - rand())
-            state.treal += -1.0 / total_rate * log(1.0 - rand())
-        else
-            state.treal += -1.0 / total_rate * log(1.0 - rand())
-        end
-
-
+        state.treal += -1.0 / total_rate * log(1.0 - rand())
         state.t += 1
     end
     if prune_on_exit
@@ -332,6 +353,7 @@ function die_or_proliferate!(
     T = 0,
     mu::Float64 = 0.0,
     mu_type = :poisson,
+    makesnps=true,
     genome_length = 10^9,
     replace_mutations = false,
     allow_multiple = false,
@@ -343,12 +365,17 @@ function die_or_proliferate!(
     prune_on_exit = true,
     callback = (s, t) -> begin end,
     abort = s -> false,
+    sizehint=0,
     kwargs...)
 
-    genotypes = state.meta.genotypes
-    npops = state.meta.npops
-    fitnesses = state.meta.fitnesses
-    snps = state.meta.snps
+    # genotypes = state.meta.genotypes
+    # npops = state.meta.npops
+    # fitnesses = state.meta.fitnesses
+    # snps = state.meta.snps
+
+    if sizehint > length(state.meta.genotypes)
+        _resize!(state.meta, sizehint)
+    end
 
     lattice = state.lattice
     I = CartesianIndices(lattice.data)
@@ -403,10 +430,10 @@ function die_or_proliferate!(
         end
 
         # In case we pruned, renew bindings.
-        genotypes = state.meta.genotypes
-        npops = state.meta.npops
-        fitnesses = state.meta.fitnesses
-        snps = state.meta.snps
+        # genotypes = state.meta.genotypes
+        # npops = state.meta.npops
+        # fitnesses = state.meta.fitnesses
+        # snps = state.meta.snps
         ## Much cheaper than checking the whole lattice each iteration
         ## Leave the loop if lattice is empty
         if nonzeros == 0
@@ -430,17 +457,15 @@ function die_or_proliferate!(
         who_and_what = rand() * total_rate
 
         cumrate = 0.0
-        selected = 0
+        selected = 1
         action = none        
         
         ## DEATH ##
         if who_and_what < d*nonzeros # death
             action = die
             _idx = floor(Int, who_and_what/d) # non-zero to die.
-            while selected != _idx
-                while state[selected]==0
-                    selected += 1
-                end
+            while state[selected]==0 && selected != _idx && selected < tot_N
+                selected += 1
             end
             z::Int = (selected-1)÷size_cross + 1 # `slice' coordinate
             ## DIE ##
@@ -514,29 +539,30 @@ function die_or_proliferate!(
 
                 ## Mutation ##
                 genotype = state[old]
-                g_id::Int = findfirst(x -> x == genotype, genotypes)
+                g_id::Int = gindex(state.meta, genotype)
                 if !b_grow
-                    npops[g_id] -= 1
+                    state.meta[g_id, :npop] -= 1
                 end
                 if rand() < p_mu
-                    new_genotype = maximum(genotypes) + 1
-                    new_snps = copy(snps[g_id])
-                    add_snps!(new_snps, mu, L = genome_length, kind=mu_type, allow_multiple = allow_multiple, replace = replace_mutations)
+                    ## TODO: custom genotypes
+                    new_genotype = state.meta[end, :genotype] + 1 
 
                     if new_genotype != genotype
-                        if true || !in(new_genotype, keys(phylogeny.metaindex[:genotype]))
-                            push!(state, new_genotype)
-                            snps[end] = new_snps
-                            fitnesses[end] = fitness(state, genotype, new_genotype)
+                        push!(state, new_genotype)
+                        if makesnps
+                            new_snps = copy(state.meta[g_id, :snps])
+                            add_snps!(new_snps, mu, L = genome_length, kind=mu_type, allow_multiple = allow_multiple, replace = replace_mutations)
+                            state.meta[end, :snps] = new_snps
                         end
+                        state.meta[end, :fitness] = fitness(state, genotype, new_genotype)
                         add_edge!(state.phylogeny, nv(state.phylogeny), g_id)
                         genotype = new_genotype
-                        g_id = length(genotypes)
+                        g_id = lastindex(state.meta)
                     end
                 end
-
+                ## END Mutation ##
                 state[new] = genotype
-                fitness_lattice[new] = fitnesses[g_id]
+                fitness_lattice[new] = state.meta[g_id, :fitness]
 
                 if !b_grow
                     total_rate -= d + br_lattice[new]

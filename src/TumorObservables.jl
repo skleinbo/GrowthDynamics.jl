@@ -1,8 +1,8 @@
 module TumorObservables
 
-import IndexedTables: table, join, rename, transform, select, filter
+import IndexedTables: table, join, rename, renamecol, transform, select, filter
 import DataFrames: DataFrame
-import LinearAlgebra: Symmetric
+import LinearAlgebra: norm, Symmetric
 import StatsBase: Weights, sample, countmap
 import Distributions: Multinomial
 import GeometryBasics: Pointf0
@@ -10,16 +10,15 @@ import GeometryBasics: Pointf0
 
 import LightGraphs: SimpleGraph,
                     SimpleDiGraph,
-                    nv, inneighbors, neighborhood, neighborhood_dists,
+                    nv, inneighbors, outneighbors, neighborhood, neighborhood_dists,
                     vertices,
                     enumerate_paths,
                     bellman_ford_shortest_paths
 
 
 import ..Lattices
-import ..LatticeTumorDynamics
 
-import ..TumorConfigurations: TumorConfiguration
+import ..TumorConfigurations: TumorConfiguration, gindex
 
 using ..Phylogenies
 
@@ -32,8 +31,7 @@ export  allele_fractions,
         surface2,
         boundary,
         lone_survivor_condition,
-        nchildren,
-        has_children,
+        living_ancestor,
         cphylo_hist,
         phylo_hist,
         polymorphisms,
@@ -48,7 +46,7 @@ export  allele_fractions,
 "Dictionary `(SNP, population count)`"
 function allele_size(S::TumorConfiguration, t=0)
     X = Dict{eltype(eltype(S.meta.snps)), Int64}()
-    for j in 1:length(S.meta.snps)
+    for j in 1:length(S.meta)
         for snp in S.meta.snps[j]
             if haskey(X, snp)
                 X[snp] += S.meta.npops[j]
@@ -72,11 +70,11 @@ end
 Randomly sample genotypes(!) and calculate frequencies of contained SNPs.
 Return a dictionary `(SNP, freq)`.
 """
-function sampled_allele_fractions(S::TumorConfiguration, t=0, samples=length(S.meta.npops))
-    X = Dict{eltype(eltype(S.meta.snps)), Int64}()
+function sampled_allele_fractions(S::TumorConfiguration, samples=length(S.meta))
+    X = Dict{eltype(eltype(S.meta.snps)), Float64}()
     T = total_population_size(S)
-    pop_samples = sample(1:length(S.meta.genotypes),
-        Weights(S.meta.npops ./ T), samples)
+    pop_samples = sample(1:length(S.meta),
+        Weights(S.meta[:, :npops] ./ T), samples)
     for j in pop_samples
         for snp in S.meta.snps[j]
             if haskey(X, snp)
@@ -171,7 +169,7 @@ end
 
 "Total population size. Duh."
 function total_population_size(S::TumorConfiguration)
-    sum(S.meta.npops)
+    sum(@view S.meta.npops[begin:S.meta._len])
 end
 
 function population_size(L::Lattices.RealLattice{T}, t) where T<:Integer
@@ -191,12 +189,12 @@ end
 
 "Dictionary (genotype, population size)"
 function population_size(S::TumorConfiguration, t)
-    zip(S.meta.genotypes, S.meta.npops) |> collect
+    zip(S.meta[:, :genotypes], S.meta[:, :npops]) |> collect
 end
 
 function genotype_dict(S::TumorConfiguration)
     G = Dict{eltype(S.meta.genotypes), Int64}()
-    for (k,g) in enumerate(S.meta.genotypes)
+    for (k,g) in enumerate(S.meta[:genotypes])
         push!(G, g=>k)
     end
     return G
@@ -204,7 +202,7 @@ end
 
 function total_birthrate(S::TumorConfiguration{<:Lattices.RealLattice}; baserate=1.0)
     L = S.lattice
-    F = S.meta.fitnesses
+    F = S.meta[:fitnesses]
     G = genotype_dict(S)
     nn = Lattices.empty_neighbors(L)
     total_rate = 0.0
@@ -218,7 +216,7 @@ function total_birthrate(S::TumorConfiguration{<:Lattices.RealLattice}; baserate
 end
 
 function total_birthrate(S::TumorConfiguration{<:Lattices.NoLattice}; baserate=1.0)
-    sum(S.meta.npops .* S.meta.fitnesses)
+    sum(S.meta[:npops] .* S.meta[:fitnesses])
 end
 
 
@@ -233,7 +231,7 @@ function surface(L::Lattices.RealLattice{<:Integer}, g::Int)
     for j in eachindex(L.data)
         if L.data[j]==g
             for n in Lattices.neighbors(L, I[j])
-                if !LatticeTumorDynamics.out_of_bounds(I[n], L.Na) && L.data[n]!=g && L.data[n]!=0
+                if !Lattices.out_of_bounds(I[n], L.Na) && L.data[n]!=g && L.data[n]!=0
                     x+=1
                     break
                 end
@@ -251,7 +249,7 @@ function surface2(L::Lattices.RealLattice{<:Integer}, g::Int)
         if L.data[j]==g
             is_surface = false
             for n in Lattices.neighbors(L, I[j])
-                if !LatticeTumorDynamics.out_of_bounds(n, L.Na) && L.data[n]!=g && L.data[n]!=0
+                if !Lattices.out_of_bounds(n, L.Na) && L.data[n]!=g && L.data[n]!=0
                     is_surface = true
                     y += 1
                 end
@@ -391,19 +389,19 @@ end
 ## Pylogenetic observables ##
 #############################
 
-"Number of direct descendends of a genotype."
-function nchildren(S::TumorConfiguration, g)
-    vertex = findfirst(x->x==g, S.meta.genotypes)
-    length(inneighbors(S.phylogeny, vertex))
+"First living ancestor."
+function living_ancestor(S::TumorConfiguration, g)
+    ancestor = parent(S, g)
+    while ancestor !== nothing && S.meta[ancestor.id, :npop] == 0
+        ancestor = parent(S, ancestor.g)
+    end
+    return ancestor
 end
-
-"Does a genotype have any children?"
-has_children(S, g) = nchildren(S, g) > 0
 
 function phylo_hist(state::TumorConfiguration)
     nb = neighborhood_dists(state.phylogeny, 1, nv(state.phylogeny), dir=:in)
     nb_table = table(map(nb) do x
-        (get_prop(state.phylogeny, x[1], :genotype),x[2])
+        (state.meta[x[1], :genotype],x[2])
     end, pkey=[1])
     nb_table = renamecol(nb_table, 1=>:g, 2=>:dist)
     # dists = getindex.(nb,2)
@@ -419,7 +417,7 @@ function cphylo_hist(state::TumorConfiguration)
     nb = neighborhood_dists(P, 1, nv(P), dir=:in)
     ps_table = table(population_size(state, 0), pkey=[1])
     nb_table = table(map(nb) do x
-        (state.meta.genotypes[x[1]], x[1], x[2])
+        (state.meta[x[1], :genotype], x[1], x[2])
     end, pkey=[1])
     nb_table = rename(nb_table, 1=>:g, 2=>:nv, 3=>:dist)
     ps_table = rename(ps_table, 1=>:g, 2=>:npop)
@@ -447,7 +445,7 @@ is_leaf(P::SimpleDiGraph, v) = length(inneighbors(P, v)) == 0
 
 "List polymorphisms that are common to all genotypes."
 function common_snps(S::TumorConfiguration)
-    populated = findall(v->v > 0, S.meta.npops)
+    populated = findall(v->v > 0, S.meta[:npops])
     if isempty(populated)
         return Int64[]
     else
@@ -468,12 +466,12 @@ end
 Vector of polymorphisms (segregating sites).
 """
 function polymorphisms(S::TumorConfiguration)
-    SNPS = Set(S.meta.snps[1])
+    SNPS = Set(S.meta[1, :snps])
     for v in vertices(S.phylogeny)
         if !is_leaf(S.phylogeny, v)
             continue
         end
-        union!(SNPS, S.meta.snps[v])
+        union!(SNPS, S.meta[v, :snps])
     end
     SNPS
 end
@@ -531,20 +529,32 @@ end
 Number of pairwise genomic differences between genotype indices `i,j`.
 """
 function pairwise(S::TumorConfiguration, i, j)
-    si = S.meta.snps[i]
-    sj = S.meta.snps[j]
+    si = S.meta[g=i, :snps]
+    sj = S.meta[g=j, :snps]
     nsymdiff(si,sj)
 end
 
 """
     pairwise(S::TumorConfiguration)
 
-Matrix of pairwise differences.
+Matrix of pairwise differences.  
+`skipdead`: Do not include extinct genotypes.
 """
-function pairwise(S::TumorConfiguration)
-    X = fill(0, nv(S.phylogeny), nv(S.phylogeny))
-    for i in 1:nv(S.phylogeny), j in i+1:nv(S.phylogeny)
-        X[i,j] = pairwise(S, i, j)
+function pairwise(S::TumorConfiguration;
+     genotypes=S.meta[:genotypes], 
+     skipdead=false
+)
+    if skipdead
+        itr = [ g for g in genotypes if S.meta[g=g, :npop]>0 ]
+    else
+        itr = genotypes
+    end
+    X = Matrix{Int64}(undef, length(itr), length(itr))
+    for (i,g1) in enumerate(itr), (j, g2) in enumerate(itr)
+        if j<i
+            continue
+        end
+        X[i,j] =  pairwise(S, g1, g2)
     end
     Symmetric(X)
 end
