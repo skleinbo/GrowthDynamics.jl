@@ -297,7 +297,7 @@ CubicLattice(L::Integer) = CubicLattice(1.0, fill(0, L,L,L))
 coord(L::CubicLattice{T}, I) where T<:Any = L.a .* (Point3f0(Tuple(I)) .- 1)
 
 function index(L::CubicLattice, p)
-    return  CartesianIndex(Tuple(round.(Int, p ./ L.a)))
+    return  CartesianIndex(Tuple(round.(Int, p ./ L.a) .+ 1))
 end
 
 Base.@propagate_inbounds function neighbors!(nn::Neighbors{3}, L::CubicLattice, I)
