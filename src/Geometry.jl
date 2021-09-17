@@ -133,16 +133,3 @@ function radius(v, dim::Int)
         throw(ArgumentError("dim >=4 not supported"))
     end
 end
-
-###################
-## Intersections ##
-###################
-
-function conicsection(L::CubicLattice, coords, Ω, o=Lattices.coord(L, Lattices.midpoint(L)))
-    cts = SphericalFromCartesian()
-    filter(coords) do p
-      q = cts(p-o)
-      ## !! WARNING: ϕ is the azimuth angle in CoordinateTransformations !!
-      q.ϕ+π/2 ≤ acos(1-Ω/(2π))
-    end
-end

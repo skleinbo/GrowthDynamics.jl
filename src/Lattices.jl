@@ -503,6 +503,18 @@ function density!(nn::Neighbors, L::RealLattice, I)
     return nz/tot
 end
 
+###################
+## Intersections ##
+###################
+
+function conicsection(L::CubicLattice, coords, Ω, o=Lattices.coord(L, Lattices.midpoint(L)))
+    cts = SphericalFromCartesian()
+    filter(coords) do p
+      q = cts(p-o)
+      ## !! WARNING: ϕ is the azimuth angle in CoordinateTransformations !!
+      q.ϕ+π/2 ≤ acos(1-Ω/(2π))
+    end
+end
 
 ## END MODULE ##
 end
