@@ -4,10 +4,11 @@ authors = ["Stephan Kleinbölting <skleinbo@thp.uni-koeln.de"]
 version = "0.6.0-pre"
 
 [deps]
+CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
-GeometryTypes = "4d00f742-c7ba-57c2-abde-4428a4b178cb"
+GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
 IndexedTables = "6deec6e2-d858-57c5-ab9b-e6ca5bd20e43"
 IterTools = "c8e1da08-722c-5040-9ed9-7db0dc04731e"
 LightGraphs = "093fc24a-ae57-5d10-9952-331d41423f4d"

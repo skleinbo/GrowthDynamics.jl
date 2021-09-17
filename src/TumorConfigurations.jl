@@ -323,18 +323,20 @@ function spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealL
     if g2==g1 || r==0.0
         return state
     end
-    N = length(state.lattice)
-    a = spacings(state.lattice)[1]
 
-    mid = midpoint(state.lattice)
+    mid = coord(state.lattice, midpoint(state.lattice))
 
     all_indices = CartesianIndices(state.lattice.data)
-    dist_matrix = map(x->dist(state.lattice, x, mid)<=r, all_indices)
+    # dist_matrix = map(x->dist(state.lattice, x, mid)<=r, all_indices)
 
-    for I in eachindex(dist_matrix)
-        if dist_matrix[I]
+    for I in eachindex(all_indices)
+        p = coord(state.lattice, I)
+        if norm(p-mid)<=r || isonshell(state.lattice, p, r, mid)
             state[I] = g2
         end
+    end
+    if g1!=0 && g2!=0
+        add_edge!(state.phylogeny, g2, g1)
     end
     state
 end
@@ -376,17 +378,13 @@ end
 
 function sphere_with_diverse_outer_shell(::Type{LT}, L::Int; r) where LT<:Lattices.RealLattice
     state = spherer(LT, L; r, g1=0, g2=1)
-    N = length(state.lattice)
-    a = spacings(state.lattice)[1]
-    mid = midpoint(state.lattice)
     # all indices with distance m
-    all_indices = CartesianIndices(state.lattice.data)
-    shell = findall(I-> r-a <= dist(state.lattice, I, mid) <= r, all_indices)
+    shell = Lattices.shell(state.lattice, r)
     g = 2
     for i in shell
         state[i] = g
         add_edge!(state.phylogeny, nv(state.phylogeny), 1)
-        push!(state.meta.snps[end], g)
+        push!(state.meta[end, :snps], g)
         g += 1
     end
     state, shell
@@ -399,20 +397,17 @@ Fill a ball of radius `r` with genotype `1`. Place a single cell of genotype `2`
 """
 function sphere_with_single_mutant_on_outer_shell(::Type{LT}, L::Int; r, s=1.0) where LT<:Lattices.RealLattice
     state = spherer(LT, L; r, g1=0, g2=1)
-    N = length(state.lattice)
-    a = spacings(state.lattice)[1]
-    mid = midpoint(state.lattice)
     # all indices with distance r
     all_indices = CartesianIndices(state.lattice.data)
-    shell = findall(I-> r-a < dist(state.lattice, I, mid) <= r, all_indices)
+    shell = Lattices.shell(state.lattice, r)
     
     g = 2
     i = rand(shell)
     state[i] = g
     add_edge!(state.phylogeny, nv(state.phylogeny), 1)
-    push!(state.meta.snps[end], g)
+    push!(state.meta[end, :snps], g)
 
-    state.meta.fitnesses[2] = s
+    state.meta[2, :fitness] = s
     state, shell, i
 end
 

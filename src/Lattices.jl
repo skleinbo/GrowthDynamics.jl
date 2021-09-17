@@ -10,6 +10,7 @@ export  AbstractLattice,
         out_of_bounds,
         coord,
         index,
+        isonshell,
         neighbors,
         neighbors!,
         nneighbors,
@@ -19,6 +20,7 @@ export  AbstractLattice,
         dimension,
         coordination,
         midpoint,
+        shell,
         spacings,
         volume,
         radius
@@ -27,6 +29,8 @@ import Base: size, length, getindex, setindex!, maybeview, firstindex, lastindex
 import Base.Iterators: product
 import LinearAlgebra: norm, normalize, cross, det, dot
 using StaticArrays
+using GeometryBasics
+import CoordinateTransformations: SphericalFromCartesian
 
 include("Geometry.jl")
 
@@ -152,7 +156,7 @@ end
 
 coord(L::LineLattice{T}, I) where T = L.a * I[1]
 
-index(L::LineLattice{T}, x) where T = CartesianIndex(round(Int64, x/L.a))
+index(L::LineLattice{T}, x) where T = CartesianIndex(Tuple(round(Int, x/L.a)))
 
 """
 In-place version of `neighbors`.
@@ -170,14 +174,13 @@ Base.@propagate_inbounds function nneighbors(::Type{LineLattice{T, A}}, N, I) wh
     end
     return nn
 end
-
-
 ## --- END 1D Lattice OBC -- ##
 
 
-
-
+####################################
 ## --- BEGIN Hexagonal lattice -- ##
+####################################
+
 struct HexagonalLattice{T, A<:AbstractArray{T, 2}} <: AbstractLattice{T, 2}
     a::Real # Lattice constant
     data::A
@@ -205,11 +208,11 @@ function coord(L::HexagonalLattice, I)
     if iseven(I[2])
         x += 1/2*L.a
     end
-    x,y
+    Point2f0(x,y)
 end
 
 function index(L::HexagonalLattice, p)
-    x,y, = p
+    x,y, = Tuple(p)
     n = round(Int, y*√3/L.a) + 1 
     if iseven(n)
         x -= 1/2*L.a
@@ -278,22 +281,23 @@ function manhatten_dist(L::HexagonalLattice, I, J)
 
     return ( abs(I[1]-J[1]) + abs(I[2]-J[2]) + abs(I[3]-J[3]) ) / 2
 end
-
 ## -- END HexagonalLattice -- ##
 
-## -------------------------- ##
 
+################################
 ## -- BEGIN CubicLattice --   ##
+################################
+
 struct CubicLattice{T, A<:AbstractArray{T,3}} <: AbstractLattice{T, 3}
     a::Real # Lattice constant
     data::A
 end
 CubicLattice(L::Integer) = CubicLattice(1.0, fill(0, L,L,L))
 
-coord(L::CubicLattice{T}, I) where T<:Any = L.a .* (Tuple(I) .- 1)
+coord(L::CubicLattice{T}, I) where T<:Any = L.a .* (Point3f0(Tuple(I)) .- 1)
 
 function index(L::CubicLattice, p)
-    return  CartesianIndex(round.(Int, p ./ L.a))
+    return  CartesianIndex(Tuple(round.(Int, p ./ L.a)))
 end
 
 Base.@propagate_inbounds function neighbors!(nn::Neighbors{3}, L::CubicLattice, I)
@@ -381,6 +385,27 @@ function isonplane(L::Lattices.CubicLattice, P::Plane)
     BitArray( euclidean_dist(SVector{3}(q), P)<L.a for q in pts )
 end
 
+"""
+    isonshell(L::CubicLattice, p, r, o)
+
+    Determine whether a lattice point `p` is on a shell with radius `r` wrt.
+    the origin `o`, i.e. does the half-line from `o` to `p` intersect the 
+    Wigner-Seitz-cell around `p` exactly once.
+"""
+function isonshell(L::CubicLattice, p, r, o=coord(L, midpoint(L)))
+    a = spacings(L)
+
+    p′ = p .- o
+    normp′ = norm(p′)
+    mapreduce(&, eachindex(p)) do i
+        abs( (r/normp′-1)*p′[i] ) ≤ a[i]/2
+    end
+end
+
+function shell(L::CubicLattice, r, o=coord(L, midpoint(L)))
+    [ I for I in CartesianIndices(L.data) if isonshell(L, coord(L, I), r, o) ]
+end
+
 ## -- END CubicLattice -- ##
 
 
@@ -392,7 +417,7 @@ struct HCPLattice{T, A<:AbstractArray{T,3}} <: AbstractLattice{T, 3}
     data::A
 end
 
-coord(L::HCPLattice, I::CartesianIndex) = L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2],I[3])
+coord(L::HCPLattice, I::CartesianIndex) = Point3f0(L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2],I[3]))
 ## TODO: index(::HCPLattice)
 function index(L::HCPLattice)
 end
@@ -459,7 +484,9 @@ coordination(::Type{HexagonalLattice{T, A}}) where {T, A} = 6
 coordination(::Type{CubicLattice{T, A}}) where {T, A} = 6
 coordination(::Type{HCPLattice{T, A}}) where {T, A} = 12
 
-spacings(L::Union{LineLattice, HexagonalLattice, CubicLattice}) = (L.a,)
+spacings(L::LineLattice) = (L.a,)
+spacings(L::HexagonalLattice) = (L.a, L.a)
+spacings(L::CubicLattice) = (L.a, L.a, L.a)
 
 """
     density(L::RealLattice, I)
