@@ -182,7 +182,7 @@ end
 ####################################
 
 struct HexagonalLattice{T, A<:AbstractArray{T, 2}} <: AbstractLattice{T, 2}
-    a::Real # Lattice constant
+    a::Float64 # Lattice constant
     data::A
 end
 
@@ -289,12 +289,12 @@ end
 ################################
 
 struct CubicLattice{T, A<:AbstractArray{T,3}} <: AbstractLattice{T, 3}
-    a::Real # Lattice constant
+    a::Float64 # Lattice constant
     data::A
 end
 CubicLattice(L::Integer) = CubicLattice(1.0, fill(0, L,L,L))
 
-coord(L::CubicLattice{T}, I) where T<:Any = L.a .* (Point3f0(Tuple(I)) .- 1)
+coord(L::CubicLattice, I)::Point3f0 = L.a .* (Point3f0(Tuple(I)) .- 1)
 
 function index(L::CubicLattice, p)
     return  CartesianIndex(Tuple(round.(Int, p ./ L.a) .+ 1))
@@ -392,7 +392,7 @@ end
     the origin `o`, i.e. does the half-line from `o` to `p` intersect the 
     Wigner-Seitz-cell around `p` exactly once.
 """
-function isonshell(L::CubicLattice, p, r, o=coord(L, midpoint(L)))
+@inline function isonshell(L::CubicLattice, p, r, o=coord(L, midpoint(L)))
     a = spacings(L)[1]
 
     p′ = p .- o
@@ -400,7 +400,21 @@ function isonshell(L::CubicLattice, p, r, o=coord(L, midpoint(L)))
 end
 
 function shell(L::CubicLattice, r, o=coord(L, midpoint(L)))
-    [ I for I in CartesianIndices(L.data) if isonshell(L, coord(L, I), r, o) ]
+    expected_surface = round(Int, Lattices.volume(r, 3)  -Lattices.volume(r-1, 3))
+    out = Vector{CartesianIndex{3}}(undef, expected_surface)
+    j = 0
+    for I in CartesianIndices(L.data)
+        if isonshell(L, coord(L, I), r, o)
+            j += 1
+            if j<=expected_surface
+                @inbounds out[j] = I
+            else
+                push!(out, I)
+            end
+        end
+    end
+    resize!(out, j)
+    out
 end
 
 ## -- END CubicLattice -- ##

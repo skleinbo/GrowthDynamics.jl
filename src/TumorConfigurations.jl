@@ -430,15 +430,23 @@ function spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealL
         return state
     end
 
-    mid = coord(state.lattice, midpoint(state.lattice))
+    lat = state.lattice
+    midx = midpoint(lat)
+    mid = coord(lat, midx)
 
-    all_indices = CartesianIndices(state.lattice.data)
-    # dist_matrix = map(x->dist(state.lattice, x, mid)<=r, all_indices)
+    ## To prevent checking the distance for every lattice site,
+    ## preselect the range of indices such that 
+    ## -r-1 <= (x-o)_i <= r+1
 
-    for I in eachindex(all_indices)
-        p = coord(state.lattice, I)
-        if norm(p-mid)<=r #|| isonshell(state.lattice, p, r, mid)
-            state[I] = g2
+    idx_ranges = map(1:length(mid)) do j
+        UnitRange(index(lat, mid.-r.-1)[j] , index(lat, mid.+r.+1)[j])
+    end
+
+    for I in product(idx_ranges...)
+        I = CartesianIndex(I)
+        p = coord(lat, I)
+        if norm(p-mid)<=r #|| isonshell(lat, p, r, mid)
+            @inbounds state[I] = g2
         end
     end
     if g1!=0 && g2!=0
