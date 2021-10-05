@@ -30,6 +30,7 @@ import Base.Iterators: product
 import LinearAlgebra: norm, normalize, cross, det, dot
 using StaticArrays
 using GeometryBasics
+using Rotations
 import CoordinateTransformations: SphericalFromCartesian
 
 include("Geometry.jl")
@@ -393,10 +394,10 @@ end
     Wigner-Seitz-cell around `p` exactly once.
 """
 @inline function isonshell(L::CubicLattice, p, r, o=coord(L, midpoint(L)))
-    a = spacings(L)[1]
+    a = spacings(L)[1] / 2
 
     p′ = p .- o
-    r-a < norm(p′) ≤ r
+    r-a-eps(r) < norm(p′) ≤ r+a+eps(r)
 end
 
 function shell(L::CubicLattice, r, o=coord(L, midpoint(L)))
@@ -518,12 +519,31 @@ end
 ## Intersections ##
 ###################
 
-function conicsection(L::CubicLattice, coords, Ω, o=Lattices.coord(L, Lattices.midpoint(L)))
+function conicsection(L::CubicLattice, coords, Ω; axis=Point3f0(0,0,-1), o=Lattices.coord(L, Lattices.midpoint(L)))
+    ## !! WARNING: ϕ is the azimuth angle in CoordinateTransformations !!
     cts = SphericalFromCartesian()
+    # rotY = @SMatrix [ cos(ϕoff) 0 -sin(ϕoff);
+    #                  0         1    0;
+    #                  sin(ϕoff) 0  cos(ϕoff) ]
+
+    # rotZ = @SMatrix [ cos(θoff) -sin(θoff) 0;
+    #                   sin(θoff)  cos(θoff) 0;
+    #                   0         0          1]
+    z = Point3f0(0,0,1)
+    _axis = cross(axis, z)
+    # @show _axis
+    if iszero(_axis)
+        _axis = Point3f0(0,1,0)
+    else
+        _axis = normalize(_axis)
+    end
+    angle_zdir = acos(dot(z, axis)/norm(axis))
+    # @show angle_zdir
+    rot = AngleAxis(angle_zdir, _axis...)
+    # @show rot
     filter(coords) do p
-      q = cts(p-o)
-      ## !! WARNING: ϕ is the azimuth angle in CoordinateTransformations !!
-      q.ϕ+π/2 ≤ acos(1-Ω/(2π))
+      q = cts(rot*(p-o))
+      q.ϕ+π/2 - eps(Float32) ≤ acos(1-Ω/(2π))
     end
 end
 

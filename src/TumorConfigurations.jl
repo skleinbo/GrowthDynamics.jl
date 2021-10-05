@@ -431,6 +431,7 @@ function spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealL
     end
 
     lat = state.lattice
+    a = spacings(lat)[1] / 2
     midx = midpoint(lat)
     mid = coord(lat, midx)
 
@@ -439,13 +440,13 @@ function spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealL
     ## -r-1 <= (x-o)_i <= r+1
 
     idx_ranges = map(1:length(mid)) do j
-        UnitRange(index(lat, mid.-r.-1)[j] , index(lat, mid.+r.+1)[j])
+        UnitRange(index(lat, mid.-r.-4a)[j] , index(lat, mid.+r.+4a)[j])
     end
 
     for I in product(idx_ranges...)
         I = CartesianIndex(I)
         p = coord(lat, I)
-        if norm(p-mid)<=r #|| isonshell(lat, p, r, mid)
+        if norm(p-mid)<=r+a #|| isonshell(lat, p, r, mid)
             @inbounds state[I] = g2
         end
     end
