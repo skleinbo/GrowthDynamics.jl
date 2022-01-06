@@ -204,9 +204,9 @@ function offset_to_cube(::Lattices.HexagonalLattice, I)
 end
 
 function coord(L::HexagonalLattice, I)
-    x = (I[1]-1)*L.a
-    y = (I[2]-1)*L.a/√3
-    if iseven(I[2])
+    x = (I[2]-1)*L.a
+    y = (I[1]-1)*L.a*sin(pi/3)
+    if iseven(I[1])
         x += 1/2*L.a
     end
     Point2f0(x,y)
@@ -247,7 +247,7 @@ function nneighbors(::Type{HexagonalLattice{T, A}}, N, I) where {T, A}
             return 4
         elseif I[2] == 1 && 2<=I[1]<N[1]
             return 3
-        elseif I[2] == N && 2<=I[1]<N[1]
+        elseif I[2] == N[2] && 2<=I[1]<N[1]
             return 5
         elseif (I[1] == N[1] && I[2] == N[2]) || (I[1] == 1 && I[2] == 1)
             return 2
@@ -257,15 +257,15 @@ function nneighbors(::Type{HexagonalLattice{T, A}}, N, I) where {T, A}
             return 6
         end
     else
-        if (I[1] == 1 || I[1] == N) && 2<=I[2]<N
+        if (I[1] == 1 || I[1] == N[1]) && 2<=I[2]<N[2]
             return 4
-        elseif I[2] == 1 && 2<=I[1]<N
+        elseif I[2] == 1 && 2<=I[1]<N[1]
             return 5
-        elseif I[2] == N && 2<=I[1]<N
+        elseif I[2] == N[2] && 2<=I[1]<N[1]
             return 3
-        elseif I[1] == N  && I[2] == N
+        elseif I[1] == N[1]  && I[2] == N[2]
             return 2
-        elseif I[1] == N && I[2] == 1
+        elseif I[1] == N[1] && I[2] == 1
             return 3
         else
             return 6
@@ -390,14 +390,14 @@ end
     isonshell(L::CubicLattice, p, r, o)
 
     Determine whether a lattice point `p` is on a shell with radius `r` wrt.
-    the origin `o`, i.e. does the half-line from `o` to `p` intersect the 
-    Wigner-Seitz-cell around `p` exactly once.
+    the origin `o`. A shell is defined as the collection of points with |(p-o)|≤r+a/2
+    where `a` is the lattice spacing.
 """
 @inline function isonshell(L::CubicLattice, p, r, o=coord(L, midpoint(L)))
     a = spacings(L)[1] / 2
 
     p′ = p .- o
-    r-a-eps(r) < norm(p′) ≤ r+a+eps(r)
+    r-a < norm(p′) ≤ r+a
 end
 
 function shell(L::CubicLattice, r, o=coord(L, midpoint(L)))

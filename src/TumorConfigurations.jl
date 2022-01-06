@@ -3,7 +3,7 @@ module TumorConfigurations
 import Base: axes, copyto!, copy, getindex, length, push!, resize!, setindex!, similar, show, zero, @propagate_inbounds
 import Base.Iterators: product
 import LinearAlgebra: norm
-import LightGraphs: SimpleDiGraph, add_vertex!, add_vertices!, add_edge!, nv
+import Graphs: SimpleDiGraph, add_vertex!, add_vertices!, add_edge!, nv
 import ..Lattices
 import ..Lattices: coord, dimension, index, isonshell, radius, realsize, midpoint, dist, spacings
 import GeometryBasics: Point2f0, Point3f0
@@ -360,6 +360,11 @@ function Base.push!(S::TumorConfiguration{<:Lattices.TypedLattice{T}}, M::MetaDa
     add_vertex!(S.phylogeny)
     lastindex(S.meta)
 end
+
+### similar et al. ###
+# // TODO: Generalize
+Base.similar(C::TumorConfiguration) = TumorConfiguration(typeof(C.lattice)(C.lattice.a, zero(C.lattice.data)))
+
 
 #####################################################################
 ## -- Convenience constructors for different initial geometries -- ##

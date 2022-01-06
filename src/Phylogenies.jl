@@ -1,7 +1,7 @@
 module Phylogenies
 
 using   Distributions,
-        LightGraphs
+        Graphs
 
 import ..Lattices: AbstractLattice
 import ..TumorConfigurations

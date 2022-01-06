@@ -18,7 +18,7 @@ include("AnalysisMethods.jl")
 include("FitnessIterators.jl")
 include("PrettyPrinting.jl")
 
-using LightGraphs
+using Graphs
 using FileIO
 import Printf: @sprintf
 using DataFrames

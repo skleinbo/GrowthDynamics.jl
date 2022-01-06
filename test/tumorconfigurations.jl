@@ -1,5 +1,5 @@
 using .Lattices
-import LightGraphs: nv
+import Graphs: nv
 import .TumorConfigurations: MetaDatum
 using .TumorConfigurations
 

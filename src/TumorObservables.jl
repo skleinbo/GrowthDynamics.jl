@@ -1,6 +1,6 @@
 module TumorObservables
 
-import IndexedTables: table, join, rename, renamecol, transform, select, filter
+# import IndexedTables: table, join, rename, renamecol, transform, select, filter
 import DataFrames: DataFrame
 import LinearAlgebra: norm, Symmetric
 import StatsBase: Weights, sample, countmap
@@ -8,7 +8,7 @@ import Distributions: Multinomial
 import GeometryBasics: Pointf0
 
 
-import LightGraphs: SimpleGraph,
+import Graphs: SimpleGraph,
                     SimpleDiGraph,
                     nv, inneighbors, outneighbors, neighborhood, neighborhood_dists,
                     vertices,
@@ -32,8 +32,8 @@ export  allele_fractions,
         boundary,
         lone_survivor_condition,
         living_ancestor,
-        cphylo_hist,
-        phylo_hist,
+        # cphylo_hist,
+        # phylo_hist,
         polymorphisms,
         npolymorphisms,
         common_snps,
@@ -346,7 +346,7 @@ Returns coordinates of cells of genotype `g`.
 function positions(state::TumorConfiguration{<:Lattices.RealLattice}, g)
     idx = findall(x->x==g, state.lattice.data)
     dim = Lattices.dimension(state.lattice)
-    map(I->Pointf0{dim}(Lattices.coord(state.lattice, I)), idx)
+    convert(Vector{Pointf0{dim}}, map(I->Pointf0{dim}(Lattices.coord(state.lattice, I)), idx))
 end
 
 """
@@ -355,9 +355,9 @@ end
 Take a vector of cartesian coordinates `v`, center them around the midpoint `mid`, and return
 a dictionary `radius=>coordinates` where `a0<= radius <= max(||v||)` in increments of `a`. 
 """
-function explode_into_shells(v::Vector{<:Pointf0}, mid, a; a0=0f0)
-    maxr = maximum(x->norm(x-mid), v)
-    Dict(r => filter(x->r-a<norm(x-mid)<=r, v) for r in a0:a:maxr+a) |> sort
+function explode_into_shells(v::Vector{T}, o, a; a0=0f0) where T<:Pointf0
+    maxr = maximum(x->norm(x-o), v)
+    Dict(r => filter(x->r-a/2<norm(x-o)<=r+a/2, v) for r in a0:a:maxr+a)
 end
 
 """
@@ -398,7 +398,8 @@ function living_ancestor(S::TumorConfiguration, g)
     return ancestor
 end
 
-function phylo_hist(state::TumorConfiguration)
+## TODO: Replace IndexedTables with DataFrames
+#= function phylo_hist(state::TumorConfiguration)
     nb = neighborhood_dists(state.phylogeny, 1, nv(state.phylogeny), dir=:in)
     nb_table = table(map(nb) do x
         (state.meta[x[1], :genotype],x[2])
@@ -438,7 +439,7 @@ function cphylo_hist(state::TumorConfiguration)
     end
 
     return transform(joined, :cnpop => cnpops)
-end
+end =#
 
 
 is_leaf(P::SimpleDiGraph, v) = length(inneighbors(P, v)) == 0

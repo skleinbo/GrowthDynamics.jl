@@ -6,7 +6,7 @@ export prune_me!,
         die_or_proliferate!,
         twonew!
 
-import LightGraphs: nv, vertices, add_vertex!, add_edge!
+import Graphs: nv, vertices, add_vertex!, add_edge!
 
 using StatsBase: Weights,sample,mean
 import Distributions: Binomial, Exponential, cdf
@@ -494,15 +494,16 @@ function die_or_proliferate!(
         else # birth/mutation
             who_and_what -= d*nonzeros
             action = proliferate
-            i = 1
-            while cumrate + br_summary[i] < who_and_what
+            slice = 1
+            while cumrate + br_summary[slice] < who_and_what
+                cumrate += br_summary[slice]
                 selected += size_cross
-                cumrate += br_summary[i]
-                i += 1
+                slice += 1
             end
-            while cumrate < who_and_what && selected < tot_N
-                selected += 1
+            # @debug state.meta.misc["preselected"] = selected
+            while cumrate+br_lattice[selected] < who_and_what && selected < tot_N
                 cumrate += br_lattice[selected]
+                selected += 1
             end
             if selected > tot_N
                 error("selected too large: $selected")
@@ -539,6 +540,16 @@ function die_or_proliferate!(
 
                 ## Mutation ##
                 genotype = state[old]
+                # @debug if genotype==0
+                #     state.meta.misc["brlattice"] = br_lattice
+                #     state.meta.misc["brslices"] = br_summary
+                #     state.meta.misc["old"] = old
+                #     state.meta.misc["totalrate"] = total_rate
+                #     state.meta.misc["who_and_what"] = who_and_what
+                #     state.meta.misc["z"] = z
+                #     state.meta.misc["slice"] = slice
+                #     state.meta.misc["cumrate"] = cumrate
+                # end
                 g_id::Int = gindex(state.meta, genotype)
                 if !b_grow
                     state.meta[g_id, :npop] -= 1
