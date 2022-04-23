@@ -226,6 +226,92 @@ end
 ## Spatial observables ##
 #########################
 
+function kpzroughness(S::AbstractDict, lattice; kwargs...)
+    sort(Dict( t=>kpzroughness(S[t], lattice; kwargs...) for t in keys(S) ))
+end
+function kpzroughness(v::AbstractVector, lattice, args...;kwargs...)
+    v = interface(v, lattice)
+    if length(v) < 2
+        return 0f0
+    end
+    o = coord(lattice, midpoint(lattice))
+    r = round(norm(v[1].-o))
+    com = SphericalFromCartesian()(mean(v.-o))
+    com = Spherical(r, com.θ, com.ϕ)
+    geodists = map(v) do p
+        r*acos( min(1.0, dot(p,o)/(norm(p)*norm(o))) )
+    end
+    # @show geodists
+    var(geodists)
+end 
+
+function roughness(S::AbstractDict, args...; kwargs...)
+    # (2*sqrt(pi)*sqrt(length(S[t])))
+    sort(Dict( t=>linterface(S[t], args...; kwargs...)/sqrt(length(S[t])>0 ? length(S[t]) : 1 ) for t in keys(S) ))
+end
+function roughness(v::AbstractVector, args...;kwargs...)
+    linterface(v, args...;kwargs...)
+    # length(v)==1 ? zero(eltype(v[1])) : std( norm.(v .- com))
+end
+function linterface(S::AbstractDict, args...;kwargs...)
+    sort(Dict( t=>linterface(S[t], args...; kwargs...) for t in keys(S) ))
+end
+function linterface(v::AbstractVector, args...; kwargs...)
+    length(interface(v, args...; kwargs...))
+end
+
+function interface(v::AbstractVector, lattice::CubicLattice; o=coord(lattice, midpoint(lattice)))
+    if length(v)==0
+        return Point3f0[]
+    end
+    r = round(norm(v[1].-o)) #round(norm(com-o))
+    iv = map(x->Lattices.index(lattice, x), v) # indices
+
+    # "(not)-on-shell neighbors"
+    nbs = LatticeNeighbors(lattice)
+    inter = Iterators.filter(iv) do i
+        neighbors!(nbs, lattice, i)
+        nosneighbors = filter(j->!isonshell(lattice, coord(lattice, j), r, o), nbs)
+        !isempty(nosneighbors) &&
+             any(x->any(y->!(y in iv), Iterators.filter(z->isonshell(lattice, coord(lattice, z), r, o), neighbors(lattice, x))), nosneighbors)
+    end |> x->map(i->coord(lattice, i), x)
+    return inter
+end
+function interface(v::AbstractVector, embedding::TumorConfiguration; o=coord(embedding.lattice, midpoint(embedding.lattice)),  g=2)
+    # embed v into lattice
+    # state = uniform(lat, L; g=0)
+
+    lattice = embedding.lattice
+    r = round(norm(v[1].-o)) #round(norm(com-o))
+    for i in Lattices.shell(lattice, r, o)
+        embedding[i] = 1
+    end
+    for p in v
+        embedding[Lattices.index(lattice, p)] = g
+    end
+
+    # @show r
+
+    # @assert any(isonshell.(Ref(lattice), v, r))
+    iv = map(x->Lattices.index(lattice, x), v) # indices
+
+    # "on-shell neighbors"
+    inter = filter(iv) do i
+        osneighbors = filter!(i->embedding[i]==0, neighbors(lattice, i)) # filter!(j->isonshell(lattice, coord(lattice, j), r, o), neighbors(lattice, i))
+        # @assert !isempty(osneighbors)
+        !isempty(osneighbors) && any(x->any(y->embedding[y]==1, neighbors(lattice, x)), osneighbors)
+    end |> x->map(i->coord(lattice, i), x)
+    return inter
+    # map(inter) do p
+    #     i = index(lattice, p)
+    #     nn = neighbors(lattice, i)
+    #     map(nn) do n
+    #         (n, isonshell(lattice, coord(lattice, n), r, o), state[n])
+    #     end
+    # end
+end
+
+
 
 function surface(L::Lattices.RealLattice{<:Integer}, g::Int)
     x = 0
