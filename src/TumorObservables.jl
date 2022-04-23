@@ -2,11 +2,12 @@ module TumorObservables
 
 # import IndexedTables: table, join, rename, renamecol, transform, select, filter
 import DataFrames: DataFrame
-import LinearAlgebra: norm, Symmetric
-import StatsBase: Weights, sample, countmap
+import LinearAlgebra: norm, Symmetric, dot
+import StatsBase: Weights, sample, countmap, mean, var
 import Distributions: Multinomial
 import GeometryBasics: Pointf0
 
+import CoordinateTransformations: Spherical, SphericalFromCartesian
 
 import Graphs: SimpleGraph,
                     SimpleDiGraph,
@@ -17,6 +18,7 @@ import Graphs: SimpleGraph,
 
 
 import ..Lattices
+import ..Lattices: CubicLattice, midpoint, coord, index, neighbors, neighbors!, isonshell, LatticeNeighbors
 
 import ..TumorConfigurations: TumorConfiguration, gindex
 
@@ -315,13 +317,17 @@ function mymerge(A,B)
         end
     end |> Dict
     K = keys(B)
+    len = findmax(map(length,values(C)))[1] - 1
+    len = max(len,0)
+    # @info C
+    # @info len
     try
         for k in K
             if !haskey(C, k)
                 if typeof(B[k]) <: AbstractVector
-                    push!(C, k => B[k])
+                    push!(C, k => [zeros(eltype(B[k]), len); B[k]])
                 else
-                    push!(C, k => [B[k]])
+                    push!(C, k => [zeros(eltype(B[k]), len); B[k]])
                 end
 
             end
@@ -364,19 +370,21 @@ end
     extract_shells(A::TumorConfiguration{<:Lattices.CubicLattice}, outer)
 
 Explode tumor configuration into shells [r, r+a) with radii between r in [1..outer].
-Return dictionary with trajectory of every genotype but 0 and 1 (set `deleteone=false` to keep the wildtype).
+Return dictionary with trajectory of every genotype but 0 and 1 (set `deleteone/zero=false` to keep the wildtype/count empty sites).
 """
-function extract_shells(state::TumorConfiguration{<:Lattices.CubicLattice}, outer; deleteone=true)
+function extract_shells(state::TumorConfiguration{<:Lattices.CubicLattice}, outer; deleteone=true, deletezero=true)
     a = Lattices.spacings(state.lattice)[1]
     dist_mat = Lattices.euclidean_dist_matrix(state.lattice, Lattices.midpoint(state.lattice))
-    shell_inds = map(1:outer) do r; findall(x-> r-a < x <= r, dist_mat ); end
+    shell_inds = map(1:outer) do r; findall(x-> r-a/2 < x <= r+a/2, dist_mat ); end
 
     mapreduce((a,b)->mymerge(a,b), 1:outer) do r #radius
         inds = shell_inds[r]
         shell = state[inds]
         c = countmap(reshape(shell, :))
         # @show c
-        delete!(c, 0)
+        if deletezero
+            delete!(c, 0)
+        end
         if deleteone
             delete!(c, 1)
         end
