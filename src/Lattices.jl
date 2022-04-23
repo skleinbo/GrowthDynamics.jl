@@ -56,7 +56,7 @@ length(L::NoLattice) = 0
 const RealLattice{T} = Union{AbstractLattice{T, 1}, AbstractLattice{T, 2}, AbstractLattice{T, 3}}
 const TypedLattice{T} = Union{RealLattice{T}, NoLattice{T}}
 
-const Neighbors{dim} = Vector{CartesianIndex{dim}}
+const Neighbors{z, dim} = MVector{z, CartesianIndex{dim}}
 
 ## Indexing
 for method in [:maybeview, :getindex, :setindex!, :firstindex, :lastindex]
@@ -83,7 +83,7 @@ end
 @inline nneighbors(L::RealLattice, I) = nneighbors(typeof(L), size(L), I)
 
 LatticeNeighbors(L::RealLattice) = LatticeNeighbors(dimension(L), coordination(L))
-LatticeNeighbors(dim, coordination) = [ CartesianIndex(zeros(Int64, dim)...) for _ in 1:coordination ]
+LatticeNeighbors(dim, coordination) = Neighbors{coordination, dim}(undef)
 
 
 ## size & lengths dispatch on the data field of any RealLattice ##
@@ -301,7 +301,7 @@ function index(L::CubicLattice, p)
     return  CartesianIndex(Tuple(round.(Int, p ./ L.a) .+ 1))
 end
 
-Base.@propagate_inbounds function neighbors!(nn::Neighbors{3}, L::CubicLattice, I)
+Base.@propagate_inbounds function neighbors!(nn::Neighbors{6,3}, L::CubicLattice, I)
     m,n,l = Tuple(I)
     nn[1] = CartesianIndex(m-1, n, l)
     nn[2] = CartesianIndex(m+1, n, l)
@@ -493,7 +493,8 @@ dimension(::Type{HCPLattice}) = 3
 coordination(L::RealLattice) = coordination(typeof(L))
 coordination(::Type{LineLattice{T, A}}) where {T, A} = 2
 coordination(::Type{HexagonalLattice{T, A}}) where {T, A} = 6
-coordination(::Type{CubicLattice{T, A}}) where {T, A} = 6
+# coordination(::Type{CubicLattice{T, A}}) where {T, A} = 6
+coordination(::Type{T}) where T<:CubicLattice = 6
 coordination(::Type{HCPLattice{T, A}}) where {T, A} = 12
 
 spacings(L::LineLattice) = (L.a,)
