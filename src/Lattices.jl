@@ -222,7 +222,7 @@ function index(L::HexagonalLattice, p)
     return CartesianIndex(m,n)
 end
 
-Base.@propagate_inbounds function neighbors!(nn::Neighbors{2}, ::HexagonalLattice, I)
+Base.@propagate_inbounds function neighbors!(nn::Neighbors{6,2}, ::HexagonalLattice, I)
     m,n = Tuple(I)
     if isodd(m)
         nn[1] = CartesianIndex(m-1, n-1)
