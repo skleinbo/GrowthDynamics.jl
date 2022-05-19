@@ -432,6 +432,12 @@ function half_space(::Type{LT}, L::Int; f=1/2, g1=0, g2=1) where LT<:Lattices.Re
     return state, fill_to
 end
 
+"""
+    spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
+
+Fill lattice of type `LT` (e.g `CubicLattice`) with genotype `g1` and put a (L2-)sphere
+of approx. radius `r` with genotype `g2` at the center.
+"""
 function spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
     if r < 0
         throw(ArgumentError("radius must be positive."))
@@ -466,7 +472,13 @@ function spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealL
     return state, idx_shell
 end
 
-function spheref(::Type{LT}, L::Int; f = 1 / 10, g1=1, g2=2) where LT<:Lattices.RealLattice
+"""
+    spheref(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
+
+Fill lattice of type `LT` (e.g `CubicLattice`) with genotype `g1` and put a (L2-)sphere with genotype `g2`
+that occupies approx. a fraction `f` of the lattice at the center.
+"""
+function spheref(::Type{LT}, L::Int; f = 1 / 10, g1=0, g2=1) where LT<:Lattices.RealLattice
     if !(0.0<=f<=1)
         throw(ArgumentError("f must be between 0 and 1."))
     end

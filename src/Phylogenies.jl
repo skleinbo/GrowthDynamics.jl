@@ -25,30 +25,40 @@ harm(N::Integer) = sum(1/i for i in 1:N)
 harm2(N::Integer) = sum(1/i^2 for i in 1:N)
 
 """
-Traverse a phylogenetic tree depth first, starting at vertex 1, which is
-assumed to be the root.
+    df_traversal(G::SimpleDiGraph; root=1)
 
-Returns a vector of vertices.
+Traverse a phylogenetic tree depth first, starting at vertex `root` which defaults to `1`.
+
+Return a vector of vertices.
 """
-function df_traversal(G::SimpleDiGraph)
+function df_traversal(G::SimpleDiGraph; root=1)
     V = Int[]
-    df_traversal!(V, G)
+    df_traversal!(V, G; root)
     V
 end
 
-df_traversal!(V::Vector{Int}, G::SimpleDiGraph) = df_traversal!(V, G, 1)
+df_traversal!(V::Vector{Int}, G::SimpleDiGraph) = df_traversal!(V, G; root=1)
 
-function df_traversal!(V::Vector{Int}, G::SimpleDiGraph, r::Int)
-    for v in inneighbors(G, r)
+"""
+See also [`df_traversal`](@ref)
+"""
+function df_traversal!(V::Vector{Int}, G::SimpleDiGraph; root::Int)
+    for v in inneighbors(G, root)
         push!(V, v)
-        df_traversal!(V, G, v)
+        df_traversal!(V, G; root=v)
     end
 end
 
 """
-Zero-truncated Poisson sampler with rate `λ`.
+    sample_ztp(lambda)
+
+Return one sample of a zero-truncated Poisson distribution with rate `λ`.
+
+See [](https://en.wikipedia.org/wiki/Zero-truncated_Poisson_distribution)
+
+__Note:__ Should be in `Distributions.jl`.
 """
-@inline function sample_ztp(lambda::Float64)
+function sample_ztp(lambda::Float64)
   k = 1
   t = exp(-lambda) / (1 - exp(-lambda)) * lambda
   s = t
@@ -61,7 +71,11 @@ Zero-truncated Poisson sampler with rate `λ`.
   k
 end
 
-"Parent of a genotype."
+"""
+    parent(S::TumorConfiguration, g)
+
+Parent of a genotype `g`.  Return tuple `(id=index, g=genotype)`.
+"""
 function parent(S::TumorConfiguration, g)
     vertex = gindex(S.meta, g)
     n = outneighbors(S.phylogeny, vertex)
@@ -71,7 +85,14 @@ function parent(S::TumorConfiguration, g)
     return (id=n[1], g=S.meta[n[1], :genotype])
 end
 
-"Direct descendends of a genotype."
+"""
+    children(S::TumorConfiguration, g)
+
+Vector of direct descendants of a genotype.
+
+!!! info
+    Returns indices.
+"""
 function children(S::TumorConfiguration, g)
     vertex = gindex(S.meta, g)
     inneighbors(S.phylogeny, vertex)
@@ -84,19 +105,20 @@ nchildren(S::TumorConfiguration, g) = length(children(S, g))
 has_children(S, g) = nchildren(S, g) > 0
 
 """
-Annotate a phylogeny with SNPs. Every vertex in the phylogeny inherits the SNPs
-of its parent, plus (on average) `μ` new ones.
+    annotate\\_snps!(S::TumorConfiguration, μ;
+        [L, allow_multiple=false, kind=:poisson, replace=false])
 
-annotate\\_snps!(S::TumorConfiguration, μ;
-    [L, allow_multiple=false, kind=:poisson, replace=false])
+Annotate a phylogeny with SNPs. Every vertex in the phylogeny inherits the SNPs
+of its parent, plus (on average) `μ` new ones.  
+Skips any vertex that is already annotated, unless `replace` is set to `true`.
 
 * `μ`: genome wide rate (Poisson) / count (uniform)
 * `L=10^9`: length of the genome
 * `allow_multiple=false`: Allow for a site to mutate more than once.
-* `kind=:poisson`: `:poisson` or `:fixed`
-* `replace=false`: Replace existing SNPs.
+* `kind=:poisson` Either `:poisson` or `:fixed`
+* `replace=false` Replace existing SNPs.
 """
-function annotate_snps!(S::TumorConfigurations.TumorConfiguration, μ;
+function annotate_snps!(S::TumorConfiguration, μ;
     L=10^9, allow_multiple=false, kind=:poisson, replace=false)
 
     P = S.phylogeny
@@ -135,13 +157,14 @@ function annotate_snps!(S::TumorConfigurations.TumorConfiguration, μ;
 end
 
 """
-Annotate a _lineage_ with SNPs. Every vertex in the phylogeny inherits the SNPs
-of its parent, plus (on average) `μ` new ones.
+    annotate\\_lineage!(S::TumorConfiguration, μ, v;
+        [L, allow_multiple=false, kind=:poisson, replace=false])
+
+Annotate a _lineage_ (path from `v` to `root`) with SNPs. Every vertex in the phylogeny inherits the SNPs
+of its parent, plus (on average) `μ` new ones.  
+Skips any vertex that is already annotated, unless `replace` is set to `true`.
 
 Ends prematurely if a vertex with annotation is found on the way from tip to root.
-
-annotate\\_lineage!(S::TumorConfiguration, μ;
-    [L, allow_multiple=false, kind=:poisson, replace=false])
 
 * `v``: vertex
 * `root`: begin of lineage. Defaults to root (1) of tree.
@@ -175,8 +198,8 @@ dynamics during a mutation event.
 * `μ`: genome wide rate (Poisson) / count (uniform)
 * `L=10^9`: length of the genome
 * `allow_multiple=false`: Allow for a site to mutate more than once.
-* `kind=:poisson`: `:poisson` or `:fixed`
-- `replace=false`: Replace existing SNPs.
+* `kind=:poisson` Either `:poisson` or `:fixed`
+- `replace=false` Replace existing SNPs.
 """
 function add_snps!(S::Vector, μ;
     L=10^9, allow_multiple=false, kind=:poisson, replace=false)
@@ -210,7 +233,10 @@ end
 
 
 """
-Remove unpopulated genotypes from the graph.
+    prune_phylogeny!(S::TumorConfiguration)
+
+Remove unpopulated genotypes from the graph.  
+Any gap in the phylogeny is bridged.
 """
 function prune_phylogeny!(S::TumorConfigurations.TumorConfiguration)
     P = S.phylogeny
@@ -278,7 +304,7 @@ function MRCA(S::TumorConfiguration, i::Integer, j::Integer)
 end
 
 """
-Return index of the most recent common ancestor between in a phylogeny.
+Return index of the most recent common ancestor in a phylogeny.
 """
 function MRCA(S::TumorConfiguration)
     P = S.phylogeny

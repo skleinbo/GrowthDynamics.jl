@@ -1,6 +1,7 @@
 [deps]
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+GrowthDynamics = "708a6a61-856c-5d7f-acbf-fcf0902d75eb"
 
 [compat]
-Documenter = "~0.26.3"
+Documenter = "~0.27.16"

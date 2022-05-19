@@ -29,7 +29,7 @@ function _genotype(x,g)
 end
 
 """
-    ps(pop_size_entry,g)
+    ps(pop_size_entry, g)
 
 Timeseries for genotype `g`.
 Takes a single entry _not_ the whole DataFrame as first argument.

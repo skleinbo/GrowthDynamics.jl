@@ -5,6 +5,8 @@ makedocs(sitename="GrowthDynamics.jl",
     format = Documenter.HTML(prettyurls = false),
     pages = [
         "Overview" => "index.md",
+        "States" => "states.md",
+        "Phylogenies" => "phylogenies.md",
         "Dynamics" => "dynamics.md",
         "Observables" => "observables.md"
     ],
