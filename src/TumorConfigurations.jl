@@ -366,22 +366,26 @@ end
 Base.similar(C::TumorConfiguration) = TumorConfiguration(typeof(C.lattice)(C.lattice.a, zero(C.lattice.data)))
 
 
-#####################################################################
-## -- Convenience constructors for different initial geometries -- ##
-#####################################################################
+###################################################################
+## -- Convenience constructors for various initial geometries -- ##
+###################################################################
+#= Some of these methods return additional useful meta-data like
+the indices of a shell. To be consistent, any such convinience
+constructor must return a tuple `(state, meta)` where `meta` may
+be `nothing`. =#
 
 """
     nolattice_state()
 
-Unstructered model.
-One genotype 1::Int64 with one individual with fitness 1.0.
+Model without spatial structure.  
+Populated with one individual of genotype `1::Int64` with fitness 1.0.
 """
-nolattice_state() = begin
+function nolattice_state()
     state = TumorConfiguration(Lattices.NoLattice())
     push!(state, 1)
     state.meta[end, :npop] = 1
     state.meta[end, :fitness] = 1.0
-    state
+    return state, nothing
 end
 
 
@@ -399,20 +403,20 @@ function uniform(T::Type{LT}, L::Int; g=0) where LT<:Lattices.RealLattice
     lattice = LT(1.0, fill(g, fill(L, dim)...))
     state = TumorConfiguration(lattice)
 
-    return state
+    return state, nothing
 end
 
 """
-    single_center(::Type{RealLattice}, L; g1=1,g2=2)
+    single_center(::Type{RealLattice}, L; g1=1, g2=2)
 
-Initialize a single cell of genotype `g2` at the midpoint of the given lattice type, filled with `g1`.
+Put a single cell of genotype `g2` at the midpoint of a lattice filled with `g1`.
 """
 function single_center(::Type{LT}, L::Int; g1=0, g2=1) where LT<:Lattices.RealLattice
     state = uniform(LT, L; g=g1)
     mid = midpoint(state.lattice)
     state[mid] = g2
 
-    return state
+    return state, mid
 end
 
 function half_space(::Type{LT}, L::Int; f=1/2, g1=0, g2=1) where LT<:Lattices.RealLattice
@@ -424,13 +428,16 @@ function half_space(::Type{LT}, L::Int; f=1/2, g1=0, g2=1) where LT<:Lattices.Re
     for ind in product(axes(state.lattice.data)[1:end-1]..., 1:fill_to)
         state[ind...] = g2
     end
-    state
+
+    return state, fill_to
 end
+
 function spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
-    if !(0.0<=r)
+    if r < 0
         throw(ArgumentError("radius must be positive."))
     end
-    state = uniform(LT, L; g=g1)
+
+    state, _ = uniform(LT, L; g=g1)
     if g2==g1 || r==0.0
         return state
     end
@@ -444,21 +451,19 @@ function spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealL
     ## preselect the range of indices such that 
     ## -r-1 <= (x-o)_i <= r+1
 
-    idx_ranges = map(1:length(mid)) do j
-        UnitRange(index(lat, mid.-r.-4a)[j] , index(lat, mid.+r.+4a)[j])
-    end
-
-    for I in product(idx_ranges...)
-        I = CartesianIndex(I)
+    idx_ranges = UnitRange.(Tuple(index(lat, mid.-r.-4a)) , Tuple(index(lat, mid.+r.+4a)))
+    idx_shell = CartesianIndex.(collect(Iterators.filter(product(idx_ranges...)) do I
         p = coord(lat, I)
-        if norm(p-mid)<=r+a #|| isonshell(lat, p, r, mid)
-            @inbounds state[I] = g2
-        end
+        norm(p-mid)<=r+a
+    end))
+    foreach(idx_shell) do I
+        state[I] = g2
     end
     if g1!=0 && g2!=0
         add_edge!(state.phylogeny, g2, g1)
     end
-    state
+
+    return state, idx_shell
 end
 
 function spheref(::Type{LT}, L::Int; f = 1 / 10, g1=1, g2=2) where LT<:Lattices.RealLattice

@@ -1,6 +1,5 @@
 module TumorObservables
 
-# import IndexedTables: table, join, rename, renamecol, transform, select, filter
 import DataFrames: DataFrame
 import LinearAlgebra: norm, Symmetric, dot
 import StatsBase: Weights, sample, countmap, mean, var

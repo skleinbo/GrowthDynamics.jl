@@ -400,6 +400,11 @@ end
     r-a < norm(p′) ≤ r+a
 end
 
+"""
+    shell(L::CubicLattice, r, o=coord(L, midpoint(L)))
+
+Return indices of shell of radius `r` around `o`.
+"""
 function shell(L::CubicLattice, r, o=coord(L, midpoint(L)))
     expected_surface = round(Int, Lattices.volume(r, 3)  -Lattices.volume(r-1, 3))
     out = Vector{CartesianIndex{3}}(undef, expected_surface)
