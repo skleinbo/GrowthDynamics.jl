@@ -3,7 +3,7 @@ module TumorObservables
 import CoordinateTransformations: Spherical, SphericalFromCartesian
 import DataFrames: DataFrame
 import Distributions: Multinomial
-import GeometryBasics: Pointf0
+import GeometryBasics: Pointf0, Point3f
 import Graphs: SimpleGraph, SimpleDiGraph, nv, inneighbors
 import Graphs: outneighbors, neighborhood, neighborhood_dists
 import Graphs: vertices, enumerate_paths, bellman_ford_shortest_paths
@@ -251,7 +251,7 @@ end
 
 function interface(v::AbstractVector, lattice::CubicLattice; o=coord(lattice, midpoint(lattice)))
     if length(v)==0
-        return Point3f0[]
+        return Point3f[]
     end
     r = round(norm(v[1].-o)) #round(norm(com-o))
     iv = map(x->Lattices.index(lattice, x), v) # indices

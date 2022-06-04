@@ -1,9 +1,9 @@
 module RoughInterfaces
 
 import Base: firstindex, getindex, lastindex, length, setindex!, size, view
-import CoordinateTransformations: Spherical, SphericalFromCartesian
 import Distributions: Normal, truncated
 import Interpolations: LinearInterpolation, Periodic, Extrapolation
+import CoordinateTransformations: Spherical, SphericalFromCartesian
 
 export isinside, PolarRandomWalkGenerator, PolarRandomWalk
 
@@ -52,6 +52,7 @@ LinearInterpolation(P::PolarRandomWalk) = LinearInterpolation(P.X, P.Y; extrapol
 Spherical(P::PolarRandomWalk) = Spherical.(P.R, P.X, P.Y)
 
 isinside(p, P::PolarRandomWalk) = isinside(SphericalFromCartesian()(p), LinearInterpolation(P))
+isinside(p, P::Extrapolation) = isinside(SphericalFromCartesian()(p), P)
 isinside(p::Spherical, P::Extrapolation) = P(p.θ) <= p.ϕ
 
 # -- END MODULE -- #

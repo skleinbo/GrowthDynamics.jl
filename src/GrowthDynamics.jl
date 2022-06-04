@@ -15,6 +15,7 @@ linspace(start,stop,length) = range(start, stop=stop, length=length)
 DEBUG = false
 
 include("Lattices.jl")
+include("RoughInterfaces.jl")
 include("TumorConfigurations.jl")
 # @reexport using .TumorConfigurations
 include("Phylogenies.jl")
