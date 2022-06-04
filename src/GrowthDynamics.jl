@@ -3,33 +3,29 @@ module GrowthDynamics
 export  Lattices,
         LatticeTumorDynamics
 
+import Printf: @sprintf
+
+using DataFrames
+using FileIO
+using Graphs
 using Reexport
+@reexport using ObservableCollector
 
 linspace(start,stop,length) = range(start, stop=stop, length=length)
 DEBUG = false
 
 include("Lattices.jl")
 include("TumorConfigurations.jl")
-@reexport using .TumorConfigurations
+# @reexport using .TumorConfigurations
 include("Phylogenies.jl")
 include("TumorObservables.jl")
 include("LatticeTumorDynamics.jl")
 include("AnalysisMethods.jl")
-include("FitnessIterators.jl")
 include("PrettyPrinting.jl")
 
-using Graphs
-using FileIO
-import Printf: @sprintf
-using DataFrames
-
-@reexport using ObservableCollector
-
-using .FitnessIterators
-@reexport using .LatticeTumorDynamics
-@reexport using .TumorObservables
-@reexport using .AnalysisMethods
-@reexport using .Phylogenies
-
+# @reexport using .LatticeTumorDynamics
+# @reexport using .TumorObservables
+# @reexport using .AnalysisMethods
+# @reexport using .Phylogenies
 
 end
