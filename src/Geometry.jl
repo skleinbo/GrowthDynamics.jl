@@ -102,7 +102,7 @@ end
 """
     euclidean_dist(q, P::Plane)
 
-Euclidean distance `| (q-p).w |` of point `q` from plane `P`.
+Orthogonal Euclidean distance `| (q-p).w |` of point `q` from plane `P`.
 """
 function euclidean_dist(q, P::Plane)
     abs(dot((q - P.p), P.w))
@@ -110,6 +110,11 @@ end
 
 ## 
 
+"""
+    volume(r, dim)
+
+Volume of unit ball in `dim` dimensions.
+"""
 function volume(r, dim::Int) 
     if dim == 1
         return 2*r
@@ -122,6 +127,11 @@ function volume(r, dim::Int)
     end
 end
 
+"""
+    radius(v, dim)
+
+Radius of a ball of volume `v` in `dim` dimensions.
+"""
 function radius(v, dim::Int)
     if dim == 1
         return v/2

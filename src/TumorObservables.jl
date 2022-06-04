@@ -1,24 +1,16 @@
 module TumorObservables
 
+import CoordinateTransformations: Spherical, SphericalFromCartesian
 import DataFrames: DataFrame
-import LinearAlgebra: norm, Symmetric, dot
-import StatsBase: Weights, sample, countmap, mean, var
 import Distributions: Multinomial
 import GeometryBasics: Pointf0
-
-import CoordinateTransformations: Spherical, SphericalFromCartesian
-
-import Graphs: SimpleGraph,
-                    SimpleDiGraph,
-                    nv, inneighbors, outneighbors, neighborhood, neighborhood_dists,
-                    vertices,
-                    enumerate_paths,
-                    bellman_ford_shortest_paths
-
-
+import Graphs: SimpleGraph, SimpleDiGraph, nv, inneighbors
+import Graphs: outneighbors, neighborhood, neighborhood_dists
+import Graphs: vertices, enumerate_paths, bellman_ford_shortest_paths
+import LinearAlgebra: dot, norm, Symmetric
+import StatsBase: countmap, mean, sample, var, Weights
 import ..Lattices
 import ..Lattices: CubicLattice, midpoint, coord, index, neighbors, neighbors!, isonshell, LatticeNeighbors
-
 import ..TumorConfigurations: TumorConfiguration, gindex
 
 using ..Phylogenies
@@ -87,7 +79,6 @@ function sampled_allele_fractions(S::TumorConfiguration, samples=length(S.meta))
     end
     return X
 end
-
 
 function allele_fractions(L::Lattices.RealLattice{<:Integer})
     m = maximum(L.data)
@@ -162,8 +153,6 @@ function allele_spectrum(as::DataFrame; threshold=0.0, read_depth=total_populati
   return as
 end
 
-
-
 function total_population_size(L::Lattices.RealLattice{<:Integer})
     countnz(L.data)
 end
@@ -228,6 +217,7 @@ end
 function kpzroughness(S::AbstractDict, lattice; kwargs...)
     sort(Dict( t=>kpzroughness(S[t], lattice; kwargs...) for t in keys(S) ))
 end
+
 function kpzroughness(v::AbstractVector, lattice, args...;kwargs...)
     v = interface(v, lattice)
     if length(v) < 2
@@ -276,6 +266,7 @@ function interface(v::AbstractVector, lattice::CubicLattice; o=coord(lattice, mi
     end |> x->map(i->coord(lattice, i), x)
     return inter
 end
+
 function interface(v::AbstractVector, embedding::TumorConfiguration; o=coord(embedding.lattice, midpoint(embedding.lattice)),  g=2)
     # embed v into lattice
     # state = uniform(lat, L; g=0)
@@ -309,8 +300,6 @@ function interface(v::AbstractVector, embedding::TumorConfiguration; o=coord(emb
     #     end
     # end
 end
-
-
 
 function surface(L::Lattices.RealLattice{<:Integer}, g::Int)
     x = 0
@@ -354,6 +343,7 @@ function boundary(L::Lattices.AbstractLattice{T, 1}, g) where T
     s += count( x->x==g, view(L.data, L.Na) )
     return s
 end
+
 function boundary(L::Lattices.AbstractLattice{T, 2}, g) where T
     s =  count( x->x==g, view(L.data, :,1) )
     s += count( x->x==g, view(L.data, :,L.Nb) )
@@ -361,6 +351,7 @@ function boundary(L::Lattices.AbstractLattice{T, 2}, g) where T
     s += count( x->x==g, view(L.data, L.Na,:) )
     return s
 end
+
 function boundary(L::Lattices.AbstractLattice{T, 3}, g) where T
     s =  count( x->x==g, view(L.data, :,:,1) )
     s += count( x->x==g, view(L.data, :,:,L.Nc) )
@@ -371,7 +362,6 @@ function boundary(L::Lattices.AbstractLattice{T, 3}, g) where T
     return s
 end
 
-
 function lone_survivor_condition(L,g::Integer)
     af = allele_fractions(L)
     for x in af
@@ -381,6 +371,7 @@ function lone_survivor_condition(L,g::Integer)
     end
     return false
 end
+
 function lone_survivor_condition(L)
     u = unique(L.data)
     return 0 in u && length(u)==2 || length(u)==1

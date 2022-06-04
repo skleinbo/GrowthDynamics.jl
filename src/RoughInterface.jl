@@ -1,9 +1,9 @@
 module RoughInterfaces
 
 import Base: firstindex, getindex, lastindex, length, setindex!, size, view
+import CoordinateTransformations: Spherical, SphericalFromCartesian
 import Distributions: Normal, truncated
 import Interpolations: LinearInterpolation, Periodic, Extrapolation
-import CoordinateTransformations: Spherical, SphericalFromCartesian
 
 export isinside, PolarRandomWalkGenerator, PolarRandomWalk
 
