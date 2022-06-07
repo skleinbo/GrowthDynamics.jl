@@ -149,7 +149,9 @@ function realsize(L::RealLattice)
 end
 
 
-## --- BEGIN 1D Lattice OBC -- ##
+####################################
+## --- BEGIN Line lattice (1D) -- ##
+####################################
 struct LineLattice{T, A<:AbstractArray{T, 1}} <: AbstractLattice{T, 1}
     a::Float64 # Lattice constant
     data::A
@@ -178,9 +180,9 @@ end
 ## --- END 1D Lattice OBC -- ##
 
 
-####################################
-## --- BEGIN Hexagonal lattice -- ##
-####################################
+#########################################
+## --- BEGIN Hexagonal lattice (2D) -- ##
+#########################################
 
 struct HexagonalLattice{T, A<:AbstractArray{T, 2}} <: AbstractLattice{T, 2}
     a::Float64 # Lattice constant
@@ -285,9 +287,9 @@ end
 ## -- END HexagonalLattice -- ##
 
 
-################################
-## -- BEGIN CubicLattice --   ##
-################################
+#####################################
+## -- BEGIN CubicLattice (3D) --   ##
+#####################################
 
 struct CubicLattice{T, A<:AbstractArray{T,3}} <: AbstractLattice{T, 3}
     a::Float64 # Lattice constant
@@ -426,7 +428,9 @@ end
 ## -- END CubicLattice -- ##
 
 
-## -- BEGIN HCPLattice -- ##
+###################################
+## --- BEGIN HCP lattice (3D) -- ##
+###################################
 
 struct HCPLattice{T, A<:AbstractArray{T,3}} <: AbstractLattice{T, 3}
     a::Float64
@@ -488,11 +492,55 @@ function nneighbors(::Type{HCPLattice{T, A}}, N, I) where {T, A}
 end
 ## -- END HCPLattice --##
 
+###################################
+## --- BEGIN FCC lattice (3D) -- ##
+###################################
+
+struct FCCLattice{T, A<:AbstractArray{T,3}} <:AbstractLattice{T, 3}
+    a::Float64
+    data::A
+end
+FCCLattice(L::Integer) = FCCLattice(1.0, fill(0, 2L+1, 2L, 2L+1))
+
+function coord(L::FCCLattice, I)::Point3f0
+    a = L.a
+    ix,iy,iz = Tuple(I) .- 1
+    z = a/2*iz
+    x = a/2*ix
+    if iseven(iz)
+        y = ifelse(iseven(ix), a*iy, a*iy + a/2)
+    else
+        y = ifelse(isodd(ix), a*iy, a*iy + a/2)
+    end
+    return Point3f(x,y,z)
+end
+
+function index(L::FCCLattice, p)
+    x,y,z = round.(2/L.a*p)
+    ix = round(Int, x) + 1
+    iz = round(Int, z) + 1
+    if isodd(iz)
+        iy = ifelse(isodd(ix), y/2+1, (y-1)/2+1)
+    else
+        iy = ifelse(iseven(ix), y/2+1, (y-1)/2+1)
+    end
+    return CartesianIndex(ix,Int(iy),iz)
+end
+
+Base.Base.@propagate_inbounds function neighbors!(nn::Neighbors{12,3}, L::FCCLattice)
+end
+
+function nneighbors(::Type{FCCLattice{T, A}}, N, I) where {T, A}
+end
+
+## --- END FCC lattice (3D) -- ##
+
 dimension(::AbstractLattice{T, N}) where {T,N} = N
 dimension(::Type{LT}) where LT<:AbstractLattice{T, N} where {T,N} = N
 dimension(::Type{LineLattice}) = 1
 dimension(::Type{HexagonalLattice}) = 2
 dimension(::Type{CubicLattice}) = 3
+dimension(::Type{FCCLattice}) = 3
 dimension(::Type{HCPLattice}) = 3
 
 coordination(L::RealLattice) = coordination(typeof(L))
@@ -500,11 +548,13 @@ coordination(::Type{LineLattice{T, A}}) where {T, A} = 2
 coordination(::Type{HexagonalLattice{T, A}}) where {T, A} = 6
 # coordination(::Type{CubicLattice{T, A}}) where {T, A} = 6
 coordination(::Type{T}) where T<:CubicLattice = 6
+coordination(::Type{T}) where T<:FCCLattice = 12
 coordination(::Type{HCPLattice{T, A}}) where {T, A} = 12
 
 spacings(L::LineLattice) = (L.a,)
 spacings(L::HexagonalLattice) = (L.a, L.a)
 spacings(L::CubicLattice) = (L.a, L.a, L.a)
+spacings(L::FCCLattice) = (L.a, L.a, L.a)
 
 """
     density(L::RealLattice, I)
