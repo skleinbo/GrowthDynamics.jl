@@ -38,6 +38,8 @@ import CoordinateTransformations: SphericalFromCartesian
 
 include("Geometry.jl")
 
+const Index{N} = Union{CartesianIndex{N}, NTuple{N, T}} where T
+
 # Lattice type structure
 abstract type AbstractLattice{T, N} end
 
@@ -160,20 +162,20 @@ struct LineLattice{T, A<:AbstractArray{T, 1}} <: AbstractLattice{T, 1}
     data::A
 end
 
-coord(L::LineLattice{T}, I) where T = L.a * I[1]
+coord(L::LineLattice{T}, I::Index{1}) where T = L.a * I[1]
 
 index(L::LineLattice{T}, x) where T = CartesianIndex(Tuple(round(Int, x/L.a)))
 
 """
 In-place version of `neighbors`.
 """
-Base.@propagate_inbounds function neighbors!(nn::Neighbors{1}, ::LineLattice, I)
+Base.@propagate_inbounds function neighbors!(nn::Neighbors{1}, ::LineLattice, I::Index{1})
     m = I[1]
     nn[1] = CartesianIndex(m-1)
     nn[2] = CartesianIndex(m+1)
 end
 
-Base.@propagate_inbounds function nneighbors(::Type{LineLattice{T, A}}, N, I) where {T, A}
+Base.@propagate_inbounds function nneighbors(::Type{LineLattice{T, A}}, N, I::Index{1}) where {T, A}
     nn = 2
     if I[1] == 1 || I[1] == N[1]
         nn -= 1
@@ -208,7 +210,7 @@ function offset_to_cube(::Lattices.HexagonalLattice, I)
     return x, y, z
 end
 
-function coord(L::HexagonalLattice, I)
+function coord(L::HexagonalLattice, I::Index{2})
     x = (I[2]-1)*L.a
     y = (I[1]-1)*L.a*sin(pi/3)
     if iseven(I[1])
@@ -300,7 +302,7 @@ struct CubicLattice{T, A<:AbstractArray{T,3}} <: AbstractLattice{T, 3}
 end
 CubicLattice(L::Integer) = CubicLattice(1.0, fill(0, L,L,L))
 
-coord(L::CubicLattice, I)::Point3f0 = L.a .* (Point3f0(Tuple(I)) .- 1)
+coord(L::CubicLattice, I::Index{3})::Point3f0 = L.a .* (Point3f0(Tuple(I)) .- 1)
 
 function index(L::CubicLattice, p)
     return  CartesianIndex(Tuple(round.(Int, p ./ L.a) .+ 1))
@@ -398,7 +400,7 @@ end
     the origin `o`. A shell is defined as the collection of points with |(p-o)|≤r+a/2
     where `a` is the lattice spacing.
 """
-@inline function isonshell(L::CubicLattice, p, r, o=coord(L, midpoint(L)))
+@inline function isonshell(L::RealLattice, p, r, o=coord(L, midpoint(L)))
     a = spacings(L)[1] / 2
 
     p′ = p .- o
@@ -410,7 +412,7 @@ end
 
 Return indices of shell of radius `r` around `o`.
 """
-function shell(L::CubicLattice, r, o=coord(L, midpoint(L)))
+function shell(L::RealLattice, r, o=coord(L, midpoint(L)))
     expected_surface = round(Int, Lattices.volume(r, 3)  -Lattices.volume(r-1, 3))
     out = Vector{CartesianIndex{3}}(undef, expected_surface)
     j = 0
@@ -441,7 +443,7 @@ struct HCPLattice{T, A<:AbstractArray{T,3}} <: AbstractLattice{T, 3}
     data::A
 end
 
-coord(L::HCPLattice, I::CartesianIndex) = Point3f0(L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2],I[3]))
+coord(L::HCPLattice, I::Index{3}) = Point3f0(L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2],I[3]))
 ## TODO: index(::HCPLattice)
 function index(L::HCPLattice)
 end
@@ -505,7 +507,7 @@ struct FCCLattice{T, A<:AbstractArray{T,3}} <:AbstractLattice{T, 3}
 end
 FCCLattice(L::Integer) = FCCLattice(1.0, fill(0, 2L+1, 2L, 2L+1))
 
-function coord(L::FCCLattice, I)::Point3f0
+function coord(L::FCCLattice, I::Index{3})::Point3f0
     a = L.a
     ix,iy,iz = Tuple(I) .- 1
     z = a/2*iz
@@ -537,6 +539,8 @@ function nneighbors(::Type{FCCLattice{T, A}}, N, I) where {T, A}
 end
 
 ## --- END FCC lattice (3D) -- ##
+
+coord(L::AbstractLattice{<:Any, N}, v::AbstractArray{<:Index{N}}) where {N} = coord.(Ref(L), v)
 
 dimension(::AbstractLattice{T, N}) where {T,N} = N
 dimension(::Type{LT}) where LT<:AbstractLattice{T, N} where {T,N} = N
@@ -581,7 +585,7 @@ end
 ## Intersections ##
 ###################
 
-function conicsection(L::CubicLattice, coords, Ω; axis=Point3f0(0,0,-1), o=Lattices.coord(L, Lattices.midpoint(L)))
+function conicsection(L::AbstractLattice{<:Any, 3}, coords, Ω; axis=Point3f0(0,0,-1), o=Lattices.coord(L, Lattices.midpoint(L)))
     ## !! WARNING: ϕ is the azimuth angle in CoordinateTransformations !!
     cts = SphericalFromCartesian()
     # rotY = @SMatrix [ cos(ϕoff) 0 -sin(ϕoff);
