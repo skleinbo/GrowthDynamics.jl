@@ -11,7 +11,7 @@ import Graphs: vertices, enumerate_paths, bellman_ford_shortest_paths
 import LinearAlgebra: dot, norm, Symmetric
 import StatsBase: countmap, mean, sample, var, Weights
 import ..Lattices
-import ..Lattices: CubicLattice, midpoint, coord, index, neighbors, neighbors!, isonshell, LatticeNeighbors
+import ..Lattices: CubicLattice, RealLattice, midpoint, coord, index, neighbors, neighbors!, isonshell, LatticeNeighbors
 import ..TumorConfigurations: TumorConfiguration, gindex
 
 using ..Phylogenies
@@ -250,7 +250,7 @@ function linterface(v::AbstractVector, args...; kwargs...)
     length(interface(v, args...; kwargs...)[1])
 end
 
-function interface(v::AbstractVector, lattice::CubicLattice; o=coord(lattice, midpoint(lattice)))
+function interface(v::AbstractVector, lattice::RealLattice; o=coord(lattice, midpoint(lattice)))
     if length(v)==0
         return (CartesianIndex{3}[], Point3f[])
     end
