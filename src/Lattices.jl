@@ -556,6 +556,9 @@ spacings(L::HexagonalLattice) = (L.a, L.a)
 spacings(L::CubicLattice) = (L.a, L.a, L.a)
 spacings(L::FCCLattice) = (L.a, L.a, L.a)
 
+sitesperunitcell(::Type{FCCLattice}, L) = (2L+1, L+1, 2L+1)
+sitesperunitcell(::Type{LT}, L) where LT<:AbstractLattice = ntuple(_->L+1, dimension(LT))
+
 """
     density(L::RealLattice, I)
 

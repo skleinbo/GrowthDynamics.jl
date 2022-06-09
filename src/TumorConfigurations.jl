@@ -6,6 +6,7 @@ import LinearAlgebra: norm
 import Graphs: SimpleDiGraph, add_vertex!, add_vertices!, add_edge!, nv
 import ..Lattices
 import ..Lattices: coord, dimension, index, isonshell, radius, realsize, midpoint, dist, spacings
+import ..Lattices: sitesperunitcell
 import GeometryBasics: Point2f0, Point3f0
 import StatsBase
 import CoordinateTransformations: SphericalFromCartesian
@@ -399,10 +400,8 @@ Return system on a lattice of type `LT` with linear extension `L`, filled with g
     uniform(HexagonalLattice, 128; g=1)
 """
 function uniform(T::Type{LT}, L::Int; g=0) where LT<:Lattices.RealLattice
-    dim = Lattices.dimension(T)
-    lattice = LT(1.0, fill(g, fill(L, dim)...))
+    lattice = LT(1.0, fill(g, sitesperunitcell(LT, L)))
     state = TumorConfiguration(lattice)
-
     return state, nothing
 end
 
