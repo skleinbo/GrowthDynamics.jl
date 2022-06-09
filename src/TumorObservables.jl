@@ -1,5 +1,6 @@
 module TumorObservables
 
+import Base.Iterators: filter
 import CoordinateTransformations: Spherical, SphericalFromCartesian
 import DataFrames: DataFrame
 import Distributions: Multinomial
@@ -219,7 +220,7 @@ function kpzroughness(S::AbstractDict, lattice; kwargs...)
 end
 
 function kpzroughness(v::AbstractVector, lattice, args...;kwargs...)
-    v = interface(v, lattice)
+    v = interface(v, lattice)[2]
     if length(v) < 2
         return 0f0
     end
@@ -246,25 +247,37 @@ function linterface(S::AbstractDict, args...;kwargs...)
     sort(Dict( t=>linterface(S[t], args...; kwargs...) for t in keys(S) ))
 end
 function linterface(v::AbstractVector, args...; kwargs...)
-    length(interface(v, args...; kwargs...))
+    length(interface(v, args...; kwargs...)[1])
 end
 
 function interface(v::AbstractVector, lattice::CubicLattice; o=coord(lattice, midpoint(lattice)))
     if length(v)==0
-        return Point3f[]
+        return (CartesianIndex{3}[], Point3f[])
     end
     r = round(norm(v[1].-o)) #round(norm(com-o))
-    iv = map(x->Lattices.index(lattice, x), v) # indices
+    iv = Lattices.index.(Ref(lattice), v) # indices
 
     # "(not)-on-shell neighbors"
     nbs = LatticeNeighbors(lattice)
-    inter = Iterators.filter(iv) do i
+    inter = Base.filter(iv) do i
         neighbors!(nbs, lattice, i)
-        nosneighbors = filter(j->!isonshell(lattice, coord(lattice, j), r, o), nbs)
+        nosneighbors = filter(j->!isonshell(lattice, coord(lattice, j), r, o), nbs) # not-on-shell-neighbors
+        # a site is on the interface if it
+        # a) has neighbors not on the same shell, i.e. has a shell to grow onto, AND
         !isempty(nosneighbors) &&
-             any(x->any(y->!(y in iv), Iterators.filter(z->isonshell(lattice, coord(lattice, z), r, o), neighbors(lattice, x))), nosneighbors)
-    end |> x->map(i->coord(lattice, i), x)
-    return inter
+            # b) 
+            any(nosneighbors) do nosn
+                # On-Shell-neighbors to compete with
+                Y = filter(neighbors(lattice, nosn)) do nosnn
+                        isonshell(lattice, coord(lattice, nosnn), r, o)
+                    end
+                any(Y) do y
+                    !(y in iv)
+                end
+            end
+    end
+    cinter = coord.(Ref(lattice), inter)
+    return inter, cinter
 end
 
 function interface(v::AbstractVector, embedding::TumorConfiguration; o=coord(embedding.lattice, midpoint(embedding.lattice)),  g=2)
