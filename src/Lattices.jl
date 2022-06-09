@@ -485,7 +485,7 @@ Base.@propagate_inbounds function neighbors!(nn::Neighbors{3}, ::HCPLattice, I)
 end
 
 function nneighbors(::Type{HCPLattice{T, A}}, N, I) where {T, A}
-    coord_xy = nneighbors(HexagonalLattice, N[1:2], I[1:2])
+    coord_xy = @views nneighbors(HexagonalLattice, N[1:2], I[1:2])
 
     if 2 <= I[3]
         coord_xy += 1
@@ -505,7 +505,7 @@ struct FCCLattice{T, A<:AbstractArray{T,3}} <:AbstractLattice{T, 3}
     a::Float64
     data::A
 end
-FCCLattice(L::Integer) = FCCLattice(1.0, fill(0, 2L+1, 2L, 2L+1))
+FCCLattice(L::Integer) = FCCLattice(1.0, fill(0, sitesperunitcell(FCCLattice, L)))
 
 function coord(L::FCCLattice, I::Index{3})::Point3f0
     a = L.a
@@ -517,7 +517,7 @@ function coord(L::FCCLattice, I::Index{3})::Point3f0
     else
         y = ifelse(isodd(ix), a*iy, a*iy + a/2)
     end
-    return Point3f(x,y,z)
+    return Point3f0(x,y,z)
 end
 
 function index(L::FCCLattice, p)
@@ -529,13 +529,36 @@ function index(L::FCCLattice, p)
     else
         iy = ifelse(iseven(ix), y/2+1, (y-1)/2+1)
     end
-    return CartesianIndex(ix,Int(iy),iz)
+    return CartesianIndex(ix, round(Int, iy), iz)
 end
 
-Base.Base.@propagate_inbounds function neighbors!(nn::Neighbors{12,3}, L::FCCLattice)
+Base.@propagate_inbounds function neighbors!(nn::Neighbors{12,3}, L::FCCLattice, I)
+    l,m,n = Tuple(I)
+    if isodd(n)
+        mnew = m + ifelse(isodd(l), -1, +1)
+    else
+        mnew = m + ifelse(iseven(l), -1, +1)
+    end
+    nn[1] = CartesianIndex(l-1, m, n)
+    nn[2] = CartesianIndex(l+1, m, n)
+    nn[3] = CartesianIndex(l+1, mnew, n)
+    nn[4] = CartesianIndex(l-1, mnew, n)
+    # plane above
+    nn[5] = CartesianIndex(l-1, m, n+1)
+    nn[6] = CartesianIndex(l, mnew, n+1)
+    nn[7] = CartesianIndex(l+1, m, n+1)
+    nn[8] = CartesianIndex(l, m, n+1)
+    # plane below
+    nn[9] = CartesianIndex(l-1, m, n-1)
+    nn[10] = CartesianIndex(l, mnew, n-1)
+    nn[11] = CartesianIndex(l+1, m, n-1)
+    nn[12] = CartesianIndex(l, m, n-1)
+    nothing
 end
 
 function nneighbors(::Type{FCCLattice{T, A}}, N, I) where {T, A}
+    coord = coordination(FCCLattice)
+
 end
 
 ## --- END FCC lattice (3D) -- ##
