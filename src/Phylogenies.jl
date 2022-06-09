@@ -37,12 +37,10 @@ function df_traversal(G::SimpleDiGraph; root=1)
     V
 end
 
-df_traversal!(V::Vector{Int}, G::SimpleDiGraph) = df_traversal!(V, G; root=1)
-
 """
 See also [`df_traversal`](@ref)
 """
-function df_traversal!(V::Vector{Int}, G::SimpleDiGraph; root::Int)
+function df_traversal!(V::Vector{Int}, G::SimpleDiGraph; root::Int=1)
     for v in inneighbors(G, root)
         push!(V, v)
         df_traversal!(V, G; root=v)
