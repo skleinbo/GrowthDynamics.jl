@@ -1,29 +1,32 @@
 module Lattices
 
 export  AbstractLattice,
-        RealLattice,
-        NoLattice,
+        CubicLattice,
+        FCCLattice,
+        HCPLattice,
         HexagonalLattice,
         LineLattice,
-        CubicLattice,
-        HCPLattice,
-        out_of_bounds,
+        NoLattice,
+        RealLattice
+
+export  conicsection,
         coord,
-        index,
-        isonshell,
-        neighbors,
-        neighbors!,
-        nneighbors,
+        coordination,
         density,
         density!,
-        dist,
         dimension,
-        coordination,
+        dist,
+        index,
+        isonshell,
         midpoint,
+        neighbors!,
+        nneighbors,
+        neighbors,
+        out_of_bounds,
+        radius,
         shell,
         spacings,
-        volume,
-        radius
+        volume
 
 import Base: size, length, getindex, setindex!, maybeview, firstindex, lastindex
 import Base.Iterators: product
