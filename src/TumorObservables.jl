@@ -452,7 +452,7 @@ a dictionary `radius=>coordinates` where `a0<= radius <= max(||v||)` in incremen
 """
 function explode_into_shells(v::Vector{T}, o, a; a0=0f0) where T<:Pointf0
     maxr = maximum(x->norm(x-o), v)
-    Dict(r => filter(x->r-a/2<norm(x-o)<=r+a/2, v) for r in a0:a:maxr+a)
+    Dict(r => Base.filter(x->r-a/2<norm(x-o)<=r+a/2, v) for r in a0:a:maxr+a)
 end
 
 """
