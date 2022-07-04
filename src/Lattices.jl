@@ -19,6 +19,7 @@ export  conicsection,
         index,
         isonshell,
         midpoint,
+        midpointcoord,
         neighbors!,
         nneighbors,
         neighbors,
@@ -125,6 +126,13 @@ Return the index of the geometeric center of the lattice `L`.
 function midpoint(L::RealLattice) 
     index(L, realsize(L)./2)
 end
+
+"""
+    midpointcoord(L)
+
+Return the coordinate of the point nearest to the geometeric center of the lattice `L`.
+"""
+midpointcoord(L::RealLattice) = coord(L, midpoint(L))
 
 """
     dist(::RealLattice, I, J)
