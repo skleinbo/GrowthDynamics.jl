@@ -11,7 +11,7 @@ import Graphs: vertices, enumerate_paths, bellman_ford_shortest_paths
 import LinearAlgebra: dot, norm, Symmetric
 import StatsBase: countmap, mean, sample, var, Weights
 import ..Lattices
-import ..Lattices: CubicLattice, RealLattice, midpoint, coord, index, neighbors, neighbors!, isonshell, LatticeNeighbors
+import ..Lattices: CubicLattice, RealLattice, midpoint, coord, index, neighbors, neighbors!, isonshell, Neighbors
 import ..TumorConfigurations: TumorConfiguration, gindex
 
 using ..Phylogenies
@@ -258,7 +258,7 @@ function interface(v::AbstractVector, lattice::RealLattice; o=coord(lattice, mid
     iv = Lattices.index.(Ref(lattice), v) # indices
 
     # "(not)-on-shell neighbors"
-    nbs = LatticeNeighbors(lattice)
+    nbs = Neighbors(lattice)
     inter = Base.filter(iv) do i
         neighbors!(nbs, lattice, i)
         nosneighbors = filter(j->!isonshell(lattice, coord(lattice, j), r, o), nbs) # not-on-shell-neighbors
@@ -486,7 +486,7 @@ end
 ## Pylogenetic observables ##
 #############################
 
-"First living ancestor."
+"Earliest living ancestor."
 function living_ancestor(S::TumorConfiguration, g)
     ancestor = parent(S, g)
     while ancestor !== nothing && S.meta[ancestor.id, :npop] == 0

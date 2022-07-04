@@ -392,7 +392,7 @@ function die_or_proliferate!(
     nonzeros = count(x -> x != 0, lattice.data)
     base_br = 1.0 # - d
 
-    nn = Lattices.LatticeNeighbors(lattice) # Initialize neighbors to the appr. type
+    nn = Lattices.Neighbors(lattice) # Initialize neighbors to the appr. type
     neighbor_indices = collect(1:length(nn))
 
     for k in 1:tot_N

@@ -31,11 +31,12 @@ export  conicsection,
 
 import Base: size, length, getindex, setindex!, maybeview, firstindex, lastindex
 import Base.Iterators: product
+import CoordinateTransformations: SphericalFromCartesian
 import LinearAlgebra: norm, normalize, cross, det, dot
-using StaticArrays
+
 using GeometryBasics
 using Rotations
-import CoordinateTransformations: SphericalFromCartesian
+using StaticArrays
 
 include("Geometry.jl")
 
@@ -73,10 +74,10 @@ end
 
 Base.@propagate_inbounds out_of_bounds(L::Lattices.RealLattice, I) = out_of_bounds(I, size(L))
 
-Base.@propagate_inbounds function out_of_bounds(I::CartesianIndex{D}, sz) where D
+function out_of_bounds(I::CartesianIndex{D}, sz::NTuple{D, <:Integer}) where D
     oob = false
     for i in 1:D
-        if I[i]<1 || I[i]>sz[i]
+        @inbounds if I[i]<1 || I[i]>sz[i]
             oob = true
             break
         end
@@ -88,8 +89,8 @@ end
 
 @inline nneighbors(L::RealLattice, I) = nneighbors(typeof(L), size(L), I)
 
-LatticeNeighbors(L::RealLattice) = LatticeNeighbors(dimension(L), coordination(L))
-LatticeNeighbors(dim, coordination) = Neighbors{coordination, dim}(undef)
+Neighbors(L::RealLattice) = Neighbors(dimension(L), coordination(L))
+Neighbors(dim, coordination) = Neighbors{coordination, dim}(undef)
 
 
 ## size & lengths dispatch on the data field of any RealLattice ##
@@ -113,7 +114,7 @@ Vector of neighbors of index I. Returns Array{CartesianIndex{dimension(L)}}.
 Does not check for bounds.
 """
 Base.@propagate_inbounds function neighbors(L::RealLattice, I)
-    tmp = LatticeNeighbors(L)
+    tmp = Neighbors(L)
     neighbors!(tmp, L, I)
     tmp
 end
@@ -121,9 +122,9 @@ end
 """
     midpoint(L)
 
-Return the index of the geometeric center of the lattice `L`.
+Return the index of the point nearest to the geometeric center of the lattice `L`.
 """
-function midpoint(L::RealLattice) 
+function midpoint(L::RealLattice)
     index(L, realsize(L)./2)
 end
 
@@ -137,7 +138,7 @@ midpointcoord(L::RealLattice) = coord(L, midpoint(L))
 """
     dist(::RealLattice, I, J)
 
-Euclidean distance between two points on a lattice.
+Euclidean distance between two indices of a lattice.
 """
 function dist(L::RealLattice, I, J)
     dx = coord(L, I) .- coord(L, J)
@@ -149,7 +150,7 @@ end
 
 Matrix similar to `L.data` filled with euclidean distances wrt. the point `p`.
 """
-euclidean_dist_matrix(L::RealLattice, p::CartesianIndex) = euclidean_dist_matrix(L, coord(L,p))
+euclidean_dist_matrix(L::RealLattice, p::Index) = euclidean_dist_matrix(L, coord(L,p))
 function euclidean_dist_matrix(L::RealLattice, p)
     N = size(L)
     map(CartesianIndices(L.data)) do I
@@ -177,7 +178,7 @@ index(L::LineLattice{T}, x) where T = CartesianIndex(Tuple(round(Int, x/L.a)))
 """
 In-place version of `neighbors`.
 """
-Base.@propagate_inbounds function neighbors!(nn::Neighbors{1}, ::LineLattice, I::Index{1})
+Base.@propagate_inbounds function neighbors!(nn::Neighbors{2,1}, ::LineLattice, I::Index{1})
     m = I[1]
     nn[1] = CartesianIndex(m-1)
     nn[2] = CartesianIndex(m+1)
@@ -289,7 +290,7 @@ function nneighbors(::Type{HexagonalLattice{T, A}}, N, I) where {T, A}
 end
 
 """
-Manhatten distance on the hex lattice.
+Manhatten distance between indices on the hex lattice.
 """
 function manhatten_dist(L::HexagonalLattice, I, J)
     I = offset_to_cube(L, I)
@@ -604,7 +605,7 @@ Calculates `(occupied sites)/(no. of neighbors)`
 
 "Occupied" means != zero(eltype(L.data))
 """
-density(L::RealLattice, I) = density!(LatticeNeighbors(L), L, I)
+density(L::RealLattice, I) = density!(Neighbors(L), L, I)
 function density!(nn::Neighbors, L::RealLattice, I)
     tot = nneighbors(L, I)
     neighbors!(nn, L, I)
