@@ -8,8 +8,6 @@ import Printf: @sprintf
 using DataFrames
 using FileIO
 using Graphs
-using Reexport
-@reexport using ObservableCollector
 
 linspace(start,stop,length) = range(start, stop=stop, length=length)
 DEBUG = false
