@@ -1,17 +1,18 @@
 module TumorConfigurations
 
-import Base: axes, copyto!, copy, eachindex, firstindex, getindex, IndexStyle, IndexLinear, lastindex
+import Base: axes, checkbounds, copyto!, copy, eachindex, firstindex, getindex, IndexStyle, IndexLinear, lastindex
 import Base: length, @propagate_inbounds, push!, resize!, setindex!, similar, size, show, view, zero
 import Base.Iterators: product
-import LinearAlgebra: norm
+import CoordinateTransformations: SphericalFromCartesian
+import Dictionaries: Dictionary
 import Graphs: SimpleDiGraph, add_vertex!, add_vertices!, add_edge!, nv
+import GeometryBasics: Point2f0, Point3f0
 import ..Lattices
 import ..Lattices: AbstractLattice
 import ..Lattices: coord, dimension, index, isonshell, radius, realsize, midpoint, dist, spacings
 import ..Lattices: sitesperunitcell
-import GeometryBasics: Point2f0, Point3f0
+import LinearAlgebra: norm
 import StatsBase
-import CoordinateTransformations: SphericalFromCartesian
 
 export TumorConfiguration,
     MetaData,
@@ -28,7 +29,7 @@ export TumorConfiguration,
 const MetaDatumFields = (:genotype, :npop, :fitness, :snps, :age)
 const MetaDatumFieldTypes{T} = Tuple{T,Int64,Float64,Vector{Int64},Tuple{Int64,Float64}}
 const MetaDatum{T} = NamedTuple{MetaDatumFields,MetaDatumFieldTypes{T}}
-const DEFAULT_META_DATA = (0, 1.0, Int64[], (0, 0.0))
+default_metadatum() = (0, 1.0, Int64[], (0, 0.0))
 """
     MetaDatum
 
@@ -39,16 +40,17 @@ function MetaDatum(A::MetaDatumFieldTypes)
 end
 
 function MetaDatum(g)
-    MetaDatum((g, DEFAULT_META_DATA...))
+    MetaDatum((g, default_metadatum()...))
 end
 
 mutable struct MetaData{T} <: AbstractArray{MetaDatum{T}, 1}
     _len::Int64
+    index::Dictionary{T, Int}
     genotypes::Vector{T}
-    npops::Vector{Int64}
+    npops::Vector{Int}
     fitnesses::Vector{Float64}
-    snps::Vector{Vector{Int64}}
-    ages::Vector{Tuple{Int64,Float64}}  ## (simulation t, real t) when a genotype entered.
+    snps::Vector{Vector{Int}}
+    ages::Vector{Tuple{Int,Float64}}  ## (simulation t, real t) when a genotype entered.
     misc::Dict{Any,Any} # store anything else in here.
 end
 
@@ -59,10 +61,11 @@ IndexStyle(::Type{<:MetaData}) = IndexLinear()
 
 Empty MetaData for genotype-type T.
 """
-MetaData(T::DataType) = MetaData(0, T[], Int64[], Float64[], Vector{Int64}[], Tuple{Int64,Float64}[], Dict())
+MetaData(T::DataType) = MetaData(0, Dictionary{T, Int}(), T[], Int64[], Float64[], Vector{Int64}[], Tuple{Int64,Float64}[], Dict())
 
 function MetaData{T}(::UndefInitializer, n) where T
-    return MetaData(0,
+    return MetaData{T}(0,
+        Dictionary{T, Int}(),
         Vector{T}(undef, n),
         Vector{Int64}(undef, n),
         Vector{Float64}(undef, n),
@@ -78,7 +81,8 @@ end
 Construct MetaData from single datum. Argument can be an appropriate tuple or named tuple.
 """
 MetaData(M::MetaDatum) = MetaData(values(M))
-MetaData(a::MetaDatumFieldTypes{T}) where {T} = MetaData{T}(1, [a[1]], [a[2]], [a[3]], [a[4]], [a[5]], Dict())
+MetaData(a::MetaDatumFieldTypes{T}) where {T} = MetaData{T}(1, Dictionary(a[1], 1), [a[1]], [a[2]], [a[3]], [a[4]], [a[5]], Dict())
+
 """
     MetaData(g::Vector{T}, n::Vector{<:Integer})
 
@@ -96,7 +100,22 @@ function MetaData(g::Vector{T}, n::Vector{<:Integer}) where {T}
     fitnesses = fill(1.0, N)
     snps = fill(Int64[], N)
     ages = fill((0, 0.0), N)
-    MetaData(N, g, n, fitnesses, snps, ages, Dict())
+    M = MetaData(N, Dictionary{T, Int}(), g, n, fitnesses, snps, ages, Dict())
+    index!(M)
+    M
+end
+
+"""
+    index!(::MetaData)
+
+Reindex the metadata.
+"""
+function index!(M::MetaData{T}) where T
+    empty!(M.index)
+    for i in eachindex(M)
+        insert!(M.index, M[i, Val(:genotype)], i)
+    end
+    return M.index
 end
 
 length(M::MetaData) = M._len
@@ -135,11 +154,7 @@ _pluralize(::Val{:age}) = :ages
 _pluralize(::Val{F}) where F = throw(ArgumentError("Unknown field $F"))
 
 @propagate_inbounds function gindex(M::MetaData{T}, g::T) where T
-    id = findfirst(x -> x.genotype == g, M)
-    # @boundscheck if id === nothing
-    #     throw(ArgumentError("Unknown genotype $g."))
-    # end
-    id
+    return haskey(M.index, g) ? M.index[g] : nothing
 end
 
 @propagate_inbounds function Base.getindex(M::MetaData{T}; g) where {T}
@@ -152,20 +167,13 @@ end
     end
     (genotype = M.genotypes[i], npop = M.npops[i], fitness = M.fitnesses[i], snps = M.snps[i], age = M.ages[i])
 end
-@propagate_inbounds function Base.getindex(M::MetaData{T}, ::Colon) where {T}
-    I = 1:M._len
-    @inbounds M[I]
-end
+Base.getindex(M::MetaData{T}, ::Colon) where {T} = @inbounds M[eachindex(M)]
 
 @propagate_inbounds function Base.getindex(M::MetaData{T}, I) where {T}
-    @boundscheck begin
-        within = intersect(I, eachindex(M))==I
-        if !within
-            throw(BoundsError())
-        end
-    end
+    @boundscheck checkbounds(Bool, M, I) || throw(BoundsError(M, I))
     N = MetaData{T}(
         0,
+        filter(x->x in I, M.index),
         M.genotypes[I],
         M.npops[I],
         M.fitnesses[I],
@@ -202,25 +210,14 @@ end
 Base.@propagate_inbounds view(M::MetaData{T}, ::Colon, field::Symbol) where {T} = view(M, :, Val(field))
 
 @propagate_inbounds function getindex(M::MetaData{T}, I::AbstractVector, field::Symbol) where T
-    @boundscheck begin
-        within = intersect(I, eachindex(M)) == I
-        if !within
-            throw(BoundsError())
-        end
-    end
+    @boundscheck checkbounds(Bool, M, I) || throw(BoundsError(M, I))
     return getfield(M, field)[I]
 end
 
 @propagate_inbounds function view(M::MetaData{T}, I::AbstractVector, field::Symbol) where T
-    @boundscheck begin
-        within = intersect(I, eachindex(M))==I
-        if !within
-            throw(BoundsError())
-        end
-    end
+    @boundscheck checkbounds(Bool, M, I) || throw(BoundsError(M, I))
     return Base.view(getfield(M, field), I)
 end
-
 
 function resize!(M::MetaData, n::Integer)
     if n<length(M)
@@ -239,14 +236,13 @@ function _resize!(M::MetaData, n::Integer)
         return M
     end
     for field in fieldnames(MetaData)
-        if field in [:_len, :misc]
+        if field in [:_len, :misc, :index]
             continue
         else
             resize!(getproperty(M, field), n)
         end
     end
-    # Mnew = similar(M, n)
-    # copyto!(Mnew, M)
+
     M
 end    
 
@@ -259,7 +255,7 @@ Base.push!(M::MetaData, D::MetaDatum) = push!(M, values(D))
     i = lastindex(M)+1
     int_length = length(M.genotypes) # internal length
     if i >= int_length
-        _resize!(M, ceil(Int64, max(1, int_length*2.0)))
+        _resize!(M, ceil(Int64, max(1, int_length*2)))
     end
     M._len = i
     setindex!(M, D, i)
@@ -268,10 +264,14 @@ end
 @propagate_inbounds Base.setindex!(M::MetaData, D::MetaDatum, i::Integer) = setindex!(M, values(D), i)
 
 @propagate_inbounds function Base.setindex!(M::MetaData{T}, D::MetaDatumFieldTypes{T}, i::Integer) where {T}
-    @boundscheck if i>lastindex(M)
-        throw(BoundsError(M, i))
+    @boundscheck checkbounds(Bool, M, i) || throw(BoundsError(M, I))
+
+    g = M.genotypes[i] = D[1]
+    if isnothing(gindex(M, g))
+        insert!(M.index, g, i)
+    else
+        M.index[g] = i
     end
-    M.genotypes[i] = D[1]
     M.npops[i] = D[2]
     M.fitnesses[i] = D[3]
     M.snps[i] = D[4]
@@ -280,11 +280,8 @@ end
 end
 
 @inline @propagate_inbounds function setindex!(M::MetaData, v, i::Integer, field)
-    @boundscheck begin
-        if i > length(M)
-            throw(BoundsError(M,i))
-        end
-    end
+    @boundscheck checkbounds(Bool, M, i) || throw(BoundsError(M, I))
+
     mfield = _pluralize(field)
     @inbounds setindex!(getproperty(M, mfield), v, i)
     return v
