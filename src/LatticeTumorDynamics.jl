@@ -14,7 +14,7 @@ import Distributions: Binomial, Exponential, cdf
 import Random: shuffle!
 
 using ..Lattices
-import ..TumorConfigurations: TumorConfiguration, gindex, _resize!
+import ..TumorConfigurations: TumorConfiguration, getfitness, gindex, _resize!
 
 import ..Phylogenies: annotate_snps!, add_snps!, prune_phylogeny!, sample_ztp
 
@@ -51,7 +51,7 @@ Run exponential growth on an unstructered population.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
 function exponential!(
-    state::TumorConfiguration{NoLattice{Int64}};
+    state::TumorConfiguration{Int64, NoLattice{Int64}};
     fitness = g -> 1.0,
     T = 0,
     mu::Float64 = 0.0,
@@ -194,7 +194,7 @@ is reach. After that individuals begin replacing each other.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
 function moran!(
-    state::TumorConfiguration{NoLattice{Int64}};
+    state::TumorConfiguration{Int64, NoLattice{Int64}};
     fitness = (s, gold, gnew) -> 1.0,
     T = 0,
     mu::Float64 = 0.0,
@@ -261,9 +261,9 @@ function moran!(
 
         if b_die
             die = sample(wnpops)
-            rates[die] -= state.meta[die, :fitness]
-            total_rate -= state.meta[die, :fitness] + d
-            state.meta[die, :npop] -= 1
+            rates[die] -= state.meta[die, Val(:fitness)]
+            total_rate -= state.meta[die, Val(:fitness)] + d
+            state.meta[die, Val(:npop)] -= 1
             Ntotal -= 1
         else
             ## Pick one to proliferate
@@ -278,39 +278,39 @@ function moran!(
 
             b_grow = p_grow==1.0 || rand() < p_grow
             if !b_grow
-                rates[old] -= state.meta[old, :fitness]
-                total_rate -= state.meta[old, :fitness] + d
-                state.meta[old, :npop] -= 1
+                rates[old] -= state.meta[old, Val(:fitness)]
+                total_rate -= state.meta[old, Val(:fitness)] + d
+                state.meta[old, Val(:npop)] -= 1
                 Ntotal -= 1
             end
     
-            genotype = state.meta[old, :genotype]
+            genotype = state.meta[old, Val(:genotype)]
             if rand() < p_mu
-                new_genotype = state.meta[end, :genotype] + 1
+                new_genotype = state.meta[end, Val(:genotype)] + 1
                 if new_genotype != genotype
                     push!(state, new_genotype)
                     if makesnps
-                        new_snps = copy(state.meta[old, :snps])
+                        new_snps = copy(state.meta[old, Val(:snps)])
                         add_snps!(new_snps, mu, L = genome_length, allow_multiple = allow_multiple, replace = replace_mutations)
-                        state.meta[end, :snps] = new_snps
+                        state.meta[end, Val(:snps)] = new_snps
                     end
-                    state.meta[end, :fitness] = fitness(state, genotype, new_genotype)
+                    state.meta[end, Val(:fitness)] = fitness(state, genotype, new_genotype)
                     push!(rates, 0.0)
                     add_edge!(state.phylogeny, nv(state.phylogeny), old)
                     old = length(state.meta)
                 end
             end
-            rates[old] += state.meta[old, :fitness]
-            total_rate += state.meta[old, :fitness] + d
-            state.meta[old, :npop] += 1
+            rates[old] += state.meta[old, Val(:fitness)]
+            total_rate += state.meta[old, Val(:fitness)] + d
+            state.meta[old, Val(:npop)] += 1
             Ntotal += 1
 
             # If carrying capacity is reached, one needs to die.
             if K < Ntotal
                 while (die=sample(wnpops))!=old end
-                rates[die] -= state.meta[die, :fitness]
-                total_rate -= state.meta[die, :fitness] + d
-                state.meta[die, :npop] -= 1
+                rates[die] -= state.meta[die, Val(:fitness)]
+                total_rate -= state.meta[die, Val(:fitness)] + d
+                state.meta[die, Val(:npop)] -= 1
                 Ntotal -= 1
             end
         end
@@ -348,7 +348,7 @@ Birthrate depends linearily on the number of neighbors.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
 function die_or_proliferate!(
-    state::TumorConfiguration{<:RealLattice};
+    state::TumorConfiguration{G, <:RealLattice};
     fitness = (s, gold, gnew) -> 1.0,
     T = 0,
     mu::Float64 = 0.0,
@@ -366,7 +366,7 @@ function die_or_proliferate!(
     callback = (s, t) -> begin end,
     abort = s -> false,
     sizehint=0,
-    kwargs...)
+    kwargs...) where G
 
     # genotypes = state.meta.genotypes
     # npops = state.meta.npops
@@ -386,7 +386,7 @@ function die_or_proliferate!(
     lin_N = sz[1]
     tot_N = length(lattice)
 
-    fitness_lattice = [k != 0 ? state.meta[g=k, :fitness] : 0.0 for k in lattice.data]
+    fitness_lattice = [k != 0 ? getfitness(state, k) : 0.0 for k in lattice.data]
     br_lattice = zeros(Float64, size(lattice.data))
 
     nonzeros = count(x -> x != 0, lattice.data)
@@ -396,7 +396,7 @@ function die_or_proliferate!(
     neighbor_indices = collect(1:length(nn))
 
     for k in 1:tot_N
-        br_lattice[k]::Float64 = (1.0 - density!(nn, lattice, I[k])) * base_br * fitness_lattice[k]
+        br_lattice[k]::Float64 = (1.0 - density!(nn, lattice, I[k])) * (base_br * fitness_lattice[k])
     end
     br_summary = reshape(sum(br_lattice, dims=1:dimension(lattice)-1), :)
 
@@ -552,28 +552,29 @@ function die_or_proliferate!(
                 # end
                 g_id::Int = gindex(state.meta, genotype)
                 if !b_grow
-                    state.meta[g_id, :npop] -= 1
+                    state.meta[g_id, Val(:npop)] -= 1
+                    # setnpop!(state, getnpop(state, g_id)-1, g_id)
                 end
                 if rand() < p_mu
                     ## TODO: custom genotypes
-                    new_genotype = state.meta[end, :genotype] + 1 
+                    new_genotype = state.meta[end, Val(:genotype)] + 1 
 
                     if new_genotype != genotype
                         push!(state, new_genotype)
                         if makesnps
-                            new_snps = copy(state.meta[g_id, :snps])
+                            new_snps = copy(state.meta[g_id, Val(:snps)])
                             add_snps!(new_snps, mu, L = genome_length, kind=mu_type, allow_multiple = allow_multiple, replace = replace_mutations)
-                            state.meta[end, :snps] = new_snps
+                            state.meta[end, Val(:snps)] = new_snps
                         end
-                        state.meta[end, :fitness] = fitness(state, genotype, new_genotype)
+                        state.meta[end, Val(:fitness)] = fitness(state, genotype, new_genotype)
                         add_edge!(state.phylogeny, nv(state.phylogeny), g_id)
                         genotype = new_genotype
                         g_id = lastindex(state.meta)
                     end
                 end
                 ## END Mutation ##
-                state[new] = genotype
-                fitness_lattice[new] = state.meta[g_id, :fitness]
+                @inbounds state[new] = genotype
+                fitness_lattice[new] = state.meta[g_id, Val(:fitness)]
 
                 if !b_grow
                     total_rate -= d + br_lattice[new]
@@ -590,7 +591,7 @@ function die_or_proliferate!(
                             local z::Int = (j-1)÷size_cross + 1
                             total_rate -= br_lattice[j]
                             br_summary[z] -= br_lattice[j]
-                            br_lattice[j] -=  1.0 / nneighbors(lattice, n) * fitness_lattice[j] * base_br
+                            br_lattice[j] -=  (1.0 / nneighbors(lattice, n)) * (fitness_lattice[j] * base_br)
                             br_summary[z] += br_lattice[j]
                             total_rate += br_lattice[j]
                         end
@@ -643,7 +644,7 @@ is reach. After that individuals begin replacing each other.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
 function twonew!(
-    state::TumorConfiguration{NoLattice{Int64}};
+    state::TumorConfiguration{Int64, NoLattice{Int64}};
     fitness = (s, gold, gnew) -> 1.0,
     T = 0,
     mu::Float64 = 0.0,

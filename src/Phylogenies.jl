@@ -172,7 +172,7 @@ Ends prematurely if a vertex with annotation is found on the way from tip to roo
 * `kind=:poisson`: `:poisson` or `:fixed`
 * `replace=false`: Replace existing SNPs.
 """
-function annotate_lineage!(S::TumorConfigurations.TumorConfiguration{<:AbstractLattice{T}}, μ, v::Int, root=1;
+function annotate_lineage!(S::TumorConfigurations.TumorConfiguration{T, <:AbstractLattice{T}}, μ, v::Int, root=1;
     L=10^9, allow_multiple=false, kind=:poisson, replace=false) where {T}
     path = []
     while !isnothing(v) && v!=root && isempty(S.meta[v, :snps])
@@ -237,12 +237,12 @@ Remove unpopulated genotypes from the graph.
 Any gap in the phylogeny is bridged.
 """
 function prune_phylogeny!(S::TumorConfigurations.TumorConfiguration)
-    P = S.phylogeny
-    npops = @view S.meta.npops[1:S.meta._len]
+    P = S.phylogeny::SimpleDiGraph{Int64}
+    # npops = @view S.meta.npops[1:S.meta._len]
 
     function bridge!(s, d)
         children = inneighbors(P, d)
-        if s==1 || npops[d] > 0
+        if s==1 || getnpop(S, d) > 0
             @debug "Adding edge"  d s
             add_edge!(P, d, s)
         elseif length(children)==0
@@ -254,13 +254,13 @@ function prune_phylogeny!(S::TumorConfigurations.TumorConfiguration)
         end
     end
 
-    itr = filter(v->npops[v]==0 && v!=1, df_traversal(P))|>collect
+    itr = filter(v->getnpop(S, v)==0 && v!=1, df_traversal(P))|>collect
     subvertices = setdiff(1:nv(P), itr)
     for (i,v) in enumerate(itr)
         children = inneighbors(P, v)
         parent = outneighbors(P, v)
         @debug "Vertex $v is empty" v children  parent[1]
-        while parent[1]!=1 && !isempty(parent) && npops[parent[1]] == 0
+        while parent[1]!=1 && !isempty(parent) && getnpop(S, parent[1]) == 0
             parent = outneighbors(P, parent[1])
         end
         if isempty(parent)
@@ -274,8 +274,8 @@ function prune_phylogeny!(S::TumorConfigurations.TumorConfiguration)
         # @debug "Removing vertex" v
         # rem_vertex!(P, v)
     end
-    S.phylogeny = induced_subgraph(P, subvertices)[1]
-    S.meta = S.meta[subvertices]
+    S.phylogeny = induced_subgraph(P, subvertices)[1]::SimpleDiGraph{Int64}
+    S.meta = @inbounds S.meta[subvertices]
     return S.phylogeny, S.meta
 end
 

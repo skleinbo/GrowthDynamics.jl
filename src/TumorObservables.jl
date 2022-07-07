@@ -191,7 +191,7 @@ function genotype_dict(S::TumorConfiguration)
     return G
 end
 
-function total_birthrate(S::TumorConfiguration{<:Lattices.RealLattice}; baserate=1.0)
+function total_birthrate(S::TumorConfiguration{T, Lattices.RealLattice{T}}; baserate=1.0) where T
     L = S.lattice
     F = S.meta[:fitnesses]
     G = genotype_dict(S)
@@ -206,8 +206,8 @@ function total_birthrate(S::TumorConfiguration{<:Lattices.RealLattice}; baserate
     total_rate
 end
 
-function total_birthrate(S::TumorConfiguration{<:Lattices.NoLattice}; baserate=1.0)
-    sum(S.meta[:npops] .* S.meta[:fitnesses])
+function total_birthrate(S::TumorConfiguration{T, Lattices.NoLattice{T}}; baserate=1.0) where T
+    sum(S.meta[:npops] .* S.meta[:fitnesses]) * baserate
 end
 
 
@@ -222,7 +222,7 @@ end
 function kpzroughness(v::AbstractVector, lattice, args...;kwargs...)
     v = interface(v, lattice)[2]
     if length(v) < 2
-        return 0f0
+        return 0.0
     end
     o = coord(lattice, midpoint(lattice))
     r = round(norm(v[1].-o))
@@ -438,10 +438,10 @@ end
 
 Returns coordinates of cells of genotype `g`.
 """
-function positions(state::TumorConfiguration{<:Lattices.RealLattice}, g)
-    idx = findall(x->x==g, state.lattice.data)
-    dim = Lattices.dimension(state.lattice)
-    convert(Vector{Pointf0{dim}}, map(I->Pointf0{dim}(Lattices.coord(state.lattice, I)), idx))
+function positions(state::TumorConfiguration{T, <:Lattices.AbstractLattice{T,N}}, g) where {T,N}
+    idx = findall(==(g), state.lattice.data)
+    # dim = Lattices.dimension(state.lattice)
+    convert(Vector{Pointf0{N}}, map(I->Pointf0{N}(Lattices.coord(state.lattice, I)), idx))
 end
 
 """
@@ -456,12 +456,12 @@ function explode_into_shells(v::Vector{T}, o, a; a0=0f0) where T<:Pointf0
 end
 
 """
-    extract_shells(A::TumorConfiguration{<:Lattices.CubicLattice}, outer)
+    extract_shells(T, outer)
 
-Explode tumor configuration into shells [r, r+a) with radii between r in [1..outer].
+Explode tumor configuration `T` into shells [r, r+a) with radii between r in [1..outer].
 Return dictionary with trajectory of every genotype but 0 and 1 (set `deleteone/zero=false` to keep the wildtype/count empty sites).
 """
-function extract_shells(state::TumorConfiguration{<:Lattices.CubicLattice}, outer; deleteone=true, deletezero=true)
+function extract_shells(state::TumorConfiguration{T, <:Lattices.CubicLattice}, outer; deleteone=true, deletezero=true) where T
     a = Lattices.spacings(state.lattice)[1]
     dist_mat = Lattices.euclidean_dist_matrix(state.lattice, Lattices.midpoint(state.lattice))
     shell_inds = map(1:outer) do r; findall(x-> r-a/2 < x <= r+a/2, dist_mat ); end
