@@ -41,23 +41,18 @@ export  allele_fractions,
 
 "Dictionary `(SNP, population count)`"
 function allele_size(S::TumorConfiguration, t=0)
-    X = Dict{eltype(eltype(S.meta.snps)), Int64}()
-    for j in 1:length(S.meta)
-        for snp in S.meta.snps[j]
+    X = Dict{Int, Int}()
+    for v in S.meta
+        isnothing(v.snps) && continue
+        for snp in v.snps
             if haskey(X, snp)
-                X[snp] += S.meta.npops[j]
+                X[snp] += v.npop
             else
-                push!(X, snp => S.meta.npops[j])
+                push!(X, snp => v.npop)
             end
         end
     end
     return X
-end
-
-"Dictionary of `(SNP, freq)`."
-allele_fractions(S::TumorConfiguration, t=0) = begin
-    as = allele_size(S, t)
-    Dict(zip(keys(as), values(as) ./ total_population_size(S)))
 end
 
 """
@@ -81,6 +76,12 @@ function sampled_allele_fractions(S::TumorConfiguration, samples=length(S.meta))
         end
     end
     return X
+end
+
+"Dictionary of `(SNP, freq)`."
+allele_fractions(S::TumorConfiguration, t=0) = begin
+    as = allele_size(S, t)
+    Dict(zip(keys(as), values(as) ./ total_population_size(S)))
 end
 
 function allele_fractions(L::Lattices.RealLattice{<:Integer})
@@ -162,7 +163,7 @@ end
 
 "Total population size. Duh."
 function total_population_size(S::TumorConfiguration)
-    sum(@view S.meta.npops[begin:S.meta._len])
+    sum(@view S.meta[:, :npops])
 end
 
 function population_size(L::Lattices.RealLattice{T}, t) where T<:Integer
@@ -185,12 +186,8 @@ function population_size(S::TumorConfiguration, t)
     zip(S.meta[:, :genotypes], S.meta[:, :npops]) |> collect
 end
 
-function genotype_dict(S::TumorConfiguration)
-    G = Dict{eltype(S.meta.genotypes), Int64}()
-    for (k,g) in enumerate(S.meta[:genotypes])
-        push!(G, g=>k)
-    end
-    return G
+function genotype_dict(S::TumorConfiguration{T, A}) where {T,A}
+    return S.meta.index
 end
 
 function total_birthrate(S::TumorConfiguration{T, Lattices.RealLattice{T}}; baserate=1.0) where T
@@ -543,21 +540,28 @@ end =#
 
 is_leaf(P::SimpleDiGraph, v) = length(inneighbors(P, v)) == 0
 
-"List polymorphisms that are common to all genotypes."
-function common_snps(S::TumorConfiguration)
-    populated = findall(v->v > 0, S.meta[:npops])
-    if isempty(populated)
-        return Int64[]
-    else
-        intersect(map(populated) do v
-            try
-                S.meta.snps[v]
-            catch
-                @info "Vertex $v carries no field snps."
-                Int64[]
-            end
-        end...)
+"""
+    common_snps(::TumorConfiguration; filterdead=true)
+
+List polymorphisms that are common to all genotypes.
+
+# Optional arguments:
+- `filterdead=true`: exclude unpopulated genotypes?
+"""
+function common_snps(S::TumorConfiguration; filterdead=true)
+    firstpopulated = findfirst(v->v.npop > ifelse(filterdead, 0, -1), S.meta)
+    if isnothing(firstpopulated)
+        return Int[]
     end
+    snps = copy(S.meta[firstpopulated[1], :snps])
+    @show snps
+    for v in S.meta
+        filterdead && v.npop == 0 && continue
+        isnothing(v.snps) && return Int[]
+        intersect!(snps, v.snps)
+        isempty(snps) && return Int[]
+    end
+    return snps
 end
 
 """
@@ -565,15 +569,18 @@ end
 
 Vector of polymorphisms (segregating sites).
 """
-function polymorphisms(S::TumorConfiguration)
-    SNPS = Set(S.meta[1, :snps])
-    for v in vertices(S.phylogeny)
-        if !is_leaf(S.phylogeny, v)
-            continue
-        end
-        union!(SNPS, S.meta[v, :snps])
+function polymorphisms(S::TumorConfiguration; filterdead=true)
+    firstpopulated = findfirst(v->v.npop > ifelse(filterdead, 0, -1), S.meta)
+    if isnothing(firstpopulated)
+        return Set{Int}()
     end
-    SNPS
+    snps = hassnps(S.meta, firstpopulated) ? Set{Int}(S.meta[firstpopulated, :snps]) : Set{Int}()
+    for v in S.meta
+        filterdead && v.npop == 0 && continue
+        isnothing(v.snps) && continue
+        union!(snps, v.snps)
+    end
+    snps
 end
 
 """
@@ -638,13 +645,13 @@ end
     pairwise(S::TumorConfiguration)
 
 Matrix of pairwise differences.  
-`skipdead`: Do not include extinct genotypes.
+`filterdead`: Do not include extinct genotypes.
 """
 function pairwise(S::TumorConfiguration;
-     genotypes=S.meta[:genotypes], 
-     skipdead=false
+     genotypes=S.meta[:, :genotypes], 
+     filterdead=false
 )
-    if skipdead
+    if filterdead
         itr = [ g for g in genotypes if S.meta[g=g, :npop]>0 ]
     else
         itr = genotypes

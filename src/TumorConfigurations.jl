@@ -18,11 +18,14 @@ export half_space, hassnps, lastgenotype, nolattice_state, MetaData
 export push!, single_center, spheref, spherer, sphere_with_diverse_outer_shell
 export sphere_with_single_mutant_on_outer_shell, TumorConfiguration, uniform
 
+const SNPSType = Union{Nothing, Vector{Int}}
+
 ##-- METADATA for efficiently storing population information --##
 const MetaDatumFields = (:genotype, :npop, :fitness, :snps, :age)
-const MetaDatumFieldTypes{T} = Tuple{T,Int64,Float64,Vector{Int64},Tuple{Int64,Float64}}
-const MetaDatum{T} = NamedTuple{MetaDatumFields,MetaDatumFieldTypes{T}}
-default_metadatum() = (0, 1.0, Int64[], (0, 0.0))
+const MetaDatumFieldTypes{T,S<:SNPSType} = Tuple{T,Int64,Float64,S,Tuple{Int64,Float64}}
+const MetaDatum{T,S} = NamedTuple{MetaDatumFields,MetaDatumFieldTypes{T,S}}
+default_metadatum() = (0, 1.0, nothing, (0, 0.0))
+
 """
     MetaDatum
 
@@ -36,13 +39,13 @@ function MetaDatum(g)
     MetaDatum((g, default_metadatum()...))
 end
 
-mutable struct MetaData{T} <: AbstractArray{MetaDatum{T}, 1}
+mutable struct MetaData{T} <: AbstractArray{MetaDatum{T,S} where S<:SNPSType, 1}
     _len::Int64
     index::Dictionary{T, Int}
     genotypes::Vector{T}
     npops::Vector{Int}
     fitnesses::Vector{Float64}
-    snps::Vector{Vector{Int}}
+    snps::Vector{SNPSType}
     ages::Vector{Tuple{Int,Float64}}  ## (simulation t, real t) when a genotype entered.
     misc::Dict{Any,Any} # store anything else in here.
 end
@@ -62,7 +65,7 @@ function MetaData{T}(::UndefInitializer, n) where T
         Vector{T}(undef, n),
         Vector{Int64}(undef, n),
         Vector{Float64}(undef, n),
-        Vector{Vector{Int64}}(undef, n),
+        Vector{SNPSType}(undef, n),
         Vector{Tuple{Int64,Float64}}(undef, n),
         Dict()
     )
@@ -81,7 +84,7 @@ MetaData(a::MetaDatumFieldTypes{T}) where {T} = MetaData{T}(1, Dictionary(a[1], 
 
 Construct MetaData from vectors of genotypes and population sizes.
 * Fitnesses default to 1.0
-* SNPs default to empty.
+* SNPs default to `nothing`.
 * Ages default to (0, 0.0)
 * misc defaults to an empty dictionary.
 """
@@ -91,7 +94,7 @@ function MetaData(g::Vector{T}, n::Vector{<:Integer}) where {T}
         throw(ArgumentError("Lengths of arguments do not match."))
     end
     fitnesses = fill(1.0, N)
-    snps = fill(Int64[], N)
+    snps = SNPSType[nothing for _ in 1:N]
     ages = fill((0, 0.0), N)
     M = MetaData(N, Dictionary{T, Int}(), g, n, fitnesses, snps, ages, Dict())
     index!(M)
@@ -100,6 +103,9 @@ end
 
 hassnps(M::MetaData, v) = !isnothing(M[v, :snps]) && !isempty(M[v, :snps])
 hassnps(M::MetaData; g) = !isnothing(M[g; :snps]) && !isempty(M[g; :snps])
+
+lastgenotype(M::MetaData) = M[end, Val(:genotype)]
+
 """
     index!(::MetaData)
 
@@ -297,7 +303,7 @@ end
 end
 
 
-##--                                                        --##
+##--  BEGIN TumorConfiguration                                   --##
 
 ## Certain values on the lattice are special. 
 ## For example, we need a way to identify the empty site.
@@ -366,7 +372,7 @@ end
 
 "Add a new _unconnected_ genotype to a TumorConfiguration."
 @propagate_inbounds @inline function Base.push!(S::TumorConfiguration{T, <:Lattices.TypedLattice{T}}, g::T) where {T}
-    push!(S, MetaDatum{T}((g, 0, 1.0, Int64[], (S.t, S.treal))))
+    push!(S, MetaDatum{T, Nothing}((g, 0, 1.0, nothing, (S.t, S.treal))))
 end
 
 @propagate_inbounds function Base.push!(S::TumorConfiguration{T, <:Lattices.TypedLattice{T}}, M::MetaDatum{T}) where {T}
@@ -411,8 +417,14 @@ for field in MetaDatumFields
     end
 end
 
+add_vertex!(state::TumorConfiguration, newgenotype, parent) = add_vertex!(state.phylogeny, index(state, newgenotype), index(state, parent))
+
 index(S::TumorConfiguration, args...) = index(S.meta, args...)
 
+"Genotype that was last added to the population."
+lastgenotype(S::TumorConfiguration) = lastgenotype(S.meta)
+
+size(S::TumorConfiguration, args...) = size(S.lattice, args...)
 
 ###################################################################
 ## -- Convenience constructors for various initial geometries -- ##
@@ -527,7 +539,7 @@ end
 Fill lattice of type `LT` (e.g `CubicLattice`) with genotype `g1` and put a (L2-)sphere with genotype `g2`
 that occupies approx. a fraction `f` of the lattice at the center.
 """
-function spheref(::Type{LT}, L::Int; f = 1 / 10, g1=0, g2=1) where LT<:Lattices.RealLattice
+function spheref(::Type{LT}, L::Int; f = 1 / 10, g1::G=0, g2::G=1) where {G,LT<:Lattices.RealLattice}
     if !(0.0<=f<=1)
         throw(ArgumentError("f must be between 0 and 1."))
     end
@@ -560,8 +572,8 @@ function spheref(::Type{LT}, L::Int; f = 1 / 10, g1=0, g2=1) where LT<:Lattices.
     for ind in sphere
         state[ind] = g2
     end
-    if g1!=0 && g2!=0
-        add_edge!(state.phylogeny, g2, g1)
+    if g1!=zero(G) && g2!=zero(G)
+        add_edge!(state.phylogeny, index(state.meta, g2), index(state.meta, g1))
     end
 
     return state, sphere
