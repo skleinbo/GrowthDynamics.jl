@@ -2,7 +2,7 @@ module TumorObservables
 
 import Base.Iterators: filter
 import CoordinateTransformations: Spherical, SphericalFromCartesian
-import DataFrames: DataFrame
+import DataFrames: DataFrame, subset
 import Distributions: Multinomial
 import GeometryBasics: Pointf0, Point3f
 import Graphs: SimpleGraph, SimpleDiGraph, nv, inneighbors
@@ -15,6 +15,7 @@ import ..Lattices: CubicLattice, RealLattice, midpoint, coord, index, neighbors,
 import ..TumorConfigurations: TumorConfiguration, index, hassnps
 
 using ..Phylogenies
+import ..Phylogenies: parent
 
 export  allele_fractions,
         sampled_allele_fractions,
@@ -35,7 +36,8 @@ export  allele_fractions,
         mean_pairwise,
         extract_shells,
         positions,
-        explode_into_shells
+        explode_into_shells,
+        tajimasd
 
 "Dictionary `(SNP, population count)`"
 function allele_size(S::TumorConfiguration, t=0)
@@ -113,7 +115,7 @@ function allele_spectrum(state::TumorConfiguration; threshold=0.0, read_depth=to
   as.fpop = as.npop ./ popsize
 
   ## Detection threshold
-  as = filter(x->x.fpop >= threshold, as) |> DataFrame
+  as = subset(as, :fpop => (x->x .>= threshold))
 
   ## Sampling
   sample_percent = read_depth / popsize

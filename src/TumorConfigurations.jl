@@ -14,16 +14,9 @@ import ..Lattices: sitesperunitcell
 import LinearAlgebra: norm
 import StatsBase
 
-export TumorConfiguration,
-    MetaData,
-    push!,
-    nolattice_state,
-    single_center,
-    uniform,
-    half_space,
-    spheref, spherer,
-    sphere_with_diverse_outer_shell,
-    sphere_with_single_mutant_on_outer_shell
+export half_space, hassnps, lastgenotype, nolattice_state, MetaData
+export push!, single_center, spheref, spherer, sphere_with_diverse_outer_shell
+export sphere_with_single_mutant_on_outer_shell, TumorConfiguration, uniform
 
 ##-- METADATA for efficiently storing population information --##
 const MetaDatumFields = (:genotype, :npop, :fitness, :snps, :age)
@@ -105,6 +98,8 @@ function MetaData(g::Vector{T}, n::Vector{<:Integer}) where {T}
     M
 end
 
+hassnps(M::MetaData, v) = !isnothing(M[v, :snps]) && !isempty(M[v, :snps])
+hassnps(M::MetaData; g) = !isnothing(M[g; :snps]) && !isempty(M[g; :snps])
 """
     index!(::MetaData)
 
