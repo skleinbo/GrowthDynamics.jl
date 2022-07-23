@@ -607,10 +607,10 @@ Calculates `(occupied sites)/(no. of neighbors)`
 "Occupied" means != zero(eltype(L.data))
 """
 density(L::RealLattice, I) = density!(Neighbors(L), L, I)
-function density!(nn::Neighbors, L::RealLattice, I)
+function density!(nn::Neighbors, L::RealLattice{G}, I) where G
     tot = nneighbors(L, I)
     neighbors!(nn, L, I)
-    nz =  count(x->!out_of_bounds(x, size(L)) && L.data[x]!=0, nn) ## TODO: makes assumption about the numerical value that repr. unoccupied
+    nz =  count(x->!out_of_bounds(x, size(L)) && L.data[x]!=zero(G), nn) ## TODO: makes assumption about the numerical value that repr. unoccupied
     return nz/tot
 end
 

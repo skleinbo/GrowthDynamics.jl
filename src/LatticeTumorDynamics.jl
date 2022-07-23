@@ -340,15 +340,16 @@ Birthrate depends linearily on the number of neighbors.
 """
 function eden_with_density!(
     state::TumorConfiguration{G, <:RealLattice};
+    label = (s, gold) -> lastgenotype(s)+1,
     fitness = (s, gold, gnew) -> 1.0,
     T = 0,
-    mu::Float64 = 0.0,
+    mu = 0.0,
     mu_type = :poisson,
     makesnps=true,
     genome_length = 10^9,
     replace_mutations = false,
     allow_multiple = false,
-    d::Float64 = 0.0,
+    d = 0.0,
     baserate = 1.0,
     p_grow = 1.0,
     constraint = true,
@@ -358,11 +359,6 @@ function eden_with_density!(
     abort = s -> false,
     sizehint=0,
     kwargs...) where G
-
-    # genotypes = state.meta.genotypes
-    # npops = state.meta.npops
-    # fitnesses = state.meta.fitnesses
-    # snps = state.meta.snps
 
     if sizehint > length(state.meta.genotypes)
         _resize!(state.meta, sizehint)
@@ -377,17 +373,17 @@ function eden_with_density!(
     lin_N = sz[1]
     tot_N = length(lattice)
 
-    fitness_lattice = [k != 0 ? getfitness(state, k) : 0.0 for k in lattice.data]
+    fitness_lattice = [k != zero(G) ? getfitness(state, k) : 0.0 for k in lattice.data]
     br_lattice = zeros(Float64, size(lattice.data))
 
-    nonzeros = count(x -> x != 0, lattice.data)
+    nonzeros = count(x -> x != zero(G), lattice.data)
     base_br = 1.0 # - d
 
     nn = Lattices.Neighbors(lattice) # Initialize neighbors to the appr. type
     neighbor_indices = collect(1:length(nn))
 
     for k in 1:tot_N
-        br_lattice[k]::Float64 = (1.0 - density!(nn, lattice, I[k])) * (base_br * fitness_lattice[k])
+        br_lattice[k] = (1.0 - density!(nn, lattice, I[k])) * (base_br * fitness_lattice[k])
     end
     br_summary = reshape(sum(br_lattice, dims=1:dimension(lattice)-1), :)
 
@@ -403,7 +399,7 @@ function eden_with_density!(
     validneighbor = false
     action::Action = none
     total_rate::Float64 = mapreduce(+, enumerate(lattice.data)) do x
-         x[2] > 0 ? d + br_lattice[x[1]] : 0.0
+         x[2] != zero(G) ? d + br_lattice[x[1]] : 0.0
     end
     @debug total_rate
 
@@ -420,11 +416,6 @@ function eden_with_density!(
             break
         end
 
-        # In case we pruned, renew bindings.
-        # genotypes = state.meta.genotypes
-        # npops = state.meta.npops
-        # fitnesses = state.meta.fitnesses
-        # snps = state.meta.snps
         ## Much cheaper than checking the whole lattice each iteration
         ## Leave the loop if lattice is empty
         if nonzeros == 0
@@ -455,7 +446,7 @@ function eden_with_density!(
         if who_and_what < d*nonzeros # death
             action = die
             _idx = floor(Int, who_and_what/d) # non-zero to die.
-            while state[selected]==0 && selected != _idx && selected < tot_N
+            while state[selected]==zero(G) && selected != _idx && selected < tot_N
                 selected += 1
             end
             z::Int = (selected-1)÷size_cross + 1 # `slice' coordinate
@@ -464,13 +455,13 @@ function eden_with_density!(
             total_rate -= br_lattice[selected] + d
             br_summary[z] -= br_lattice[selected]
 
-            state[selected] = 0
+            state[selected] = zero(G)
             fitness_lattice[selected] = 0.
             br_lattice[selected] = 0.
             ## Update birth-rates
             neighbors!(nn, lattice, I[selected])
             for n in nn
-                if !out_of_bounds(n, sz) && state[n] != 0
+                if !out_of_bounds(n, sz) && state[n] != zero(G)
                     j = Lin[n]
                     local z::Int = (j-1)÷size_cross + 1
                     total_rate -= br_lattice[j]
@@ -515,7 +506,7 @@ function eden_with_density!(
                     validneighbor = false
                     for j in shuffle!(neighbor_indices)
                         nnj = nn[j]
-                        if !out_of_bounds(nnj, sz) && state[nnj] == 0
+                        if !out_of_bounds(nnj, sz) && state[nnj] == zero(G)
                             new_cart = nnj
                             validneighbor = true
                             break
@@ -548,12 +539,12 @@ function eden_with_density!(
                 end
                 if rand() < p_mu
                     ## TODO: custom genotypes
-                    new_genotype = state.meta[end, Val(:genotype)] + 1 
+                    new_genotype = label(state, g_id)
 
                     if new_genotype != genotype
                         push!(state, new_genotype)
                         if makesnps
-                            new_snps = copy(state.meta[g_id, Val(:snps)])
+                            new_snps = hassnps(state.meta, g_id) ? copy(state.meta[g_id, Val(:snps)]) : Int[]
                             add_snps!(new_snps, mu, L = genome_length, kind=mu_type, allow_multiple = allow_multiple, replace = replace_mutations)
                             state.meta[end, Val(:snps)] = new_snps
                         end
@@ -577,7 +568,7 @@ function eden_with_density!(
 
                 if b_grow
                     for n in nn
-                        if !out_of_bounds(n, sz) && state[n] != 0
+                        if !out_of_bounds(n, sz) && state[n] != zero(G)
                             j = Lin[n]
                             local z::Int = (j-1)÷size_cross + 1
                             total_rate -= br_lattice[j]

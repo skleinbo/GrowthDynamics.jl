@@ -119,21 +119,24 @@ function annotate_snps!(S::TumorConfiguration, μ;
     L=10^9, allow_multiple=false, kind=:poisson, replace=false)
 
     P = S.phylogeny
-    SNPS = S.meta.snps
+    M = S.meta
     # D = Poisson(μ)
 
     tree = df_traversal(P)
     # set_prop!(P, 1, :snps, Int[])
     for v in tree
-        if !replace && !isempty(SNPS[v])
+        if !replace && hassnps(S.meta, v)
             continue
         end
         parent = outneighbors(P, v)[1]
-        snps = copy(SNPS[parent])
+        snps = hassnps(S.meta, parent) ? copy(M[parent, :snps]) : Int[]
         if kind == :poisson
             count = sample_ztp(μ)
         else
             count = μ
+        end
+        if count == 0
+            continue
         end
         if allow_multiple
             append!(snps, rand(1:L, count))
@@ -149,7 +152,7 @@ function annotate_snps!(S::TumorConfiguration, μ;
         end
         sort!(snps)
         @debug "Setting SNPs for $v"
-        SNPS[v] = snps
+        M[v, :snps] = snps
     end
 end
 
@@ -169,20 +172,27 @@ Ends prematurely if a vertex with annotation is found on the way from tip to roo
 * `L=10^9`: length of the genome
 * `allow_multiple=false`: Allow for a site to mutate more than once.
 * `kind=:poisson`: `:poisson` or `:fixed`
-* `replace=false`: Replace existing SNPs.
+* `replace=true`: Replace existing SNPs.
+
+!!! note
+    If `replace` is `false`, any existing annotation will break the inheritance 
+    from root to target vertex.
+
 """
-function annotate_lineage!(S::TumorConfigurations.TumorConfiguration{T, <:AbstractLattice{T}}, μ, v::Int, root=1;
-    L=10^9, allow_multiple=false, kind=:poisson, replace=false) where {T}
+function annotate_lineage!(S::TumorConfiguration{T, <:AbstractLattice{T}}, μ, v::Int, root=1;
+    L=10^9, allow_multiple=false, kind=:poisson, replace=true) where {T}
     path = []
-    while !isnothing(v) && v!=root && isempty(S.meta[v, :snps])
+    while !isnothing(v) && v!=root # && (isnothing(S.meta[v, :snps]) || isempty(S.meta[v, :snps]))
         push!(path, v)
         p = outneighbors(S.phylogeny, v)
         v = isempty(p) ? nothing : p[1]
     end
     reverse!(path)
-    psnps = T[]
+    psnps = Int[]
     for v in path
-        S.meta[v, :snps] = add_snps!(psnps, μ; L, allow_multiple, kind, replace)           
+        if !isnothing(S.meta[v, :snps]) && !isempty(S.meta[v, :snps])
+            S.meta[v, :snps] = add_snps!(psnps, μ; L, allow_multiple, kind, replace=true)           
+        end 
         psnps = copy(S.meta[v, :snps])
     end
     return path
@@ -227,17 +237,14 @@ function add_snps!(S::Vector, μ;
     S
 end
 
-
-
 """
     prune_phylogeny!(S::TumorConfiguration)
 
-Remove unpopulated genotypes from the graph.  
+Remove unpopulated genotypes from the phylogenetic tree and meta data.  
 Any gap in the phylogeny is bridged.
 """
-function prune_phylogeny!(S::TumorConfigurations.TumorConfiguration)
+function prune_phylogeny!(S::TumorConfigurations.TumorConfiguration{G,L}) where {G,L}
     P = S.phylogeny::SimpleDiGraph{Int64}
-    # npops = @view S.meta.npops[1:S.meta._len]
 
     function bridge!(s, d)
         children = inneighbors(P, d)
@@ -253,13 +260,13 @@ function prune_phylogeny!(S::TumorConfigurations.TumorConfiguration)
         end
     end
 
-    itr = filter(v->getnpop(S, v)==0 && v!=1, df_traversal(P))|>collect
+    itr = filter(v->S.meta[v, Val(:npop)]==0 && v!=1, df_traversal(P))|>collect
     subvertices = setdiff(1:nv(P), itr)
     for (i,v) in enumerate(itr)
         children = inneighbors(P, v)
         parent = outneighbors(P, v)
         @debug "Vertex $v is empty" v children  parent[1]
-        while parent[1]!=1 && !isempty(parent) && getnpop(S, parent[1]) == 0
+        while parent[1]!=1 && !isempty(parent) && S.meta[parent[1], Val(:npop)] == 0
             parent = outneighbors(P, parent[1])
         end
         if isempty(parent)
