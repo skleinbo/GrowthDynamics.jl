@@ -1,24 +1,15 @@
 module LatticeTumorDynamics
 
-export prune_me!,
-        moran!,
-        independent_death_birth!,
-        die_or_proliferate!,
-        twonew!
-
-import Graphs: nv, vertices, add_vertex!, add_edge!
-
-using StatsBase: Weights,sample,mean
 import Distributions: Binomial, Exponential, cdf
-
-import Random: shuffle!
-
+import Graphs: nv, vertices, add_vertex!, add_edge!
 using ..Lattices
-import ..TumorConfigurations: TumorConfiguration, getfitness, gindex, _resize!
-
+import Random: shuffle!
+using StatsBase: Weights,sample,mean
 import ..Phylogenies: annotate_snps!, add_snps!, prune_phylogeny!, sample_ztp
 import ..TumorConfigurations: TumorConfiguration, getfitness, index, hassnps, lastgenotype, _resize!
 import ..TumorObservables: total_population_size
+
+export eden_with_density!, independent_death_birth!, moran!, twonew!
 
 occupied(m,n,s,N) = @inbounds m < 1 || m > N || n < 1 || n > N || s[x,y] != 0
 growth_rate(nw,basebr) = basebr * (1 - 1 / 6 * nw)
@@ -324,7 +315,7 @@ function moran!(
 end
 
 """
-    die_or_proliferate!(state::RealLattice{Int}; <keyword arguments>)
+    eden_with_density!(state::RealLattice{Int}; <keyword arguments>)
 
 Moran-like dynamics on an spatially structured population. Each step is either a death or
 (potential) birth and mutation event.
@@ -347,7 +338,7 @@ Birthrate depends linearily on the number of neighbors.
     Used primarily for collecting observables during the run.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
-function die_or_proliferate!(
+function eden_with_density!(
     state::TumorConfiguration{G, <:RealLattice};
     fitness = (s, gold, gnew) -> 1.0,
     T = 0,
@@ -756,7 +747,7 @@ end
 
 dynamics_dict = Dict(
     :moran => moran!,
-    :die_or_proliferate => die_or_proliferate!,
+    :eden_with_density => eden_with_density!,
 )
 
 ## -- END module LatticeTumorDynamics --
