@@ -4,7 +4,7 @@ import Base: axes, checkbounds, copyto!, copy, eachindex, firstindex, getindex, 
 import Base: length, @propagate_inbounds, push!, resize!, setindex!, similar, size, show, view, zero
 import Base.Iterators: product
 import CoordinateTransformations: SphericalFromCartesian
-import Dictionaries: Dictionary
+import Dictionaries: Dictionary, index
 import Graphs: SimpleDiGraph, add_vertex!, add_vertices!, add_edge!, nv
 import GeometryBasics: Point2f0, Point3f0
 import ..Lattices
@@ -153,12 +153,12 @@ _pluralize(::Val{:fitness}) = :fitnesses
 _pluralize(::Val{:age}) = :ages
 _pluralize(::Val{F}) where F = throw(ArgumentError("Unknown field $F"))
 
-@propagate_inbounds function gindex(M::MetaData{T}, g::T) where T
+@propagate_inbounds function index(M::MetaData{T}, g) where T
     return haskey(M.index, g) ? M.index[g] : nothing
 end
 
 @propagate_inbounds function Base.getindex(M::MetaData{T}; g) where {T}
-    M[gindex(M, g)]
+    M[index(M, g)]
 end
 
 @propagate_inbounds function Base.getindex(M::MetaData{T}, i::Integer) where {T}
@@ -197,7 +197,7 @@ end
 end
 
 @propagate_inbounds function getindex(M::MetaData{T}, F::Val; g::T) where {T}
-    getindex(M, gindex(M, g), F)
+    getindex(M, index(M, g), F)
 end
 
 @propagate_inbounds function getindex(M::MetaData{T}, ::Colon, field::Symbol) where T
@@ -267,7 +267,7 @@ end
     @boundscheck checkbounds(Bool, M, i) || throw(BoundsError(M, I))
 
     g = M.genotypes[i] = D[1]
-    if isnothing(gindex(M, g))
+    if isnothing(index(M, g))
         insert!(M.index, g, i)
     else
         M.index[g] = i
@@ -288,7 +288,7 @@ end
 end
 
 @inline @propagate_inbounds function setindex!(M::MetaData, v, field; g)
-    i = gindex(M, g)
+    i = index(M, g)
     setindex!(M, v, i, field)
 end
 
@@ -356,7 +356,7 @@ end
     end
     if v != z
         @boundscheck begin
-            if @inbounds isnothing(gindex(T.meta, v))
+            if @inbounds isnothing(index(T.meta, v))
                 throw(ArgumentError("Genotype $v is not know. Use push!(::TumorConfiguration, $v) first."))
             end
         end
@@ -375,7 +375,7 @@ end
 end
 
 @propagate_inbounds function Base.push!(S::TumorConfiguration{T, <:Lattices.TypedLattice{T}}, M::MetaDatum{T}) where {T}
-    @boundscheck if !isnothing(gindex(S.meta, M.genotype))
+    @boundscheck if !isnothing(index(S.meta, M.genotype))
         throw(ArgumentError("genotype $(M.genotype) already present"))
     end
     push!(S.meta, M)
@@ -397,7 +397,7 @@ for field in MetaDatumFields
     @eval begin
         export $getfn, $setfn
         function $getfn(M::MetaData{T}, g::T) where T
-            id = gindex(M, g)
+            id = index(M, g)
             @boundscheck if isnothing(id)
                 throw(ArgumentError("Unknown genotype $g"))
             end
@@ -406,7 +406,7 @@ for field in MetaDatumFields
         $getfn(S::TumorConfiguration, g) = $getfn(S.meta, g)
 
         function $setfn(M::MetaData{T}, v, g::T) where T
-            id = gindex(M, g)
+            id = index(M, g)
             @boundscheck if isnothing(id)
                 throw(ArgumentError("Unknown genotype $g"))
             end
@@ -416,6 +416,7 @@ for field in MetaDatumFields
     end
 end
 
+index(S::TumorConfiguration, args...) = index(S.meta, args...)
 
 
 ###################################################################

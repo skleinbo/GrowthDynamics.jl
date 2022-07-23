@@ -32,6 +32,7 @@ export  conicsection,
 import Base: size, length, getindex, setindex!, maybeview, firstindex, lastindex
 import Base.Iterators: product
 import CoordinateTransformations: SphericalFromCartesian
+import Dictionaries: index
 import LinearAlgebra: norm, normalize, cross, det, dot
 
 using GeometryBasics

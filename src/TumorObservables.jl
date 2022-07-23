@@ -12,7 +12,7 @@ import LinearAlgebra: dot, norm, Symmetric
 import StatsBase: countmap, mean, sample, var, Weights
 import ..Lattices
 import ..Lattices: CubicLattice, RealLattice, midpoint, coord, index, neighbors, neighbors!, isonshell, Neighbors
-import ..TumorConfigurations: TumorConfiguration, gindex
+import ..TumorConfigurations: TumorConfiguration, index, hassnps
 
 using ..Phylogenies
 
