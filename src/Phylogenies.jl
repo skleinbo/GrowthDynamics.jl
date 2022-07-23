@@ -2,7 +2,7 @@ module Phylogenies
 
 using   Distributions,
         Graphs
-
+import Base: parent
 import ..Lattices: AbstractLattice
 import ..TumorConfigurations
 import ..TumorConfigurations: getnpop, index, hassnps, TumorConfiguration
@@ -10,16 +10,15 @@ import ..TumorConfigurations: getnpop, index, hassnps, TumorConfiguration
 export  annotate_snps!,
         annotate_lineage!,
         add_snps!,
-        df_traversal,
         children,
-        parent,
-        nchildren,
+        df_traversal,
         has_children,
         harm,
         harm2,
+        mrca,
+        nchildren,
         prune_phylogeny!,
-        sample_ztp,
-        MRCA
+        sample_ztp
 
 harm(N::Integer) = sum(1/i for i in 1:N)
 harm2(N::Integer) = sum(1/i^2 for i in 1:N)
@@ -282,7 +281,7 @@ end
 """
 Return index of the most recent common ancestor between `(i,j)` in a phylogeny.
 """
-function MRCA(S::TumorConfiguration, i::Integer, j::Integer)
+function mrca(S::TumorConfiguration, i::Integer, j::Integer)
     P = S.phylogeny
     @assert 1<=i<=nv(P) && 1<=j<=nv(P)
 
@@ -304,18 +303,18 @@ end
 """
 Return index of the most recent common ancestor in a phylogeny.
 """
-function MRCA(S::TumorConfiguration)
+function mrca(S::TumorConfiguration)
     P = S.phylogeny
 
-    mrca = nv(P)
+    _mrca = nv(P)
 
-    idx = findall(x->x>0, S.meta.npops) ## Only check the currently alive
+    idx = findall(>(0), (@view S.meta[:, Val(:npops)])) ## Only check the currently alive
 
     for i in idx[2:end], j in idx[2:end]
-        mrca = min(mrca, MRCA(S, i,j))
-        mrca == 1 && return mrca
+        _mrca = min(_mrca, mrca(S, i,j))
+        _mrca == 1 && return _mrca
     end
-    return mrca
+    return _mrca
 end
 
 
