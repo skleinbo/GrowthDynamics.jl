@@ -17,7 +17,7 @@ using ..Lattices
 import ..TumorConfigurations: TumorConfiguration, getfitness, gindex, _resize!
 
 import ..Phylogenies: annotate_snps!, add_snps!, prune_phylogeny!, sample_ztp
-
+import ..TumorConfigurations: TumorConfiguration, getfitness, index, hassnps, lastgenotype, _resize!
 import ..TumorObservables: total_population_size
 
 occupied(m,n,s,N) = @inbounds m < 1 || m > N || n < 1 || n > N || s[x,y] != 0
@@ -550,7 +550,7 @@ function die_or_proliferate!(
                 #     state.meta.misc["slice"] = slice
                 #     state.meta.misc["cumrate"] = cumrate
                 # end
-                g_id::Int = gindex(state.meta, genotype)
+                g_id::Int = index(state.meta, genotype)
                 if !b_grow
                     state.meta[g_id, Val(:npop)] -= 1
                     # setnpop!(state, getnpop(state, g_id)-1, g_id)
@@ -676,7 +676,7 @@ function twonew!(
     p_mu = 1.0 - exp(-mu)
     old = new1 = new2 = 0
 
-    die!(;g) = die!(gindex(state.meta, g))
+    die!(;g) = die!(index(state.meta, g))
     function die!(gid)
         rates[gid] -= state.meta[gid, :fitness]
         total_rate -= state.meta[gid, :fitness] + d

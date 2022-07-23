@@ -5,7 +5,7 @@ using   Distributions,
 
 import ..Lattices: AbstractLattice
 import ..TumorConfigurations
-import ..TumorConfigurations: getnpop, TumorConfiguration
+import ..TumorConfigurations: getnpop, index, hassnps, TumorConfiguration
 
 export  annotate_snps!,
         annotate_lineage!,
@@ -75,7 +75,7 @@ end
 Parent of a genotype `g`.  Return tuple `(id=index, g=genotype)`.
 """
 function parent(S::TumorConfiguration, g)
-    vertex = gindex(S.meta, g)
+    vertex = index(S.meta, g)
     n = outneighbors(S.phylogeny, vertex)
     if length(n)!=1
         return nothing
@@ -92,7 +92,7 @@ Vector of direct descendants of a genotype.
     Returns indices.
 """
 function children(S::TumorConfiguration, g)
-    vertex = gindex(S.meta, g)
+    vertex = index(S.meta, g)
     inneighbors(S.phylogeny, vertex)
 end
 
