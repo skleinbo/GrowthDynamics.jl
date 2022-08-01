@@ -7,6 +7,6 @@ further parameters like mutation rate as keyword arguments.
 
 ```@docs
 LatticeTumorDynamics.moran!
-LatticeTumorDynamics.die_or_proliferate!
+LatticeTumorDynamics.eden_with_density!
 LatticeTumorDynamics.exponential!
 ```
