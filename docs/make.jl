@@ -6,6 +6,7 @@ makedocs(sitename="GrowthDynamics.jl",
     pages = [
         "Overview" => "index.md",
         "States" => "states.md",
+        "Meta Data" => "metadata.md",
         "Phylogenies" => "phylogenies.md",
         "Dynamics" => "dynamics.md",
         "Observables" => "observables.md"
