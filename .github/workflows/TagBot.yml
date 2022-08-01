@@ -11,10 +11,9 @@ jobs:
     steps:
       - uses: JuliaRegistries/TagBot@v1
         with:
-          # Owner/name of the registry repository
           registry: skleinbo/JuliaRegistry.jl
           lookback: 28
-          # SSH private key for pushing tags
+          token: ${{ secrets.GITHUB_TOKEN }}
           ssh: ${{secrets.DOCUMENTER_KEY}}
           # Changelog template
           changelog: |
