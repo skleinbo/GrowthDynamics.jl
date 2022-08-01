@@ -1,15 +1,34 @@
-name: TagBot
-on:
-  issue_comment:
-    types: [created]
-  workflow_dispatch:
-jobs:
-  TagBot:
-    if: github.event_name == 'workflow_dispatch' || github.actor == 'JuliaTagBot'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: JuliaRegistries/TagBot@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          registry: skleinbo/JuliaRegistry.jl
-          lookback: 21
+- name: Julia TagBot
+  on:
+    issue_comment:
+      types: [created]
+  uses: JuliaRegistries/TagBot@v1
+  with:
+    # Owner/name of the registry repository
+    registry: skleinbo/JuliaRegistry.jl
+    lookback: 28
+    # SSH private key for pushing tags
+    ssh: ${{secrets.DOCUMENTER_KEY}}
+    # Changelog template
+    changelog:
+      {% if previous_release %}
+      [Diff since {{ previous_release }}]({{ compare_url }})
+      {% endif %}
+
+      {% if custom %}
+      {{ custom }}
+      {% endif %}
+
+      {% if issues %}
+      **Closed issues:**
+      {% for issue in issues %}
+      - {{ issue.title }} (#{{ issue.number }})
+      {% endfor %}
+      {% endif %}
+
+      {% if pulls %}
+      **Merged pull requests:**
+      {% for pull in pulls %}
+      - {{ pull.title }} (#{{ pull.number }}) (@{{ pull.author.username }})
+      {% endfor %}
+      {% endif %}
