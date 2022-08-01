@@ -4,7 +4,7 @@ import Base.Iterators: filter
 import CoordinateTransformations: Spherical, SphericalFromCartesian
 import DataFrames: DataFrame, subset
 import Distributions: Multinomial
-import GeometryBasics: Pointf0, Point3f
+import GeometryBasics: Pointf0
 import Graphs: SimpleGraph, SimpleDiGraph, nv, inneighbors
 import Graphs: outneighbors, neighborhood, neighborhood_dists
 import Graphs: vertices, enumerate_paths, bellman_ford_shortest_paths
