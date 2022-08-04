@@ -1,6 +1,10 @@
 # Meta Data
 
-Every `TumorConfiguration` has meta data attached. They contain for every genotype
+```@meta
+CurrentModule = GrowthDynamics.TumorConfigurations
+```
+
+Every [`TumorConfiguration`](@ref) has [`MetaData`](@ref) attached. They contain for every genotype
 
 * A population count. While in principle redundant, it is significantly cheaper than enumerating the lattice.
 * A fitness value
@@ -23,7 +27,7 @@ using GrowthDynamics.TumorObservables
 import DataFrames: first # hide
 ```
 
-```@example 1
+```@repl 1
 using InlineStrings
 import Base: zero
 zero(::Type{String7}) = String7("00-00")
@@ -39,27 +43,27 @@ eden_with_density!(state;
 )
 ```
 
-```@example 1
+```@repl 1
 state.meta
 ```
 
 We can query according to index
 
-```@example 1
+```@repl 1
 state.meta[2, :genotype]
 ```
 
-```@example 1
-state.meta[5:10, :npops]
+```@repl 1
+state.meta[5:10, :npop]
 ```
 
 or genotype
 
-```@example 1
+```@repl 1
 state.meta[g="46-YQ"]
 ```
 
-```@example 1
+```@repl 1
 state.meta[g="46-YQ", :fitness] = 1.1
 ```
 
@@ -67,10 +71,21 @@ state.meta[g="46-YQ", :fitness] = 1.1
     In places where performance is paramount, getter and setter should be called like
     `state.meta[2, Val(:genotype)]` to circumvent dynamic dispatch.
 
+    Alternatively, `getgenotype(state, id)`, `setgenotype!(state, id)`, etc. are provided.
+
 Because `MetaData` implements Julia's [array interface](https://docs.julialang.org/en/v1/manual/interfaces/#man-interface-array), iterating is supported, and because each `MetaDatum` is a `NamedTuple`, we can for example convert to a `DataFrame`
 
-```@example 1
+```@repl 1
 using DataFrames
 
 filter(v->v.npop>10, state.meta) |> DataFrame
+```
+
+## API
+
+```@docs
+MetaData
+MetaDatum
+index(::MetaData{T}, ::T) where {T}
+index!
 ```
