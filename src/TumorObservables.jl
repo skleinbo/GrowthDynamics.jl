@@ -394,6 +394,8 @@ end
 ## Helper function to merge dictionaries with vectors as values
 ## appends new value to old value
 function mymerge(A,B)
+    isempty(A) && return B
+    isempty(B) && return A
     K = keys(A)
     C = map(collect(K)) do k
         if haskey(B, k)
@@ -457,29 +459,55 @@ function explode_into_shells(v::Vector{T}, o, a; a0=0f0) where T<:Pointf0
 end
 
 """
-    extract_shells(T, outer)
+    popsize_on_shells(T, outer, [o=midpoint(T.lattice)])
 
-Explode tumor configuration `T` into shells [r, r+a) with radii between r in [1..outer].
-Return dictionary with trajectory of every genotype but 0 and 1 (set `deleteone/zero=false` to keep the wildtype/count empty sites).
+Creates a dictionary `genotype => trajectory` where `trajectory` is a vector of population size.
+`trajectory[r]` is the the population size on a L2-norm shell of radius `r` around `o`.
+
+`r` ranges between `1..outer` in increments of `a` (defaults to the lattice spacing).
+
+Set `deleteone/zero=false` to keep the wildtype/count empty sites.
 """
-function extract_shells(state::TumorConfiguration{T, <:Lattices.CubicLattice}, outer; deleteone=true, deletezero=true) where T
-    a = Lattices.spacings(state.lattice)[1]
+function popsize_on_shells(state::TumorConfiguration{T, <:RealLattice}, outer; a=spacings(state.lattice)[1], deleteone=true, deletezero=true) where T
     dist_mat = Lattices.euclidean_dist_matrix(state.lattice, Lattices.midpoint(state.lattice))
     shell_inds = map(1:outer) do r; findall(x-> r-a/2 < x <= r+a/2, dist_mat ); end
 
-    mapreduce((a,b)->mymerge(a,b), 1:outer) do r #radius
+    # aux. dictionary to store first/latest appearance of genotype
+    genotypes = state.meta[:, :genotype]
+    firstlast = Dict{T, Tuple{Int,Int}}()  #(map(g->g=>(typemax(Int),0), genotypes))
+
+    ret = mapreduce((a,b)->mymerge(a,b), 1:outer) do r #radius
         inds = shell_inds[r]
         shell = state[inds]
         c = countmap(reshape(shell, :))
-        # @show c
         if deletezero
             delete!(c, 0)
         end
         if deleteone
             delete!(c, 1)
         end
+        for g in keys(c)
+            newfirst = haskey(firstlast, g) ? firstlast[g][1] : r
+            firstlast[g] = (newfirst, r)
+        end
+        for g in keys(firstlast)
+            if !haskey(c, g)
+                c[g] = 0
+            end
+        end
         c
     end
+
+    for g in keys(ret)
+        # pad trajectories
+        ret[g] = vcat(
+            zeros(Int, firstlast[g][1]-1),
+            ret[g],
+            zeros(Int, outer-firstlast[g][2])
+            )
+    end
+    return ret
+
 end
 
 
