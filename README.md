@@ -1,4 +1,7 @@
 # GrowthDynamics.jl
+
+[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://skleinbo.github.io/GrowthDynamics.jl/dev/)
+
 Agent based population genetics in mixed and structured populations
 
 ## Installation
@@ -8,8 +11,7 @@ Either add my registry to resolve the dependencies
 registry update
 add https://github.com/skleinbo/GrowthDynamics.jl
 ```
-or install all them manually
+or install manually
 ```julia
-]add https://github.com/skleinbo/OpenCLPicker.jl https://github.com/skleinbo/ObservableCollector.jl
-add https://github.com/skleinbo/GrowthDynamics.jl
+]add https://github.com/skleinbo/GrowthDynamics.jl
 ```
