@@ -11,7 +11,8 @@ import Graphs: vertices, enumerate_paths, bellman_ford_shortest_paths
 import LinearAlgebra: dot, norm, Symmetric
 import StatsBase: countmap, mean, sample, var, Weights
 import ..Lattices
-import ..Lattices: CubicLattice, RealLattice, midpoint, coord, index, neighbors, neighbors!, isonshell, Neighbors
+import ..Lattices: CubicLattice, RealLattice, midpoint, coord, index, isonshell
+import ..Lattices: neighbors, neighbors!, Neighbors, spacings
 import ..TumorConfigurations: TumorConfiguration, index, hassnps
 
 using ..Phylogenies
@@ -29,12 +30,13 @@ export  allele_fractions,
         living_ancestor,
         # cphylo_hist,
         # phylo_hist,
-        polymorphisms,
+        mrca,
         npolymorphisms,
+        polymorphisms,
         common_snps,
         pairwise,
         mean_pairwise,
-        extract_shells,
+        popsize_on_shells,
         positions,
         explode_into_shells,
         tajimasd
@@ -163,7 +165,7 @@ end
 
 "Total population size. Duh."
 function total_population_size(S::TumorConfiguration)
-    sum(@view S.meta[:, :npops])
+    sum(@view S.meta[:, :npop])
 end
 
 function population_size(L::Lattices.RealLattice{T}, t) where T<:Integer
@@ -183,7 +185,7 @@ end
 
 "Dictionary (genotype, population size)"
 function population_size(S::TumorConfiguration, t)
-    zip(S.meta[:, :genotypes], S.meta[:, :npops]) |> collect
+    zip(S.meta[:, :genotype], S.meta[:, :npop]) |> collect
 end
 
 function genotype_dict(S::TumorConfiguration{T, A}) where {T,A}
@@ -433,7 +435,7 @@ end
 ######################
 
 """
-    function positions(state, g)
+    positions(state, g)
 
 Returns coordinates of cells of genotype `g`.
 """
@@ -444,9 +446,9 @@ function positions(state::TumorConfiguration{T, <:Lattices.AbstractLattice{T,N}}
 end
 
 """
-    function explode_into_shells(v, mid, a; a0=)
+    explode_into_shells(v, o, a; a0=)
 
-Take a vector of cartesian coordinates `v`, center them around the midpoint `mid`, and return
+Take a vector of cartesian coordinates `v`, center them around the midpoint `o`, and return
 a dictionary `radius=>coordinates` where `a0<= radius <= max(||v||)` in increments of `a`. 
 """
 function explode_into_shells(v::Vector{T}, o, a; a0=0f0) where T<:Pointf0
@@ -582,7 +584,44 @@ function polymorphisms(S::TumorConfiguration; filterdead=true)
     end
     snps
 end
+"""
+Return index of the most recent common ancestor between `(i,j)` in a phylogeny.
+"""
+function mrca(S::TumorConfiguration, i::Integer, j::Integer)
+    P = S.phylogeny
+    @assert 1<=i<=nv(P) && 1<=j<=nv(P)
 
+    mrca = 1 ## 'Worst' case: MRCA is the root
+
+    while i > 1 && j > 1
+        (i == j) && return i ## (i,j) have coalesced -> return MRCA
+        i = outneighbors(P, i)[1]
+        # @info i,j
+        (i == j) && return i ## (i,j) have coalesced -> return MRCA
+        j = outneighbors(P, j)[1]
+        # @info i,j
+        (i == j) && return i ## (i,j) have coalesced -> return MRCA
+    end
+
+    return mrca
+end
+
+"""
+Return index of the most recent common ancestor in a phylogeny.
+"""
+function mrca(S::TumorConfiguration)
+    P = S.phylogeny
+
+    _mrca = nv(P)
+
+    idx = findall(>(0), (@view S.meta[:, Val(:npops)])) ## Only check the currently alive
+
+    for i in idx[2:end], j in idx[2:end]
+        _mrca = min(_mrca, mrca(S, i,j))
+        _mrca == 1 && return _mrca
+    end
+    return _mrca
+end
 """
     npolymorphisms(S::TumorConfiguration)
 
@@ -648,7 +687,7 @@ Matrix of pairwise differences.
 `filterdead`: Do not include extinct genotypes.
 """
 function pairwise(S::TumorConfiguration;
-     genotypes=S.meta[:, :genotypes], 
+     genotypes=S.meta[:, :genotype], 
      filterdead=false
 )
     if filterdead

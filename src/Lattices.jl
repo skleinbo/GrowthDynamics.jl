@@ -108,12 +108,6 @@ Number of elements of `L.data`.
 """
 length(L::RealLattice) = length(L.data)
 
-"""
-    neighbors(L::RealLattice, I)
-
-Vector of neighbors of index I. Returns Array{CartesianIndex{dimension(L)}}.
-Does not check for bounds.
-"""
 Base.@propagate_inbounds function neighbors(L::RealLattice, I)
     tmp = Neighbors(L)
     neighbors!(tmp, L, I)
@@ -146,16 +140,18 @@ function dist(L::RealLattice, I, J)
     return norm(dx)
 end
 
-"""
+@doc raw"""
     function euclidean_dist_matrix(L, p)
 
 Matrix similar to `L.data` filled with euclidean distances wrt. the point `p`.
-"""
-euclidean_dist_matrix(L::RealLattice, p::Index) = euclidean_dist_matrix(L, coord(L,p))
-function euclidean_dist_matrix(L::RealLattice, p)
-    N = size(L)
+
+`p` can either be an index or a coordinate.
+""" euclidean_dist_matrix
+
+euclidean_dist_matrix(L::RealLattice, p::Point) = euclidean_dist_matrix(L, index(L,p))
+function euclidean_dist_matrix(L::RealLattice, I′::Index)
     map(CartesianIndices(L.data)) do I
-        dist(L, coord(L, I), p)
+        dist(L, I, I′)
     end
 end
 
@@ -167,6 +163,16 @@ end
 ####################################
 ## --- BEGIN Line lattice (1D) -- ##
 ####################################
+
+"""
+    LineLattice
+
+One dimensional lattice.
+
+# Fields
+* `a`: lattice spacing
+* `data`
+"""
 struct LineLattice{T, A<:AbstractArray{T, 1}} <: AbstractLattice{T, 1}
     a::Float64 # Lattice constant
     data::A
@@ -176,9 +182,6 @@ coord(L::LineLattice{T}, I::Index{1}) where T = L.a * I[1]
 
 index(L::LineLattice{T}, x) where T = CartesianIndex(Tuple(round(Int, x/L.a)))
 
-"""
-In-place version of `neighbors`.
-"""
 Base.@propagate_inbounds function neighbors!(nn::Neighbors{2,1}, ::LineLattice, I::Index{1})
     m = I[1]
     nn[1] = CartesianIndex(m-1)
@@ -199,8 +202,45 @@ end
 ## --- BEGIN Hexagonal lattice (2D) -- ##
 #########################################
 
+"""
+    HexagonalLattice
+
+Each site has six equidistant neighbors with a sixfold rotational symmetry.
+
+See https://en.wikipedia.org/wiki/Hexagonal_lattice
+
+# Fields
+* `a`: lattice constant
+* `data`: underlying array
+
+# Example
+```jldoctest
+julia> using GrowthDynamics.Lattices
+
+julia> l = HexagonalLattice(1/2, ones(32,32))
+HexagonalLattice{Float64, Matrix{Float64}}(0.5, [1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0])
+
+julia> neighbors(l, (16,16))
+6-element StaticArrays.MVector{6, CartesianIndex{2}} with indices SOneTo(6):
+ CartesianIndex(15, 16)
+ CartesianIndex(15, 17)
+ CartesianIndex(16, 17)
+ CartesianIndex(17, 17)
+ CartesianIndex(17, 16)
+ CartesianIndex(16, 15)
+
+julia> coord.(Ref(l), ans)
+6-element StaticArrays.MVector{6, GeometryBasics.Point{2, Float32}} with indices SOneTo(6):
+ [7.5, 6.0621777]
+ [8.0, 6.0621777]
+ [8.25, 6.4951906]
+ [8.0, 6.928203]
+ [7.5, 6.928203]
+ [7.25, 6.4951906]
+```
+"""
 struct HexagonalLattice{T, A<:AbstractArray{T, 2}} <: AbstractLattice{T, 2}
-    a::Float64 # Lattice constant
+    a::Float64
     data::A
 end
 
@@ -305,11 +345,48 @@ end
 #####################################
 ## -- BEGIN CubicLattice (3D) --   ##
 #####################################
+"""
+    CubicLattice
 
+Three dimensional primitive cubic lattice. Each site has six equidistant neighbors with a fourfold rotational symmetry in each of the three planes.
+
+See https://en.wikipedia.org/wiki/Cubic_crystal_system
+
+# Fields
+* `a`: lattice constant
+* `data`: underlying array
+
+# Example
+```jldoctest
+julia> using GrowthDynamics.Lattices
+
+julia> l = CubicLattice(1/2, ones(16,16,16))
+CubicLattice{Float64, Array{Float64, 3}}(0.5, [1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; … ;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0])
+
+julia> neighbors(l, (8,8,8))
+6-element StaticArrays.MVector{6, CartesianIndex{3}} with indices SOneTo(6):
+ CartesianIndex(7, 8, 8)
+ CartesianIndex(9, 8, 8)
+ CartesianIndex(8, 7, 8)
+ CartesianIndex(8, 9, 8)
+ CartesianIndex(8, 8, 7)
+ CartesianIndex(8, 8, 9)
+
+julia> coord.(Ref(l), ans)
+6-element StaticArrays.MVector{6, GeometryBasics.Point{3, Float32}} with indices SOneTo(6):
+ [3.0, 3.5, 3.5]
+ [4.0, 3.5, 3.5]
+ [3.5, 3.0, 3.5]
+ [3.5, 4.0, 3.5]
+ [3.5, 3.5, 3.0]
+ [3.5, 3.5, 4.0]
+```
+"""
 struct CubicLattice{T, A<:AbstractArray{T,3}} <: AbstractLattice{T, 3}
     a::Float64 # Lattice constant
     data::A
 end
+
 CubicLattice(L::Integer) = CubicLattice(1.0, fill(0, L,L,L))
 
 coord(L::CubicLattice, I::Index{3})::Point3f0 = L.a .* (Point3f0(Tuple(I)) .- 1)
@@ -510,7 +587,55 @@ end
 ###################################
 ## --- BEGIN FCC lattice (3D) -- ##
 ###################################
+"""
+    FCCLattice
 
+Three dimensional face-centered cubic lattice. Each site has twelve neighbors.
+
+See https://en.wikipedia.org/wiki/Cubic_crystal_system
+
+# Fields
+* `a`: lattice constant
+* `data`: underlying array
+
+# Example
+```jldoctest
+julia> using GrowthDynamics.Lattices
+
+julia> l = FCCLattice(1/2, ones(16,16,16))
+FCCLattice{Float64, Array{Float64, 3}}(0.5, [1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; … ;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0])
+
+julia> neighbors(l, (8,8,8))
+12-element StaticArrays.MVector{12, CartesianIndex{3}} with indices SOneTo(12):
+ CartesianIndex(7, 8, 8)
+ CartesianIndex(9, 8, 8)
+ CartesianIndex(9, 7, 8)
+ CartesianIndex(7, 7, 8)
+ CartesianIndex(7, 8, 9)
+ CartesianIndex(8, 7, 9)
+ CartesianIndex(9, 8, 9)
+ CartesianIndex(8, 8, 9)
+ CartesianIndex(7, 8, 7)
+ CartesianIndex(8, 7, 7)
+ CartesianIndex(9, 8, 7)
+ CartesianIndex(8, 8, 7)
+
+julia> coord.(Ref(l), ans)
+12-element StaticArrays.MVector{12, GeometryBasics.Point{3, Float32}} with indices SOneTo(12):
+ [1.5, 3.75, 1.75]
+ [2.0, 3.75, 1.75]
+ [2.0, 3.25, 1.75]
+ [1.5, 3.25, 1.75]
+ [1.5, 3.5, 2.0]
+ [1.75, 3.25, 2.0]
+ [2.0, 3.5, 2.0]
+ [1.75, 3.75, 2.0]
+ [1.5, 3.5, 1.5]
+ [1.75, 3.25, 1.5]
+ [2.0, 3.5, 1.5]
+ [1.75, 3.75, 1.5]
+```
+"""
 struct FCCLattice{T, A<:AbstractArray{T,3}} <:AbstractLattice{T, 3}
     a::Float64
     data::A
@@ -600,17 +725,17 @@ sitesperunitcell(::Type{FCCLattice}, L) = (2L+1, L+1, 2L+1)
 sitesperunitcell(::Type{LT}, L) where LT<:AbstractLattice = ntuple(_->L+1, dimension(LT))
 
 """
-    density(L::RealLattice, I)
+    density(L::RealLattice{T}, I)
 
 Calculates `(occupied sites)/(no. of neighbors)`
 
-"Occupied" means != zero(eltype(L.data))
+"Occupied" is defined as not equal to `zero(T)`.
 """
 density(L::RealLattice, I) = density!(Neighbors(L), L, I)
 function density!(nn::Neighbors, L::RealLattice{G}, I) where G
     tot = nneighbors(L, I)
     neighbors!(nn, L, I)
-    nz =  count(x->!out_of_bounds(x, size(L)) && L.data[x]!=zero(G), nn) ## TODO: makes assumption about the numerical value that repr. unoccupied
+    nz =  count(x->!out_of_bounds(x, size(L)) && L.data[x]!=zero(G), nn)
     return nz/tot
 end
 
@@ -646,5 +771,59 @@ function conicsection(L::AbstractLattice{<:Any, 3}, coords, Ω; axis=Point3f0(0,
     end
 end
 
+### DOCUMENTATION
+@doc raw"""
+    coord(L, I)
+
+Coordinate of index `I` on the lattice `L`. `I` is either a tuple of integers, or an
+appropriate `CartesianIndex`.
+""" coord
+
+@doc raw"""
+    index(L, p)
+Index of the coordinate `p` closest to the nearest site on lattice `L`. `p` is a `GeometryBasics.Point`.
+""" index
+
+@doc "Coordination number of the lattice." coordination
+@doc "Dimension of the lattice. Functionally equivalent to `ndims(lattice.data)`." dimension
+
+@doc raw"""
+neighbors(L::RealLattice, I)
+
+Vector of neighbors of index `I``. Returns `Vector{CartesianIndex{dimension(L)}}``.
+
+Does not check for bounds.
+""" neighbors
+
+@doc raw"""
+neighbors!(n, L, I)
+
+In-place version of `neighbors`.
+
+Use `n = Neighbors(L)` to allocate an appropriate vector.
+""" neighbors!
+
+@doc raw"""
+    nneighbors(L, I)
+
+Boundary-aware number of nearest neighbors of site `I` on lattice `L`. 
+
+# Example
+```doctest
+julia> using GrowthDynamics.Lattices
+
+julia> l = HexagonalLattice(1/2, ones(32,32))
+HexagonalLattice{Float64, Matrix{Float64}}(0.5, [1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0])
+
+julia> nneighbors(l, (5,5))
+6
+
+julia> nneighbors(l, (1,5))
+4
+
+julia> nneighbors(l, (1,1))
+2
+```
+""" nneighbors
 ## END MODULE ##
 end
