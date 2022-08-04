@@ -5,8 +5,8 @@ import Graphs: nv, vertices, add_vertex!, add_edge!
 using ..Lattices
 import Random: shuffle!
 using StatsBase: Weights,sample,mean
-import ..Phylogenies: annotate_snps!, add_snps!, prune_phylogeny!, sample_ztp
-import ..TumorConfigurations: TumorConfiguration, getfitness, index, hassnps, lastgenotype, _resize!
+import ..Phylogenies: add_snps!, sample_ztp
+import ..TumorConfigurations: TumorConfiguration, annotate_snps!, getfitness, index, hassnps, lastgenotype, prune_phylogeny!, _resize!
 import ..TumorObservables: total_population_size
 
 export eden_with_density!, independent_death_birth!, moran!, twonew!
@@ -58,9 +58,10 @@ function exponential!(
     # P = state.phylogeny
     K = state.lattice.N # Carrying capacity
 
-    genotypes = state.meta.genotypes
-    npops = state.meta.npops
-    fitnesses = state.meta.fitnesses
+    # FIX This is broken
+    genotypes = state.meta.genotype
+    npops = state.meta.npop
+    fitnesses = state.meta.fitness
     rates = fitnesses .* npops
     snps = state.meta.snps
 
@@ -90,6 +91,7 @@ function exponential!(
             break
         end
         # In case we pruned, renew bindings
+        # FIX
         genotypes = state.meta.genotypes
         npops = state.meta.npops
         fitnesses = state.meta.fitnesses
@@ -205,16 +207,9 @@ function moran!(
     sizehint=0, # initially resize state.meta to `sizehint`. do nothing if 0.
     kwargs...)
 
-    # genotypes = state.meta.genotypes
-    # npops = state.meta.npops
-    # fitnesses = state.meta.fitnesses
-    rates = state.meta[:, :fitnesses] .* state.meta[:, :npops]
-    # snps = state.meta.snps
+    rates = state.meta[:, :fitness] .* state.meta[:, :npop]
 
     ## sizehint ##
-    if sizehint > length(state.meta.genotypes)
-        _resize!(state.meta, sizehint)
-    end
 
     Ntotal = total_population_size(state)
     total_rate = sum(rates) + d*Ntotal
@@ -230,14 +225,6 @@ function moran!(
         if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
             @debug "Pruning..."
             prune_me!(state, mu)
-            # # Renew bindings
-            # genotypes = state.meta.genotypes
-            # npops = state.meta.npops
-            # fitnesses = state.meta.fitnesses
-            # rates = fitnesses .* npops
-            # snps = state.meta.snps
-            # wrates = Weights(rates)
-            # wnpops = Weights(npops)
         end
 
         callback(state, state.t)
@@ -360,7 +347,7 @@ function eden_with_density!(
     sizehint=0,
     kwargs...) where G
 
-    if sizehint > length(state.meta.genotypes)
+    if sizehint > length(state.meta.genotype)
         _resize!(state.meta, sizehint)
     end
 
@@ -646,10 +633,10 @@ function twonew!(
     sizehint=0, # initially resize state.meta to `sizehint`. do nothing if 0.
     kwargs...)
 
-    rates = state.meta[:, :fitnesses] .* state.meta[:, :npops]
+    rates = state.meta[:, :fitness] .* state.meta[:, :npops]
 
     ## sizehint ##
-    if sizehint > length(state.meta.genotypes)
+    if sizehint > length(state.meta.genotype)
         _resize!(state.meta, sizehint)
     end
 

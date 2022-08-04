@@ -14,9 +14,9 @@ DEBUG = false
 
 include("Lattices.jl")
 include("RoughInterfaces.jl")
+include("Phylogenies.jl")
 include("TumorConfigurations.jl")
 # @reexport using .TumorConfigurations
-include("Phylogenies.jl")
 include("TumorObservables.jl")
 include("LatticeTumorDynamics.jl")
 include("AnalysisMethods.jl")
