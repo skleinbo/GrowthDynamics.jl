@@ -2,6 +2,7 @@
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 GrowthDynamics = "708a6a61-856c-5d7f-acbf-fcf0902d75eb"
 InlineStrings = "842dd82b-1e85-43dc-bf29-5d0ee9dffc48"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
