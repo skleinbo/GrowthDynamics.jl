@@ -271,7 +271,7 @@ end
 
 function index(L::HexagonalLattice, p)
     x,y, = Tuple(p)
-    n = round(Int, y*√3/L.a) + 1 
+    n = round(Int, y/sin(pi/3)/L.a) + 1 
     if iseven(n)
         x -= 1/2*L.a
     end
