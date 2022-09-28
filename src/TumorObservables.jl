@@ -4,7 +4,7 @@ import Base.Iterators: filter
 import CoordinateTransformations: Spherical, SphericalFromCartesian
 import DataFrames: DataFrame, subset
 import Distributions: Multinomial
-import GeometryBasics: Pointf0
+import GeometryBasics: Pointf
 import Graphs: SimpleGraph, SimpleDiGraph, nv, inneighbors
 import Graphs: outneighbors, neighborhood, neighborhood_dists
 import Graphs: vertices, enumerate_paths, bellman_ford_shortest_paths
@@ -444,7 +444,7 @@ Returns coordinates of cells of genotype `g`.
 function positions(state::TumorConfiguration{T, <:Lattices.AbstractLattice{T,N}}, g) where {T,N}
     idx = findall(==(g), state.lattice.data)
     # dim = Lattices.dimension(state.lattice)
-    convert(Vector{Pointf0{N}}, map(I->Pointf0{N}(Lattices.coord(state.lattice, I)), idx))
+    convert(Vector{Pointf{N}}, map(I->Pointf{N}(Lattices.coord(state.lattice, I)), idx))
 end
 
 """
@@ -453,7 +453,7 @@ end
 Take a vector of cartesian coordinates `v`, center them around the midpoint `o`, and return
 a dictionary `radius=>coordinates` where `a0<= radius <= max(||v||)` in increments of `a`. 
 """
-function explode_into_shells(v::Vector{T}, o, a; a0=0f0) where T<:Pointf0
+function explode_into_shells(v::Vector{T}, o, a; a0=0f0) where T<:Pointf
     maxr = maximum(x->norm(x-o), v)
     Dict(r => Base.filter(x->r-a/2<norm(x-o)<=r+a/2, v) for r in a0:a:maxr+a)
 end

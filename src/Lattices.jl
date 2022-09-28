@@ -267,7 +267,7 @@ function coord(L::HexagonalLattice, I::Index{2})
     if iseven(I[1])
         x += 1/2*L.a
     end
-    Point2f0(x,y)
+    Point2f(x,y)
 end
 
 function index(L::HexagonalLattice, p)
@@ -390,7 +390,7 @@ end
 
 CubicLattice(L::Integer) = CubicLattice(1.0, fill(0, L,L,L))
 
-coord(L::CubicLattice, I::Index{3})::Point3f0 = L.a .* (Point3f0(Tuple(I)) .- 1)
+coord(L::CubicLattice, I::Index{3})::Point3f = L.a .* (Point3f(Tuple(I)) .- 1)
 
 function index(L::CubicLattice, p)
     return  CartesianIndex(Tuple(round.(Int, p ./ L.a) .+ 1))
@@ -531,7 +531,7 @@ struct HCPLattice{T, A<:AbstractArray{T,3}} <: AbstractLattice{T, 3}
     data::A
 end
 
-coord(L::HCPLattice, I::Index{3}) = Point3f0(L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2],I[3]))
+coord(L::HCPLattice, I::Index{3}) = Point3f(L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2],I[3]))
 ## TODO: index(::HCPLattice)
 function index(L::HCPLattice)
 end
@@ -643,7 +643,7 @@ struct FCCLattice{T, A<:AbstractArray{T,3}} <:AbstractLattice{T, 3}
 end
 FCCLattice(L::Integer) = FCCLattice(1.0, fill(0, sitesperunitcell(FCCLattice, L)))
 
-function coord(L::FCCLattice, I::Index{3})::Point3f0
+function coord(L::FCCLattice, I::Index{3})::Point3f
     a = L.a
     ix,iy,iz = Tuple(I) .- 1
     z = a/2*iz
@@ -653,7 +653,7 @@ function coord(L::FCCLattice, I::Index{3})::Point3f0
     else
         y = ifelse(isodd(ix), a*iy, a*iy + a/2)
     end
-    return Point3f0(x,y,z)
+    return Point3f(x,y,z)
 end
 
 function index(L::FCCLattice, p)
@@ -744,7 +744,7 @@ end
 ## Intersections ##
 ###################
 
-function conicsection(L::AbstractLattice{<:Any, 3}, coords, Ω; axis=Point3f0(0,0,-1), o=Lattices.coord(L, Lattices.midpoint(L)))
+function conicsection(L::AbstractLattice{<:Any, 3}, coords, Ω; axis=Point3f(0,0,-1), o=Lattices.coord(L, Lattices.midpoint(L)))
     ## !! WARNING: ϕ is the azimuth angle in CoordinateTransformations !!
     cts = SphericalFromCartesian()
     # rotY = @SMatrix [ cos(ϕoff) 0 -sin(ϕoff);
@@ -754,11 +754,11 @@ function conicsection(L::AbstractLattice{<:Any, 3}, coords, Ω; axis=Point3f0(0,
     # rotZ = @SMatrix [ cos(θoff) -sin(θoff) 0;
     #                   sin(θoff)  cos(θoff) 0;
     #                   0         0          1]
-    z = Point3f0(0,0,1)
+    z = Point3f(0,0,1)
     _axis = cross(axis, z)
     # @show _axis
     if iszero(_axis)
-        _axis = Point3f0(0,1,0)
+        _axis = Point3f(0,1,0)
     else
         _axis = normalize(_axis)
     end

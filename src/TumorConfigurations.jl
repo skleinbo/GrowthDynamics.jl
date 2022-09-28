@@ -9,7 +9,7 @@ import CoordinateTransformations: SphericalFromCartesian
 import Dictionaries: Dictionary, index
 import Graphs: SimpleDiGraph, add_vertex!, add_vertices!, add_edge!, induced_subgraph
 import Graphs: inneighbors, nv, outneighbors, rem_vertex!
-import GeometryBasics: Point2f0, Point3f0
+import GeometryBasics: Point2f, Point3f
 import ..Lattices
 import ..Lattices: AbstractLattice
 import ..Lattices: coord, dimension, index, isonshell, radius, realsize, midpoint, dist, spacings

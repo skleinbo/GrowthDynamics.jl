@@ -5,7 +5,7 @@
 
 import Base: ==
 import LinearAlgebra: cross, dot, norm, norm2, normalize
-import GeometryBasics: Pointf0
+import GeometryBasics: Pointf
 
 struct Plane
     p
