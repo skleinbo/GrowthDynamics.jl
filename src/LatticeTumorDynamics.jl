@@ -233,7 +233,7 @@ function moran!(
         end
 
         wrates = Weights(rates, total_rate - d*Ntotal)
-        wnpops = Weights((@view state.meta.npops[begin:state.meta._len]), Ntotal)
+        wnpops = Weights((@view state.meta.npop[begin:state.meta._len]), Ntotal)
 
         b_die = rand() < d / (total_rate/Ntotal)
 
