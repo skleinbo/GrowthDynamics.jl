@@ -5,7 +5,7 @@ using   Distributions,
 
 import ..Lattices: AbstractLattice
 import ..TumorConfigurations
-import ..TumorConfigurations: TumorConfiguration
+import ..TumorConfigurations: gindex, TumorConfiguration
 
 export  annotate_snps!,
         annotate_lineage!,
