@@ -113,7 +113,7 @@ end
 """
     volume(r, dim)
 
-Volume of unit ball in `dim` dimensions.
+Volume of ball of radius `r` in `dim` dimensions.
 """
 function volume(r, dim::Int) 
     if dim == 1
@@ -122,6 +122,22 @@ function volume(r, dim::Int)
         return π*r^2
     elseif dim == 3
         return 4π/3*r^3
+    else
+        throw(ArgumentError("dim >=4 not supported"))
+    end
+end
+"""
+    surface(r, dim)
+
+Surface of ball of radius `r` in `1<=dim<=3` dimensions.
+"""
+function surface(r, dim::Int) 
+    if dim == 1
+        return 2
+    elseif dim == 2
+        return 2π*r
+    elseif dim == 3
+        return 4π*r^2
     else
         throw(ArgumentError("dim >=4 not supported"))
     end

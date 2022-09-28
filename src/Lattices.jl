@@ -27,6 +27,7 @@ export  conicsection,
         radius,
         shell,
         spacings,
+        surface,
         volume
 
 import Base: size, length, getindex, setindex!, maybeview, firstindex, lastindex
