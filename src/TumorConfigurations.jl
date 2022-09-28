@@ -309,8 +309,12 @@ end
 
 @inline @propagate_inbounds function setindex!(M::MetaData, v, i::Integer, ::Val{field}) where field
     @boundscheck checkbounds(Bool, M, i) || throw(BoundsError(M, I))
-
-    # mfield = _pluralize(field)
+    # update index if genotype changes
+    if field == :genotype
+        old_g = M[i, Val(:genotype)]
+        insert!(M.index, v, i)
+        delete!(M.index, old_g)
+    end
     @inbounds setindex!(getproperty(M, field), v, i)
     return v
 end
