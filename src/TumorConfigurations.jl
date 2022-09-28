@@ -89,13 +89,14 @@ IndexStyle(::Type{<:MetaData}) = IndexLinear()
 
 Empty `MetaData`` for genotype-type `T`.
 """
-MetaData(T::DataType) = MetaData(0, Dictionary{T, Int}(), T[], Int64[], Float64[], Vector{Int64}[], Tuple{Int64,Float64}[], Dict())
+MetaData(T::DataType) = MetaData(0, Dictionary{T, Int}(), T[], Int[], Float64[],
+ SNPSType[], Tuple{Int,Float64}[], Dict())
 
 function MetaData{T}(::UndefInitializer, n) where T
     return MetaData{T}(0,
         Dictionary{T, Int}(),
         Vector{T}(undef, n),
-        Vector{Int64}(undef, n),
+        Vector{Int}(undef, n),
         Vector{Float64}(undef, n),
         Vector{SNPSType}(undef, n),
         Vector{Tuple{Int64,Float64}}(undef, n),
@@ -291,7 +292,7 @@ end
 @propagate_inbounds Base.setindex!(M::MetaData, D::MetaDatum, i::Integer) = setindex!(M, values(D), i)
 
 @propagate_inbounds function Base.setindex!(M::MetaData{T}, D::MetaDatumFieldTypes{T}, i::Integer) where {T}
-    @boundscheck checkbounds(Bool, M, i) || throw(BoundsError(M, I))
+    @boundscheck checkbounds(Bool, M, i) || throw(BoundsError(M, i))
 
     g = M.genotype[i] = D[1]
     if isnothing(index(M, g))
