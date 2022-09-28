@@ -5,13 +5,17 @@
 Agent based population genetics in mixed and structured populations
 
 ## Installation
-Either add my registry to resolve the dependencies
+
+Either add my personal registry to resolve the dependencies
+
 ```julia
 ]registry add https://github.com/skleinbo/JuliaRegistry.jl.git
 registry update
 add https://github.com/skleinbo/GrowthDynamics.jl
 ```
-or install manually
+
+or install the package manually
+
 ```julia
 ]add https://github.com/skleinbo/GrowthDynamics.jl
 ```
