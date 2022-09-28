@@ -277,7 +277,7 @@ function index(L::HexagonalLattice, p)
         x -= 1/2*L.a
     end
     m = round(Int, x/L.a+1)
-    return CartesianIndex(m,n)
+    return CartesianIndex(n,m)
 end
 
 Base.@propagate_inbounds function neighbors!(nn::Neighbors{6,2}, ::HexagonalLattice, I)
