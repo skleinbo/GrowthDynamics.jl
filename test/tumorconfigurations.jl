@@ -56,5 +56,23 @@ using GrowthDynamics.TumorConfigurations
                 @test conf.meta.npop == floor.(Int, length(conf.lattice).*[1-f, f])
             end
         end
+        # remove_genotype!
+        conf = uniform(CubicLattice, 31; g=0)[1]
+        for g in 1:5
+            push!(conf, g)
+        end
+        connect!(conf, 2 => 1)
+        connect!(conf, 3 => 2)
+        connect!(conf, 4 => 2)
+        connect!(conf, 5 => 1)
+        for g in 1:5
+            conf[g, :, :] .= g
+        end
+        @test conf.meta[:, :npop] == fill(1024, 5)
+        @test_throws ArgumentError remove_genotype!(conf, 1)
+        @test remove_genotype!(conf, 2)
+        @test_throws ArgumentError getnpop(conf, 2)
+        @test Edge(3=>1) in edges(conf.phylogeny)
+
     end
 end

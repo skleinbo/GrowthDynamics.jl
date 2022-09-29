@@ -11,7 +11,7 @@ import Graphs: SimpleDiGraph, add_vertex!, add_vertices!, add_edge!, induced_sub
 import Graphs: inneighbors, nv, outneighbors, rem_vertex!
 import GeometryBasics: Point2f, Point3f
 import ..Lattices
-import ..Lattices: AbstractLattice
+import ..Lattices: AbstractLattice, RealLattice
 import ..Lattices: coord, dimension, index, isonshell, radius, realsize, midpoint, dist, spacings
 import ..Lattices: sitesperunitcell
 import LinearAlgebra: norm
@@ -19,7 +19,7 @@ import ..Phylogenies: children, df_traversal, isroot, isleaf, nchildren, parent
 import StatsBase
 
 export half_space, hassnps, lastgenotype, nolattice_state, MetaData
-export push!, single_center, spheref, spherer, sphere_with_diverse_outer_shell
+export push!, remove_genotype!, single_center, spheref, spherer, sphere_with_diverse_outer_shell
 export sphere_with_single_mutant_on_outer_shell, TumorConfiguration, uniform
 
 const SNPSType = Union{Nothing, Vector{Int}}
@@ -506,7 +506,7 @@ function remove_genotype!(S::TumorConfiguration{T, <:Lattices.TypedLattice{T}}, 
     isnothing(v) && throw(ArgumentError("Genotype $g does not exist."))
     if S.lattice isa RealLattice
         sites = S.lattice.data .== g 
-        S.lattice.data[sites] = zero(T)
+        S.lattice.data[sites] .= zero(T)
     end
     return remove_genotype_from_phylogeny!(S.phylogeny, v) && remove_genotype_from_metadata!(S.meta, g)
 end
