@@ -49,7 +49,7 @@ using GrowthDynamics.TumorConfigurations
             @test nv(conf.phylogeny) == 3
             conf[fill(9, dim)...] = 0
             @test sum(conf.meta[:, :npop]) == length(lat)-1
-            @test_broken conf[:] .= 1
+            @test (conf[:] .= 1).meta[g=1, :npop] == length(conf.lattice)
             ##
             for f in [i//10 for i in 1:10]
                 conf = half_space(l, 9; f=f, g1=1, g2=2)[1]
