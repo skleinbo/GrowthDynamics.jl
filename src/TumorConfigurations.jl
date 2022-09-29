@@ -8,7 +8,7 @@ import Base.Iterators: product
 import CoordinateTransformations: SphericalFromCartesian
 import Dictionaries: Dictionary, index
 import Graphs: SimpleDiGraph, add_vertex!, add_vertices!, add_edge!, induced_subgraph
-import Graphs: inneighbors, nv, outneighbors, rem_vertex!
+import Graphs: add_edge!, inneighbors, nv, outneighbors, rem_vertex!
 import GeometryBasics: Point2f, Point3f
 import ..Lattices
 import ..Lattices: AbstractLattice, RealLattice
@@ -18,7 +18,7 @@ import LinearAlgebra: norm
 import ..Phylogenies: children, df_traversal, isroot, isleaf, nchildren, parent
 import StatsBase
 
-export half_space, hassnps, lastgenotype, nolattice_state, MetaData
+export connect!, half_space, hassnps, lastgenotype, nolattice_state, MetaData
 export push!, remove_genotype!, single_center, spheref, spherer, sphere_with_diverse_outer_shell
 export sphere_with_single_mutant_on_outer_shell, TumorConfiguration, uniform
 
@@ -377,6 +377,9 @@ function TumorConfiguration(nolattice::Lattices.NoLattice{T}) where T
     phylogeny = SimpleDiGraph()
     TumorConfiguration(nolattice, phylogeny, metadata, 0, 0.0, Dict{Symbol,Any}())
 end
+
+connect!(T::TumorConfiguration, p::Pair{Int,Int}) = connect!(T, p[1], p[2])
+connect!(T::TumorConfiguration, a::Int, b::Int) = add_edge!(T.phylogeny, a, b)
 
 @propagate_inbounds Base.getindex(T::TumorConfiguration, ind...) = getindex(T.lattice.data, ind...)
 
