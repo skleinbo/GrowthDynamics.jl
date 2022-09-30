@@ -165,19 +165,20 @@ size(M::MetaData) = (length(M),)
 function Base.similar(M::MetaData{T}) where T
     return similar(M, M._len)
 end
-function Base.similar(::MetaData{T}, len) where T
+function Base.similar(::MetaData{T}, len::Int) where T
     return MetaData{T}(undef, len)
 end
 
-@propagate_inbounds function Base.copyto!(dest::MetaData{T}, src::MetaData{T}) where T
+@propagate_inbounds function Base.copyto!(dest::MetaData{T}, src::S) where {T, S<:MetaData{T}}
     @boundscheck if length(src) > length(dest.genotype)
         throw(BoundsError())
     end
     dest._len = src._len
     dest.misc = copy(src.misc)
-    for field in setdiff(fieldnames(src), [:_len, :misc])
-        copyto!(getproperty(dest, field), getproperty(dest, field))
+    for field in setdiff(fieldnames(S), [:_len, :misc, :index])
+        copyto!(getproperty(dest, field), getproperty(src, field))
     end
+    dest.index = copy(src.index)
     return dest
 end
 
