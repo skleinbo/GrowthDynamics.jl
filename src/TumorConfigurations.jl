@@ -233,6 +233,10 @@ end
     return getproperty(M, field)[eachindex(M)]
 end
 
+@propagate_inbounds function getindex(M::MetaData{T}, ::Colon, ::Val{F}) where {T,F}
+    return getproperty(M, F)[eachindex(M)]
+end
+
 @propagate_inbounds function view(M::MetaData{T}, ::Colon, field::Val{F}) where {T, F}
     return Base.view(getproperty(M, F), eachindex(M))
 end
