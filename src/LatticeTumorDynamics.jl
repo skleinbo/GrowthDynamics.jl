@@ -6,10 +6,11 @@ using ..Lattices
 import Random: shuffle!
 using StatsBase: Weights,sample,mean
 import ..Phylogenies: add_snps!, sample_ztp
-import ..TumorConfigurations: TumorConfiguration, annotate_snps!, getfitness, index, hassnps, lastgenotype, prune_phylogeny!, _resize!
+import ..TumorConfigurations: TumorConfiguration, annotate_snps!, getfitness
+import ..TumorConfigurations: connect!, index, hassnps, lastgenotype, prune_phylogeny!, _resize!
 import ..TumorObservables: total_population_size
 
-export eden_with_density!, independent_death_birth!, moran!, twonew!
+export eden_with_density!, exponential!, independent_death_birth!, moran!, twonew!
 
 occupied(m,n,s,N) = @inbounds m < 1 || m > N || n < 1 || n > N || s[x,y] != 0
 growth_rate(nw,basebr) = basebr * (1 - 1 / 6 * nw)
@@ -28,7 +29,8 @@ const MutationProfile = Tuple{Symbol,Float64,Int64} # (rate, :poisson/:fixed, ge
 """
     exponential!(state::NoLattice{Int}; <keyword arguments>)
 
-Run exponential growth on an unstructered population.
+Run exponential growth on an unstructered population until carrying capacity is reached.
+No death. 
 
 # Arguments
 - `T::Int`: the number of steps (generations) to advance.
@@ -44,9 +46,15 @@ Run exponential growth on an unstructered population.
 function exponential!(
     state::TumorConfiguration{Int64, NoLattice{Int64}};
     fitness = g -> 1.0,
+    label = (s, gold) -> lastgenotype(s)+1,
     T = 0,
     mu::Float64 = 0.0,
-    d::Float64 = 0.0,
+    mu_type = :poisson,
+    makesnps = true,
+    genome_length = 10^9,
+    replace_mutations = false,
+    allow_multiple = false,
+    K = 0, # Carrying capacity
     baserate = 1.0,
     prune_period = 0,
     prune_on_exit = true,
@@ -56,29 +64,26 @@ function exponential!(
     kwargs...)
 
     # P = state.phylogeny
-    K = state.lattice.N # Carrying capacity
+    meta = state.meta
 
-    # FIX This is broken
-    genotypes = state.meta.genotype
-    npops = state.meta.npop
-    fitnesses = state.meta.fitness
-    rates = fitnesses .* npops
-    snps = state.meta.snps
-
+    @views npops = meta[:, Val(:npop)]
+    @views fitness_vec = meta[:, Val(:fitness)]
+    rates = fitness_vec .* npops
+    wrates = Weights(rates)
+    wnpops = Weights(npops)
+    
+    mean_fitness = mean(fitness_vec)
     Ntotal = sum(npops)
     total_rate = sum(rates)
 
-    if haskey(kwargs, :det_mutations) && kwargs[:det_mutations] == true
+    if mu_type == :fixed
         p_mu = 1.0
     else
         p_mu = 1.0 - exp(-mu)
     end
 
-    wrates = Weights(rates)
-    wnpops = Weights(npops)
-    new = 0
-    old = 0
-    selected = 0
+    wrates = Weights(rates, total_rate)
+    wnpops = Weights(npops, Ntotal)
 
     for step in 0:T
         if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
@@ -90,38 +95,32 @@ function exponential!(
         if abort(state)
             break
         end
-        # In case we pruned, renew bindings
-        # FIX
-        genotypes = state.meta.genotypes
-        npops = state.meta.npops
-        fitnesses = state.meta.fitnesses
-        rates = fitnesses .* npops
-        snps = state.meta.snps
-        wrates = Weights(rates)
-        wnpops = Weights(npops)
+        # Recalculate rates
+        @views npops = meta[:, Val(:npop)]
+        @views fitness_vec = meta[:, Val(:fitness)]
+        rates = fitness_vec .* npops
+        mean_fitness = mean(fitness_vec)
+        Ntotal = sum(npops)
+        total_rate = sum(rates)
 
-        # @debug "Step $step/$T"
-        told = state.treal
-        state.treal += 1.0 / (baserate * mean(fitnesses))
-        dt = state.treal - told
+        wrates = Weights(rates, total_rate)
+        wnpops = Weights(npops, Ntotal)
 
-        # If carrying capacity is reached, we exit.
-        if K <= Ntotal
-            break
-        end
+        state.treal += 1.0 / (baserate * mean_fitness)
 
-        for (j, genotype) in enumerate(genotypes) |> collect
-            # @debug "Genotype: $j,$genotype"
-            if npops[j] == 0
-                # @debug "g$genotype is empty; skipping"
+         # need to collect, or new genotypes will be iterated too!
+        for (genotype, j) in collect(pairs(meta.index))
+            npop = meta[j, Val(:npop)]
+            if npop == 0
                 continue
             end
+            max_nplus = K>0 ? K-Ntotal : typemax(Ntotal)-Ntotal
             if haskey(kwargs, :det_growth) && kwargs[:det_growth] == true
                 pgrow = 1.0 # grow with certainty
-                nplus = min(K - Ntotal, ceil(Int, npops[j] * baserate))
+                nplus = min(max_nplus, ceil(Int, npop * baserate))
             else
-                pgrow = 1.0 - exp(-fitnesses[j] / mean(fitnesses)) # CDF of exponential with s/<s>
-                nplus = min(rand(Binomial(npops[j], pgrow)), K - Ntotal) # How many proliferate?
+                pgrow = 1.0 - exp(-fitness_vec[j] / mean_fitness) # CDF of exponential with s/<s>
+                nplus = min(max_nplus, rand(Binomial(npop, pgrow))) # How many proliferate?
             end
             # @debug "Pgrow = $pgrow"
             if nplus <= 0
@@ -129,22 +128,25 @@ function exponential!(
             end
             nmutants = rand(Binomial(nplus, p_mu)) # How many of those mutate?
             for _ in 1:nmutants
-                new_genotype = genotypes[end] + 1
-                if new_genotype != genotype && fitness(new_genotype) != -Inf # -Inf indicates no mutation possible
-                    if true || !in(new_genotype, genotypes)
-                        push!(state, new_genotype)
-                        fitnesses[end] = fitness(new_genotype)
-                        push!(rates, 0.0)
+                new_genotype = label(state, genotype)
+                if new_genotype != genotype && fitness(state, genotype, new_genotype) != -Inf # -Inf indicates no mutation possible
+                    push!(state, new_genotype)
+                    idxnew = lastindex(meta)
+                    connect!(state, idxnew, j)
+
+                    meta[idxnew, Val(:fitness)] = new_fitness = fitness(state, genotype, new_genotype)
+                    meta[idxnew, Val(:npop)] = 1
+                    if makesnps
+                        new_snps = isnothing(state.meta[j, Val(:snps)]) ? Int[] : copy(state.meta[j, Val(:snps)])
+                        add_snps!(new_snps, mu, L = genome_length, allow_multiple = allow_multiple, replace = replace_mutations)
+                        state.meta[end, Val(:snps)] = new_snps
                     end
-                    add_edge!(state.phylogeny, nv(state.phylogeny), j)
-                    new = length(genotypes)
-                    rates[new] += fitnesses[new]
-                    total_rate += fitnesses[new]
-                    npops[new] += 1
+                else # if mutation is impossible
+                    nmutants -= 1
                 end
             end
-            npops[j] += nplus - nmutants
-            Ntotal += nplus
+            meta[j, Val(:npop)] += nplus - nmutants
+            Ntotal += nplus # keep track in the loop, because otherwise may overshoot K
         end
 
         state.t += 1
@@ -152,8 +154,8 @@ function exponential!(
     if prune_on_exit
         prune_me!(state, mu)
     end
-    # state.phylogeny = P
-    nothing
+
+    return nothing
 end
 
 function prune_me!(state, mu)
@@ -175,10 +177,11 @@ is reach. After that individuals begin replacing each other.
 - `T::Int`: the number of steps to advance.
 - `fitness`: function that assigns a fitness value to a genotype `g::Int`.
 - `p_grow=1.0`: Probability with which to actually proliferate. If no proliferation happens, mutation might still occur.
-- `mu`: mutation rate.
+- `mu=0.0`: mutation rate.
 - `mu_type=[:poisson, :fixed]`: Number of mutations is fixed, or Poisson-distributed.
 - `genome_length=10^9`: Length of the haploid genome.
-- `d`: death rate.
+- `d=0.0`: death rate.
+- `K=0`: Carrying capacity. Set to `0` for unlimited.
 - `baserate`: progressing real time is measured in `1/baserate`.
 - `prune_period`: prune the phylogeny periodically after no. of steps.
 - `prune_on_exit`: prune before leaving the simulation loop.
@@ -187,8 +190,9 @@ is reach. After that individuals begin replacing each other.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
 function moran!(
-    state::TumorConfiguration{Int64, NoLattice{Int64}};
+    state::TumorConfiguration{Int, NoLattice{Int}};
     fitness = (s, gold, gnew) -> 1.0,
+    label = (s, gold) -> lastgenotype(s)+1,
     T = 0,
     mu::Float64 = 0.0,
     mu_type = :poisson,
@@ -200,26 +204,19 @@ function moran!(
     p_grow = 1.0,
     prune_period = 0,
     prune_on_exit = true,
-    DEBUG = false,
     callback = (s, t) -> begin end,
     abort = s -> false,
-    K::Int64 = typemax(Int64), # carrying capacity
-    sizehint=0, # initially resize state.meta to `sizehint`. do nothing if 0.
+    K::Int64 = 0, # carrying capacity
     kwargs...)
 
     rates = state.meta[:, :fitness] .* state.meta[:, :npop]
 
-    ## sizehint ##
-
     Ntotal = total_population_size(state)
     total_rate = sum(rates) + d*Ntotal
 
-    p_mu = 1.0 - exp(-mu)
+    p_mu = mu_type==:poisson ? 1.0 - exp(-mu) : 1.0
 
-
-    new = 0
     old = 0
-    selected = 0
 
     @inbounds for t in 0:T
         if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
@@ -233,7 +230,7 @@ function moran!(
         end
 
         wrates = Weights(rates, total_rate - d*Ntotal)
-        wnpops = Weights((@view state.meta.npop[begin:state.meta._len]), Ntotal)
+        wnpops = Weights((@view state.meta[:, Val(:npop)]), Ntotal)
 
         b_die = rand() < d / (total_rate/Ntotal)
 
@@ -246,14 +243,6 @@ function moran!(
         else
             ## Pick one to proliferate
             old = sample(wrates)
-            # rate = 0.0
-            # target = rand()*total_rate
-            # old = 0
-            # while rate < target
-            #     old += 1
-            #     @inbounds rate += rates[old]
-            # end
-
             b_grow = p_grow==1.0 || rand() < p_grow
             if !b_grow
                 rates[old] -= state.meta[old, Val(:fitness)]
@@ -264,18 +253,18 @@ function moran!(
     
             genotype = state.meta[old, Val(:genotype)]
             if rand() < p_mu
-                new_genotype = state.meta[end, Val(:genotype)] + 1
+                new_genotype = label(state, genotype)
                 if new_genotype != genotype
                     push!(state, new_genotype)
                     if makesnps
-                        new_snps = copy(state.meta[old, Val(:snps)])
+                        new_snps = isnothing(state.meta[old, Val(:snps)]) ? Int[] : copy(state.meta[old, Val(:snps)])
                         add_snps!(new_snps, mu, L = genome_length, allow_multiple = allow_multiple, replace = replace_mutations)
                         state.meta[end, Val(:snps)] = new_snps
                     end
                     state.meta[end, Val(:fitness)] = fitness(state, genotype, new_genotype)
                     push!(rates, 0.0)
-                    add_edge!(state.phylogeny, nv(state.phylogeny), old)
-                    old = length(state.meta)
+                    connect!(state, nv(state.phylogeny), old)
+                    old = lastindex(state.meta)
                 end
             end
             rates[old] += state.meta[old, Val(:fitness)]
@@ -284,8 +273,8 @@ function moran!(
             Ntotal += 1
 
             # If carrying capacity is reached, one needs to die.
-            if K < Ntotal
-                while (die=sample(wnpops))!=old end
+            if Ntotal>K>0
+                die = sample(wnpops)
                 rates[die] -= state.meta[die, Val(:fitness)]
                 total_rate -= state.meta[die, Val(:fitness)] + d
                 state.meta[die, Val(:npop)] -= 1
@@ -525,7 +514,6 @@ function eden_with_density!(
                     # setnpop!(state, getnpop(state, g_id)-1, g_id)
                 end
                 if rand() < p_mu
-                    ## TODO: custom genotypes
                     new_genotype = label(state, g_id)
 
                     if new_genotype != genotype
@@ -630,15 +618,9 @@ function twonew!(
     callback = (s, t) -> begin end,
     abort = s -> false,
     K::Int64 = typemax(Int64), # carrying capacity
-    sizehint=0, # initially resize state.meta to `sizehint`. do nothing if 0.
     kwargs...)
 
-    rates = state.meta[:, :fitness] .* state.meta[:, :npops]
-
-    ## sizehint ##
-    if sizehint > length(state.meta.genotype)
-        _resize!(state.meta, sizehint)
-    end
+    rates = state.meta[:, :fitness] .* state.meta[:, :npop]
 
     Ntotal = total_population_size(state)
     total_rate = sum(rates) + d*Ntotal
@@ -647,9 +629,9 @@ function twonew!(
 
     die!(;g) = die!(index(state.meta, g))
     function die!(gid)
-        rates[gid] -= state.meta[gid, :fitness]
-        total_rate -= state.meta[gid, :fitness] + d
-        state.meta[gid, :npop] -= 1
+        rates[gid] -= state.meta[gid, Val(:fitness)]
+        total_rate -= state.meta[gid, Val(:fitness)] + d
+        state.meta[gid, Val(:npop)] -= 1
         Ntotal -= 1
         nothing
     end
@@ -681,7 +663,7 @@ function twonew!(
         end
 
         wrates = Weights(rates, total_rate - d*Ntotal)
-        wnpops = Weights((@view state.meta.npops[begin:state.meta._len]), Ntotal)
+        wnpops = Weights((@view state.meta[:, Val(:npop)]), Ntotal)
 
         
         ## Pick one to proliferate
@@ -697,11 +679,11 @@ function twonew!(
         end
 
         if makesnps
-            new_snps = copy(state.meta[old, :snps])
+            new_snps = isnothing(state.meta[old, :snps]) ? Int[] : copy(state.meta[old, :snps])
             add_snps!(new_snps, mu, L = genome_length, allow_multiple = allow_multiple, replace = replace_mutations)
             state.meta[new1, :snps] = new_snps
             if !b_die
-                new_snps = copy(state.meta[old, :snps])
+                new_snps = isnothing(state.meta[old, :snps]) ? Int[] : copy(state.meta[old, :snps])
                 add_snps!(new_snps, mu, L = genome_length, allow_multiple = allow_multiple, replace = replace_mutations)
                 state.meta[new2, :snps] = new_snps
             end
@@ -709,7 +691,7 @@ function twonew!(
         
         # If carrying capacity is reached, one needs to die.
         if K < Ntotal
-            while (die=sample(wnpops))!=old end
+            die = sample(wnpops)
             die!(die)
         end
 
