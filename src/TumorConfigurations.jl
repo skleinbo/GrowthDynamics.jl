@@ -352,7 +352,7 @@ zero(::Type{String}) = "0"
 
 mutable struct TumorConfiguration{G, T <: Lattices.AbstractLattice}
     lattice::T
-    phylogeny::SimpleDiGraph{Int64}
+    phylogeny::SimpleDiGraph{Int}
     meta::MetaData{G}
     t::Int
     treal::Float64
