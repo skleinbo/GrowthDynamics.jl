@@ -459,15 +459,26 @@ function positions(state::TumorConfiguration{T, <:Lattices.AbstractLattice{T,N}}
 end
 
 """
-    explode_into_shells(v, o, a; a0=)
+    explode_into_shells(v, o, a; r0=)
 
 Take a vector of cartesian coordinates `v`, center them around the midpoint `o`, and return
-a dictionary `radius=>coordinates` where `a0<= radius <= max(||v||)` in increments of `a`. 
+a dictionary `radius=>coordinates` where `r0<= radius <= max(||v||)` in increments of `a`. 
 """
-function explode_into_shells(v::Vector{T}, o, a; a0=0f0) where T<:Pointf
+function explode_into_shells(v::Vector{T}, o, a; r0=0f0) where T<:Pointf
     maxr = maximum(x->norm(x-o), v)
-    Dict(r => Base.filter(x->r-a/2<norm(x-o)<=r+a/2, v) for r in a0:a:maxr+a)
+    Dict(r => Base.filter(x->r-a/2<=norm(x-o)<r+a/2, v) for r in r0:a:maxr+a)
 end
+
+function explode_into_shells(state::TumorConfiguration{G,A}, g::G,
+    o=midpointcoord(state.lattice), a=spacings(state.lattice)[1];
+    r0=0.0
+) where {G,A}
+    v = positions(state, g)
+    maxr = maximum(x->norm(x-o), v; init=0.0)
+    imaxr = Int(maxr÷a)
+    dictionary(i => Base.filter(x->isonshell(state.lattice, x, i*a, o; a), v) for i in round(Int, r0÷a):(imaxr+1))
+end
+
 
 """
     popsize_on_shells(T, outer, [o=midpoint(T.lattice)])
