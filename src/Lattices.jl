@@ -492,11 +492,11 @@ end
     the origin `o`. A shell is defined as the collection of points with |(p-o)|≤r+a/2
     where `a` is the lattice spacing.
 """
-@inline function isonshell(L::RealLattice, p, r, o=coord(L, midpoint(L)))
-    a = spacings(L)[1] / 2
+@inline function isonshell(L::RealLattice, p, r, o=midpointcoord(L))
+    a = spacings(L)[1]
 
     p′ = p .- o
-    r-a < norm(p′) ≤ r+a
+    r-a/2 ≤ norm(p′) < r+a/2
 end
 
 """
