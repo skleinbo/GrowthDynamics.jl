@@ -496,11 +496,11 @@ end
 end
 
 """
-    shell(L::CubicLattice, r, o=coord(L, midpoint(L)))
+    shell(L::CubicLattice, r, o=midpointcoord(L))
 
 Return indices of shell of radius `r` around `o`.
 """
-function shell(L::RealLattice, r, o=coord(L, midpoint(L)))
+function shell(L::RealLattice, r, o=midpointcoord(L))
     expected_surface = round(Int, Lattices.volume(r, 3)  -Lattices.volume(r-1, 3))
     out = Vector{CartesianIndex{3}}(undef, expected_surface)
     j = 0
@@ -744,7 +744,7 @@ end
 ## Intersections ##
 ###################
 
-function conicsection(L::AbstractLattice{<:Any, 3}, coords, Ω; axis=Point3f(0,0,-1), o=Lattices.coord(L, Lattices.midpoint(L)))
+function conicsection(L::AbstractLattice{<:Any, 3}, coords, Ω; axis=Point3f(0,0,-1), o=midpointcoord(L))
     ## !! WARNING: ϕ is the azimuth angle in CoordinateTransformations !!
     cts = SphericalFromCartesian()
     # rotY = @SMatrix [ cos(ϕoff) 0 -sin(ϕoff);

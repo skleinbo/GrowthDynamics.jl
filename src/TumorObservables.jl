@@ -3,16 +3,17 @@ module TumorObservables
 import Base.Iterators: filter
 import CoordinateTransformations: Spherical, SphericalFromCartesian
 import DataFrames: DataFrame, subset
+import Dictionaries: dictionary
 import Distributions: Multinomial
-import GeometryBasics: Pointf
+import GeometryBasics: Pointf, Point3f
 import Graphs: SimpleGraph, SimpleDiGraph, nv, inneighbors
 import Graphs: outneighbors, neighborhood, neighborhood_dists
 import Graphs: vertices, enumerate_paths, bellman_ford_shortest_paths
 import LinearAlgebra: dot, norm, Symmetric
 import StatsBase: countmap, mean, sample, var, Weights
 import ..Lattices
-import ..Lattices: CubicLattice, RealLattice, midpoint, coord, index, isonshell
-import ..Lattices: neighbors, neighbors!, Neighbors, spacings
+import ..Lattices: CubicLattice, RealLattice, midpoint, midpointcoord, coord, index, isonshell
+import ..Lattices: neighbors, neighbors!, Neighbors, out_of_bounds, spacings
 import ..TumorConfigurations: TumorConfiguration, index, hassnps
 
 using ..Phylogenies
@@ -92,7 +93,7 @@ function allele_fractions(L::Lattices.RealLattice{<:Integer})
         return []
     end
     genotypes = 1:m
-    Ntot = countnz(L.data)
+    Ntot = count(!=(0), L.data)
     Ng = [(g,0.) for g in genotypes]
     for g in genotypes
         Ng[g] = (g,count(x->x==g,L.data)/Ntot)
@@ -136,7 +137,7 @@ function allele_spectrum(state::TumorConfiguration; threshold=0.0, read_depth=to
   return as
 end
 
-function allele_spectrum(as::DataFrame; threshold=0.0, read_depth=total_population_size(state))
+function allele_spectrum(as::DataFrame; threshold=0.0, read_depth=sum(as.npop))
   # Recover population size
   popsize = round(Int, as[1, :npop] / as[1, :fpop])
 
@@ -160,7 +161,7 @@ function allele_spectrum(as::DataFrame; threshold=0.0, read_depth=total_populati
 end
 
 function total_population_size(L::Lattices.RealLattice{<:Integer})
-    countnz(L.data)
+    count(!=(0), L.data)
 end
 
 "Total population size. Duh."

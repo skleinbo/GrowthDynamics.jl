@@ -15,7 +15,7 @@ import ..Lattices: AbstractLattice, RealLattice
 import ..Lattices: coord, dimension, index, isonshell, radius, realsize, midpoint, dist, spacings
 import ..Lattices: sitesperunitcell
 import LinearAlgebra: norm
-import ..Phylogenies: children, df_traversal, isroot, isleaf, nchildren, parent
+import ..Phylogenies: add_snps!, children, df_traversal, isroot, isleaf, nchildren, parent, sample_ztp
 import StatsBase
 
 export connect!, half_space, hassnps, lastgenotype, nolattice_state, MetaData
@@ -313,7 +313,7 @@ end
 end
 
 @inline @propagate_inbounds function setindex!(M::MetaData, v, i::Integer, ::Val{field}) where field
-    @boundscheck checkbounds(Bool, M, i) || throw(BoundsError(M, I))
+    @boundscheck checkbounds(Bool, M, i) || throw(BoundsError(M, i))
     # update index if genotype changes
     if field == :genotype
         old_g = M[i, Val(:genotype)]

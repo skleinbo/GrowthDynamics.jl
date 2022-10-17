@@ -5,9 +5,7 @@ using   Distributions,
 import Base: parent
 import ..Lattices: AbstractLattice
 
-export  annotate_snps!,
-        annotate_lineage!,
-        add_snps!,
+export  add_snps!,
         children,
         df_traversal,
         has_children,
@@ -66,7 +64,7 @@ function sample_ztp(lambda::Float64)
   k
 end
 
-isroot(P::SimpleDiGraph, ::Nothing) = throw(ArgumentError("Not a valid vertex."))
+isroot(::SimpleDiGraph, ::Nothing) = throw(ArgumentError("Not a valid vertex."))
 isroot(P::SimpleDiGraph, v) = isempty(outneighbors(P, v))
 
 parent(P::SimpleDiGraph, v) = outneighbors(P, v)[1]

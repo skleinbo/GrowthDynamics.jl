@@ -10,9 +10,9 @@ import ..TumorConfigurations: TumorConfiguration, annotate_snps!, getfitness
 import ..TumorConfigurations: connect!, index, hassnps, lastgenotype, prune_phylogeny!, _resize!
 import ..TumorObservables: total_population_size
 
-export eden_with_density!, exponential!, independent_death_birth!, moran!, twonew!
+export eden_with_density!, exponential!, moran!, twonew!
 
-occupied(m,n,s,N) = @inbounds m < 1 || m > N || n < 1 || n > N || s[x,y] != 0
+occupied(m,n,s,N) = @inbounds m < 1 || m > N || n < 1 || n > N || s[m,n] != 0
 growth_rate(nw,basebr) = basebr * (1 - 1 / 6 * nw)
 
 @enum Action none=0 proliferate=1 mutate=2 die=3
@@ -165,7 +165,6 @@ function prune_me!(state, mu)
     # state.meta = newMeta
     nothing
 end
-_prune!(s) = LatticeTumorDynamics.prune_me!(s, mu)
 
 """
     moran!(state::NoLattice{Int}; <keyword arguments>)
