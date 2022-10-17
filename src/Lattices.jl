@@ -16,6 +16,7 @@ export  conicsection,
         density!,
         dimension,
         dist,
+        gindex,
         index,
         isonshell,
         midpoint,
@@ -41,6 +42,9 @@ using Rotations
 using StaticArrays
 
 include("Geometry.jl")
+
+# backwards compatibility with 0.6
+const gindex = index
 
 const Index{N} = Union{CartesianIndex{N}, NTuple{N, T}} where T
 
