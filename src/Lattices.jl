@@ -712,15 +712,16 @@ dimension(::Type{HCPLattice}) = 3
 coordination(L::RealLattice) = coordination(typeof(L))
 coordination(::Type{LineLattice{T, A}}) where {T, A} = 2
 coordination(::Type{HexagonalLattice{T, A}}) where {T, A} = 6
-# coordination(::Type{CubicLattice{T, A}}) where {T, A} = 6
 coordination(::Type{T}) where T<:CubicLattice = 6
 coordination(::Type{T}) where T<:FCCLattice = 12
 coordination(::Type{HCPLattice{T, A}}) where {T, A} = 12
 
-spacings(L::LineLattice) = (L.a,)
-spacings(L::HexagonalLattice) = (L.a, L.a)
-spacings(L::CubicLattice) = (L.a, L.a, L.a)
-spacings(L::FCCLattice) = (L.a, L.a, L.a)
+spacings(L::RealLattice) = L.a .* spacings(typeof(L))
+# If only lattice type is given, assume lattice constant==1.0
+spacings(::Type{<:LineLattice}) = (1.0,)
+spacings(::Type{<:HexagonalLattice}) = (1.0, 1.0)/sqrt(2)
+spacings(::Type{<:CubicLattice}) = (1.0, 1.0, 1.0)
+spacings(::Type{<:FCCLattice}) = (1.0, 1.0, 1.0)./sqrt(2)
 
 sitesperunitcell(::Type{FCCLattice}, L) = (2L+1, L+1, 2L+1)
 sitesperunitcell(::Type{LT}, L) where LT<:AbstractLattice = ntuple(_->L+1, dimension(LT))
