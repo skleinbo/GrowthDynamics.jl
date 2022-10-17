@@ -486,15 +486,13 @@ function isonplane(L::Lattices.CubicLattice, P::Plane)
 end
 
 """
-    isonshell(L::CubicLattice, p, r, o)
+    isonshell(L::RealLattice, p, r, o)
 
     Determine whether a lattice point `p` is on a shell with radius `r` wrt.
     the origin `o`. A shell is defined as the collection of points with |(p-o)|≤r+a/2
     where `a` is the lattice spacing.
 """
-@inline function isonshell(L::RealLattice, p, r, o=midpointcoord(L))
-    a = spacings(L)[1]
-
+@inline function isonshell(L::RealLattice, p, r, o=midpointcoord(L); a=spacings(L)[1])
     p′ = p .- o
     r-a/2 ≤ norm(p′) < r+a/2
 end
