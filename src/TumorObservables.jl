@@ -38,6 +38,7 @@ export  allele_fractions,
         pairwise,
         mean_pairwise,
         popsize_on_shells,
+        ipositions,
         positions,
         explode_into_shells,
         tajimasd
@@ -438,12 +439,21 @@ end
 ######################
 
 """
+    ipositions(state, g)
+
+Returns lattice indices of cells of genotype `g`.
+"""
+function ipositions(state::TumorConfiguration, g)
+    findall(==(g), state.lattice.data)
+end
+
+"""
     positions(state, g)
 
 Returns coordinates of cells of genotype `g`.
 """
 function positions(state::TumorConfiguration{T, <:Lattices.AbstractLattice{T,N}}, g) where {T,N}
-    idx = findall(==(g), state.lattice.data)
+    idx = ipositions(state, g)
     # dim = Lattices.dimension(state.lattice)
     convert(Vector{Pointf{N}}, map(I->Pointf{N}(Lattices.coord(state.lattice, I)), idx))
 end
