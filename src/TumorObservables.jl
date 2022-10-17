@@ -317,6 +317,41 @@ function interface(v::AbstractVector, embedding::TumorConfiguration; o=coord(emb
     # end
 end
 
+interface(state::TumorConfiguration{G, <:RealLattice}, g::G) where G = interface(state, ipositions(state, g))
+
+function interface(state::TumorConfiguration{G, <:RealLattice}, v::AbstractVector{<:Lattices.Index}) where G
+    lat = state.lattice
+    nn = Neighbors(lat)
+    freenb = fill(false, size(nn))
+    Base.filter(v) do I
+        neighbors!(nn, lat, I)
+        freenb = fill(false, size(nn))
+        # filter out if no free neighboring site, i.e. if cannot grow
+        # record empty neighboring sites
+        bIgnore = true
+        for (i,nb) in enumerate(nn)
+            out_of_bounds(lat, nb) && continue
+            if state[nb] == zero(G)
+                bIgnore = false
+                freenb[i] = true
+            end
+        end
+        bIgnore && return false
+        
+        # Iterate over all empty neighboring sites
+        # nn2: secondary neighbors == neighbors of empty neighbor
+        for i in eachindex(nn)
+            !freenb[i] && continue
+            nn2 = neighbors(lat, nn[i])
+            for n2 in nn2
+                (n2 == I || n2 in v) && continue
+                (I in neighbors(lat, n2)) && return true
+            end
+        end
+        return false
+    end
+end
+
 function surface(L::Lattices.RealLattice{<:Integer}, g::Int)
     x = 0
     I = CartesianIndices(L.data)
