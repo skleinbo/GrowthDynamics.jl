@@ -747,29 +747,26 @@ end
 ## Intersections ##
 ###################
 
-function conicsection(L::AbstractLattice{<:Any, 3}, coords, Ω; axis=Point3f(0,0,-1), o=midpointcoord(L))
+"""
+    conicsection(L, points, Ω; axis, o)
+
+Filter those `points` that lie within a conic section of opening angle `Ω` around `axis` emanating from origin `o`.
+"""
+function conicsection(L::AbstractLattice{<:Any, 3}, points, Ω; axis=Vec3f(0,0,-1), o=midpointcoord(L))
     ## !! WARNING: ϕ is the azimuth angle in CoordinateTransformations !!
     cts = SphericalFromCartesian()
-    # rotY = @SMatrix [ cos(ϕoff) 0 -sin(ϕoff);
-    #                  0         1    0;
-    #                  sin(ϕoff) 0  cos(ϕoff) ]
 
-    # rotZ = @SMatrix [ cos(θoff) -sin(θoff) 0;
-    #                   sin(θoff)  cos(θoff) 0;
-    #                   0         0          1]
-    z = Point3f(0,0,1)
+    z = Vec3f(0,0,1)
     _axis = cross(axis, z)
-    # @show _axis
     if iszero(_axis)
-        _axis = Point3f(0,1,0)
+        _axis = Vec3f(0,1,0)
     else
         _axis = normalize(_axis)
     end
     angle_zdir = acos(dot(z, axis)/norm(axis))
-    # @show angle_zdir
     rot = AngleAxis(angle_zdir, _axis...)
-    # @show rot
-    filter(coords) do p
+    
+    filter(points) do p
       q = cts(rot*(p-o))
       q.ϕ+π/2 - eps(Float32) ≤ acos(1-Ω/(2π))
     end
