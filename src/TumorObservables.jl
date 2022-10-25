@@ -12,7 +12,7 @@ import Graphs: vertices, enumerate_paths, bellman_ford_shortest_paths
 import LinearAlgebra: dot, norm, Symmetric
 import StatsBase: countmap, mean, sample, var, Weights
 import ..Lattices
-import ..Lattices: CubicLattice, RealLattice, midpoint, midpointcoord, coord, index, isonshell
+import ..Lattices: CubicLattice, RealLattice, Index, midpoint, midpointcoord, coord, index, isonshell
 import ..Lattices: neighbors, neighbors!, Neighbors, out_of_bounds, spacings
 import ..TumorConfigurations: TumorConfiguration, index, hassnps
 
@@ -325,7 +325,7 @@ function interface(state::TumorConfiguration{G, <:RealLattice}, v::AbstractVecto
     freenb = fill(false, size(nn))
     Base.filter(v) do I
         neighbors!(nn, lat, I)
-        freenb = fill(false, size(nn))
+        freenb = fill!(freenb, false)
         # filter out if no free neighboring site, i.e. if cannot grow
         # record empty neighboring sites
         bIgnore = true

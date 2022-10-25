@@ -11,7 +11,7 @@ import Graphs: SimpleDiGraph, add_vertex!, add_vertices!, add_edge!, induced_sub
 import Graphs: add_edge!, inneighbors, nv, outneighbors, rem_vertex!
 import GeometryBasics: Point2f, Point3f
 import ..Lattices
-import ..Lattices: AbstractLattice, RealLattice
+import ..Lattices: AbstractLattice, RealLattice, TypedLattice
 import ..Lattices: coord, dimension, index, isonshell, radius, realsize, midpoint, dist, spacings
 import ..Lattices: sitesperunitcell
 import LinearAlgebra: norm
