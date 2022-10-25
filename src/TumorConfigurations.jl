@@ -18,7 +18,7 @@ import LinearAlgebra: norm
 import ..Phylogenies: add_snps!, children, df_traversal, isroot, isleaf, nchildren, parent, sample_ztp
 import StatsBase
 
-export connect!, half_space, hassnps, lastgenotype, nolattice_state, MetaData
+export add_genotype!, connect!, half_space, hassnps, lastgenotype, nolattice_state, MetaData
 export push!, remove_genotype!, single_center, spheref, spherer, sphere_with_diverse_outer_shell
 export sphere_with_single_mutant_on_outer_shell, TumorConfiguration, uniform
 
@@ -216,7 +216,7 @@ end
 
 Base.@propagate_inbounds getindex(M::MetaData, i::Integer, field::Symbol) = getindex(M, i, Val(field))
 
-@propagate_inbounds function getindex(M::MetaData, i::Integer, field::Val{F}) where F
+@propagate_inbounds function getindex(M::MetaData, i::Integer, ::Val{F}) where F
     # mfield = _pluralize(field)
     getindex(getproperty(M, F), i)
 end
@@ -434,26 +434,33 @@ end
 
 
 """
-    add_genotype!(S::TumorConfiguration, G)
+    add_genotype!(S::TumorConfiguration, G, parent)
 
-Add genotype `G` to the population. `G` is either a genotype or a full `MetaDatum`
+Add genotype `G` to the population and connect it to `parent` in the phylogeny.
+`G` is either a genotype or a full `MetaDatum`.
+`parent` defaults to the first genotype, i.e. the root of the phylogenetic tree.
 
 See also: [`MetaDatum`](@ref), [`remove_genotype!`](@ref)
 """
-add_genotype!(S::TumorConfiguration, args...; kwargs...) = push!(S, args...;kwargs...)
+add_genotype!(S::TumorConfiguration, G, parent=S.meta[1, :genotype]; kwargs...) = push!(S, G, parent; kwargs...)
 
 "Add a new _unconnected_ genotype to a TumorConfiguration."
-@propagate_inbounds @inline function Base.push!(S::TumorConfiguration{T, <:Lattices.TypedLattice{T}}, g::T) where {T}
-    push!(S, MetaDatum{T, Nothing}((g, 0, 1.0, nothing, (S.t, S.treal))))
+@propagate_inbounds @inline function Base.push!(S::TumorConfiguration{T, <:TypedLattice{T}}, g::T, args...) where {T}
+    push!(S, MetaDatum{T, Nothing}((g, 0, 1.0, nothing, (S.t, S.treal))), args...)
 end
 
-@propagate_inbounds function Base.push!(S::TumorConfiguration{T, <:Lattices.TypedLattice{T}}, M::MetaDatum{T}) where {T}
+@propagate_inbounds function Base.push!(S::TumorConfiguration{T, <:TypedLattice{T}}, M::MetaDatum{T}, parent=nothing) where {T}
     @boundscheck if !isnothing(index(S.meta, M.genotype))
         throw(ArgumentError("genotype $(M.genotype) already present"))
     end
     push!(S.meta, M)
     add_vertex!(S.phylogeny)
-    lastindex(S.meta)
+    inew = lastindex(S.meta)
+    if !isnothing(parent)
+        iparent = index(S.meta, parent)
+        add_edge!(S.phylogeny, inew, iparent)
+    end
+    inew
 end
 
 """
@@ -488,7 +495,7 @@ function remove_genotype_from_metadata!(M::MetaData{T}, g::T) where {T}
     end
     ## Mimic behavior for removal from Graphs:
     ## Overwrite the meta data at index v with 
-    ## those from the last position and shorten.
+    ## those from the last position and trim.
     g_new = M[end, :genotype]
     M[v] = M[end]
     M._len -= 1
