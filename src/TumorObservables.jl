@@ -41,7 +41,8 @@ export  allele_fractions,
         ipositions,
         positions,
         explode_into_shells,
-        tajimasd
+        tajimasd,
+        icompetition
 
 "Dictionary `(SNP, population count)`"
 function allele_size(S::TumorConfiguration, t=0)
@@ -349,6 +350,38 @@ function interface(state::TumorConfiguration{G, <:RealLattice}, v::AbstractVecto
             end
         end
         return false
+    end
+end
+
+hasemptyneighbor(state::TumorConfiguration{G, A}, I::Index) where {G,A} = any(n->state[n]==zero(G), neighbors(state.lattice, I))
+
+function icompetition(state::TumorConfiguration{G, <:RealLattice}, g::G) where G
+    lat = state.lattice
+    nv, ncomp = 0, 0 
+    v = ipositions(state, g)
+
+    # filter out those that cannot grow, i.e. have no empty neighboring sites
+    filter!(v) do I
+        hasemptyneighbor(state, I)
+    end
+    # collect all empty neighboring sites
+    emptyneighbors = mapreduce(union, v) do I
+        nn = neighbors(lat, I)
+        emptynn = Base.filter(n->state[n]==zero(G), nn)
+    end
+    # create a mapping
+    # empty site => (no. of neighbors of type `g`, no. of neighbors of any other type)
+    # the counts of which are a measure for the competition between genotype g and 
+    # all others for a given empty site.
+    intf = map(emptyneighbors) do en
+        nn = neighbors(lat, en)
+        native = Base.filter(n->state[n]==g, nn)
+        foreign = Base.filter(n->state[n]!=g && state[n]!=zero(G), nn)
+        return en => (native, foreign)
+    end
+    # filter out entries with no competition
+    filter!(intf) do (_, (_, foreign))
+        !isempty(foreign)
     end
 end
 
