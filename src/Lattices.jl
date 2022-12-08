@@ -694,9 +694,17 @@ Base.@propagate_inbounds function neighbors!(nn::Neighbors{12,3}, L::FCCLattice,
     nothing
 end
 
-function nneighbors(::Type{FCCLattice{T, A}}, N, I) where {T, A}
-    coord = coordination(FCCLattice)
+function nneighbors(lattice::FCCLattice{T, A}, I) where {T, A}
+    if any( Tuple(I).==1 .|| Tuple(I).==size(lattice) )
+        return count(i->!out_of_bounds(lattice, i), neighbors(lattice, I))
+    else
+        return coordination(FCCLattice)
+    end
+end
 
+# FIXME: Wrong at the boundaries
+function nneighbors(::Type{FCCLattice{T, A}}, N, I) where {T, A}
+    coordination(FCCLattice)
 end
 
 ## --- END FCC lattice (3D) -- ##
