@@ -3,7 +3,7 @@ module TumorObservables
 import Base.Iterators: filter
 import CoordinateTransformations: Spherical, SphericalFromCartesian
 import DataFrames: DataFrame, subset
-import Dictionaries: dictionary
+import Dictionaries: dictionary, Dictionary, insert!
 import Distributions: Multinomial
 import GeometryBasics: Pointf, Point3f
 import Graphs: SimpleGraph, SimpleDiGraph, nv, inneighbors
@@ -42,7 +42,9 @@ export  allele_fractions,
         positions,
         explode_into_shells,
         tajimasd,
-        icompetition
+        icompetition,
+        counts_on_shells,
+        counts_on_shells_vec
 
 "Dictionary `(SNP, population count)`"
 function allele_size(S::TumorConfiguration, t=0)
@@ -546,7 +548,52 @@ function explode_into_shells(state::TumorConfiguration{G,A}, g::G,
     imaxr = Int(maxr÷a)
     dictionary(i => Base.filter(x->isonshell(state.lattice, x, i*a, o; a), v) for i in round(Int, r0÷a):(imaxr+1))
 end
+"""
+    counts_on_shells(state, g, [o, a])
 
+Return a dictionary `i=>count` mapping the `ith` shell to the number of cells
+of genotype `g` on it.
+
+The "shell number" of a point is the integer closest to `|p-o|/a`.
+
+# Keyword arguments
+* `o=midpointcoord(state.lattice)`: center of shells
+* `a=spacing(state.lattice)`: spacing of shells
+"""
+function counts_on_shells(state::TumorConfiguration{G,A}, g::G,
+    o=midpointcoord(state.lattice), a=spacings(state.lattice)[1];
+) where {G,A}
+    D = Dictionary{Int, Int}(;sizehint=maximum(size(state.lattice)))
+    Cart = CartesianIndices(state.lattice.data)
+    pos_iter = Iterators.map(i->coord(state.lattice, Cart[i]), Iterators.filter(i->state[i]==g, eachindex(state.lattice.data)))
+    for p in pos_iter
+        shell = round(Int, norm(p-o)/a)
+        if haskey(D, shell)
+            D[shell] += 1
+        else
+            insert!(D, shell, 1)
+        end
+    end
+    D
+end
+
+function counts_on_shells_vec(state::TumorConfiguration{G,A}, g::G,
+    o=midpointcoord(state.lattice), a=spacings(state.lattice)[1];
+    maxr
+) where {G,A}
+    D = zeros(Int, maxr)
+    Cart = CartesianIndices(state.lattice.data)
+    pos_iter = Iterators.map(i->coord(state.lattice, Cart[i]) ,Iterators.filter(i->state[i]==g, eachindex(state.lattice.data)))
+    for p in pos_iter
+        shell = round(Int, norm(p-o)/a)
+        if length(D)>shell
+            D[shell+1] += 1
+        else
+            push!(D, 1)
+        end
+    end
+    D
+end
 
 """
     popsize_on_shells(T, outer, [o=midpoint(T.lattice)])
