@@ -1,5 +1,6 @@
 module Phylogenies
 
+import Base: parent
 using   Distributions,
         Graphs
 import Base: parent
@@ -14,6 +15,7 @@ export  add_snps!,
         isleaf,
         isroot,
         nchildren,
+        parent,
         sample_ztp
 
 harm(N::Integer) = sum(1/i for i in 1:N)
