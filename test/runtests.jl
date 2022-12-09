@@ -1,6 +1,7 @@
 using Test
 using GrowthDynamics
 
+@testset begin
 @testset "Lattices" begin
     include("latticestests.jl")
 end
@@ -12,4 +13,5 @@ end
 end
 @testset "LatticeTumorDynamics" begin
     include("latticetumordynamics.jl")
+end
 end

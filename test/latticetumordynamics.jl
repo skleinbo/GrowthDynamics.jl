@@ -3,7 +3,7 @@ import GrowthDynamics.Lattices: CubicLattice
 using GrowthDynamics.LatticeTumorDynamics
 import GrowthDynamics.TumorObservables: total_population_size
 
-@testset "die_or_proliferate" begin
+@testset "eden_with_density" begin
     μ = 1e-2
     L = 2^6
     N = L^3
@@ -19,7 +19,7 @@ import GrowthDynamics.TumorObservables: total_population_size
         prune_on_exit=true,
         det_growth=false,
         det_mutations=false,
-        abort=s->total_population_size(s) >= Nfinal || s.t >= Nfinal
+        onstep=s->total_population_size(s) >= Nfinal || s.t >= Nfinal
     )
     @test total_population_size(tumor) == Nfinal
 end

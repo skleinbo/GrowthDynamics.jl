@@ -1,6 +1,6 @@
 import Dictionaries: IndexError
 using .Lattices
-import Graphs: nv
+import Graphs: Edge, edges, nv
 import GrowthDynamics.TumorConfigurations: MetaDatum
 using GrowthDynamics.TumorConfigurations
 

@@ -99,9 +99,8 @@ end
     @test (coord(lattice, CartesianIndex(4,4,4)) .≈ lattice.a.*(1+1/2,3,1+1/2)) |> all
     @test Tuple(index(lattice, Point3f(3,4.5,2.1))) == (13, 10, 9)
     @testset "Neighbors" begin
-        @test_broken  nneighbors(lattice, (1,1,1)) == 3
+        @test nneighbors(lattice, (1,1,1)) == 3
         @test nneighbors(lattice, (5,5,5)) == 12
-        @test_broken nneighbors(lattice, (3,3,3)) == 6
     end
     @test dist(lattice, CartesianIndex(1,1,1), CartesianIndex(5,5,1)) ≈ lattice.a*sqrt(2^2+4^2)
     @test (lattice[3,3,3] = 1) == 1
