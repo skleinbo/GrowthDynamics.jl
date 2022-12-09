@@ -289,6 +289,19 @@ function moran!(
     end
 end
 
+function mu_func(mu)
+    if mu isa Real
+        function(args...)
+            (mu, 1.0 - exp(-mu))
+        end
+    else
+        function(args...)
+            _mu = mu(args...)
+            (_mu, 1.0-exp(-_mu))
+        end
+    end
+end
+
 """
     eden_with_density!(state::RealLattice{Int}; <keyword arguments>)
 
@@ -313,12 +326,15 @@ Birthrate depends linearily on the number of neighbors.
     Used primarily for collecting observables during the run.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
-function eden_with_density!(
+function eden_with_density!(args...; mu=0.0, kwargs...)
+    _eden_with_density!(args...; mu=mu_func(mu), kwargs...)
+end
+function _eden_with_density!(
     state::TumorConfiguration{G, <:RealLattice};
     label = (s, gold) -> lastgenotype(s)+1,
     fitness = (s, gold, gnew) -> 1.0,
     T = 0,
-    mu = 0.0,
+    mu::Function,
     mu_type = :poisson,
     makesnps=true,
     genome_length = 10^9,
@@ -326,13 +342,14 @@ function eden_with_density!(
     allow_multiple = false,
     d = 0.0,
     baserate = 1.0,
-    p_grow = 1.0,
-    constraint = true,
     prune_period = 0,
     prune_on_exit = true,
-    callback = (s, t) -> begin end,
-    abort = s -> false,
+    onprebirth = (s, Iold)->true,
+    onpostbirth = (s, Iold, Inew)->nothing,
+    ondeath = (s, I)->nothing,
+    onstep = s->false,
     sizehint=0,
+    strict=false,
     kwargs...) where G
 
     if sizehint > length(state.meta.genotype)
@@ -364,8 +381,6 @@ function eden_with_density!(
 
     size_cross = prod(size(lattice)[1:end-1]) # number of elements in one slice
 
-    p_mu = 1.0 - exp(-mu)
-
     new = 0
     new_cart = nn[1]
     old = 0
@@ -381,15 +396,10 @@ function eden_with_density!(
     @debug "Prune period is $prune_period"
     @inbounds for t in 0:T
         if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
-            # @debug "Pruning..."
             prune_me!(state, mu)
         end
-        # Base.invokelatest(callback, state, state.t)
-        # if Base.invokelatest(abort, state)
-        callback(state, state.t)
-        if abort(state)
-            break
-        end
+
+        onstep(state) && break
 
         ## Much cheaper than checking the whole lattice each iteration
         ## Leave the loop if lattice is empty
@@ -398,6 +408,7 @@ function eden_with_density!(
             break
         end
         if total_rate == 0.0
+            @warn "Total rate is zero." maxlog=1
             continue
         end
         if total_rate < 0.0
@@ -446,6 +457,7 @@ function eden_with_density!(
                     br_summary[z] += br_lattice[j]
                 end
             end
+            ondeath(state, selected)
             ## END DIE ##
         ## PROLIFERATE ##
         else # birth/mutation
@@ -469,92 +481,77 @@ function eden_with_density!(
             ## BIRTH & MUTATE ##
             old = selected
             new = old
-            if !constraint
-                new = 0
-                while new != old
-                    new = rand1toN(tot_N)
-                end
-            else
-                b_grow = rand() < p_grow # Actual growth, or mutation only?
-                if b_grow
-                    neighbors!(nn, lattice, I[old])
-                    validneighbor = false
-                    for j in shuffle!(neighbor_indices)
-                        nnj = nn[j]
-                        if !out_of_bounds(nnj, sz) && state[nnj] == zero(G)
-                            new_cart = nnj
-                            validneighbor = true
-                            break
-                        end
-                    end
-                    if !validneighbor
-                        continue
-                    end
-                    nonzeros += 1
-                    new = Lin[new_cart]
-                end
-                znew::Int = (new-1)÷size_cross + 1 # `slice' coordinate
-
-                ## Mutation ##
-                genotype = state[old]
-                # @debug if genotype==0
-                #     state.meta.misc["brlattice"] = br_lattice
-                #     state.meta.misc["brslices"] = br_summary
-                #     state.meta.misc["old"] = old
-                #     state.meta.misc["totalrate"] = total_rate
-                #     state.meta.misc["who_and_what"] = who_and_what
-                #     state.meta.misc["z"] = z
-                #     state.meta.misc["slice"] = slice
-                #     state.meta.misc["cumrate"] = cumrate
-                # end
-                g_id::Int = index(state.meta, genotype)
-                if !b_grow
-                    state.meta[g_id, Val(:npop)] -= 1
-                    # setnpop!(state, getnpop(state, g_id)-1, g_id)
-                end
-                if rand() < p_mu
-                    new_genotype = label(state, g_id)
-
-                    if new_genotype != genotype
-                        push!(state, new_genotype)
-                        if makesnps
-                            new_snps = hassnps(state.meta, g_id) ? copy(state.meta[g_id, Val(:snps)]) : Int[]
-                            add_snps!(new_snps, mu, L = genome_length, kind=mu_type, allow_multiple = allow_multiple, replace = replace_mutations)
-                            state.meta[end, Val(:snps)] = new_snps
-                        end
-                        state.meta[end, Val(:fitness)] = fitness(state, genotype, new_genotype)
-                        add_edge!(state.phylogeny, nv(state.phylogeny), g_id)
-                        genotype = new_genotype
-                        g_id = lastindex(state.meta)
+            b_grow = onprebirth(state, selected) # Actual growth, or mutation only?
+            if b_grow
+                neighbors!(nn, lattice, I[old])
+                validneighbor = false
+                for j in shuffle!(neighbor_indices)
+                    nnj = nn[j]
+                    if !out_of_bounds(nnj, sz) && state[nnj] == zero(G)
+                        new_cart = nnj
+                        validneighbor = true
+                        break
                     end
                 end
-                ## END Mutation ##
-                @inbounds state[new] = genotype
-                fitness_lattice[new] = state.meta[g_id, Val(:fitness)]
-
-                if !b_grow
-                    total_rate -= d + br_lattice[new]
+                if !validneighbor
+                    @warn "No valid neighbor found." maxlog=1 I[old] nn state[nn]
+                    strict && throw(ErrorException("No valid neighbor found."))
                 end
-                br_summary[znew] -= br_lattice[new]
-                br_lattice[new] = (1.0 - density!(nn, lattice, I[new])) * base_br * fitness_lattice[new]
-                br_summary[znew] += br_lattice[new]
-                total_rate += d + br_lattice[new]
+                nonzeros += 1
+                new = Lin[new_cart]
+            end
+            znew::Int = (new-1)÷size_cross + 1 # `slice' coordinate
 
-                if b_grow
-                    for n in nn
-                        if !out_of_bounds(n, sz) && state[n] != zero(G)
-                            j = Lin[n]
-                            local z::Int = (j-1)÷size_cross + 1
-                            total_rate -= br_lattice[j]
-                            br_summary[z] -= br_lattice[j]
-                            br_lattice[j] -=  (1.0 / nneighbors(lattice, n)) * (fitness_lattice[j] * base_br)
-                            br_summary[z] += br_lattice[j]
-                            total_rate += br_lattice[j]
-                        end
+            ## Mutation ##
+            genotype = state[old]
+            g_id::Int = index(state.meta, genotype)
+            if !b_grow
+                state.meta[g_id, Val(:npop)] -= 1
+            end
+            thismu, p_mu = mu(state, genotype, old, new)
+            if rand() < p_mu
+                new_genotype = label(state, g_id)
+
+                if new_genotype != genotype
+                    push!(state, new_genotype)
+                    if makesnps
+                        new_snps = hassnps(state.meta, g_id) ? copy(state.meta[g_id, Val(:snps)]) : Int[]
+                        add_snps!(new_snps, thismu, L = genome_length, kind=mu_type, allow_multiple = allow_multiple, replace = replace_mutations)
+                        state.meta[end, Val(:snps)] = new_snps
+                    end
+                    state.meta[end, Val(:fitness)] = fitness(state, genotype, new_genotype)
+                    add_edge!(state.phylogeny, nv(state.phylogeny), g_id)
+                    genotype = new_genotype
+                    g_id = lastindex(state.meta)
+                end
+            end
+            ## END Mutation ##
+            @inbounds state[new] = genotype
+            fitness_lattice[new] = state.meta[g_id, Val(:fitness)]
+
+            if !b_grow
+                total_rate -= d + br_lattice[new]
+            end
+            br_summary[znew] -= br_lattice[new]
+            br_lattice[new] = (1.0 - density!(nn, lattice, I[new])) * base_br * fitness_lattice[new]
+            br_summary[znew] += br_lattice[new]
+            total_rate += d + br_lattice[new]
+
+            if b_grow
+                for n in nn
+                    if !out_of_bounds(n, sz) && state[n] != zero(G)
+                        j = Lin[n]
+                        local z::Int = (j-1)÷size_cross + 1
+                        total_rate -= br_lattice[j]
+                        br_summary[z] -= br_lattice[j]
+                        br_lattice[j] -=  (1.0 / nneighbors(lattice, n)) * (fitness_lattice[j] * base_br)
+                        br_summary[z] += br_lattice[j]
+                        total_rate += br_lattice[j]
                     end
                 end
             end
             ## END BIRTH & MUTATE ##
+            onpostbirth(state, old, new)
         end
         if action === none
             @debug "No reaction occured."
