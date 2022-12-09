@@ -159,10 +159,7 @@ function exponential!(
 end
 
 function prune_me!(state, mu)
-    annotate_snps!(state, mu)
     prune_phylogeny!(state)
-    # state.phylogeny = newP
-    # state.meta = newMeta
     nothing
 end
 
