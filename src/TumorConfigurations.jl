@@ -708,7 +708,7 @@ function prune_phylogeny!(S::TumorConfiguration{G,L}) where {G,L}
 
     function bridge!(s, d)
         children = inneighbors(P, d)
-        if s==1 || getnpop(S, d) > 0
+        if s==1 || S.meta[d, :npop] > 0
             @debug "Adding edge"  d s
             add_edge!(P, d, s)
         elseif length(children)==0
@@ -726,7 +726,7 @@ function prune_phylogeny!(S::TumorConfiguration{G,L}) where {G,L}
         children = inneighbors(P, v)
         parent = outneighbors(P, v)
         @debug "Vertex $v is empty" v children  parent[1]
-        while parent[1]!=1 && !isempty(parent) && S.meta[parent[1], Val(:npop)] == 0
+        while !isempty(parent) && parent[1]!=1 && S.meta[parent[1], Val(:npop)] == 0
             parent = outneighbors(P, parent[1])
         end
         if isempty(parent)
