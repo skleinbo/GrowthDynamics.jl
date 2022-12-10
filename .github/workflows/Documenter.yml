@@ -17,6 +17,8 @@ jobs:
       - uses: julia-actions/setup-julia@v1
         with:
           version: '1.6'
+      - name: Add skleinbo registry
+        run: julia -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(RegistrySpec(url="https://github.com/skleinbo/JuliaRegistry.jl")); Pkg.Registry.update()'      
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
       - name: Build and deploy
