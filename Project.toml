@@ -1,7 +1,7 @@
 name = "GrowthDynamics"
 uuid = "708a6a61-856c-5d7f-acbf-fcf0902d75eb"
 authors = ["Stephan Kleinbölting <skleinbo@thp.uni-koeln.de"]
-version = "0.6.1"
+version = "0.6.2-DEV"
 
 [deps]
 CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
