@@ -729,7 +729,7 @@ coordination(::Type{HCPLattice{T, A}}) where {T, A} = 12
 spacings(L::RealLattice) = L.a .* spacings(typeof(L))
 # If only lattice type is given, assume lattice constant==1.0
 spacings(::Type{<:LineLattice}) = (1.0,)
-spacings(::Type{<:HexagonalLattice}) = (1.0, 1.0)/sqrt(2)
+spacings(::Type{<:HexagonalLattice}) = (1.0, 1.0)./sqrt(2)
 spacings(::Type{<:CubicLattice}) = (1.0, 1.0, 1.0)
 spacings(::Type{<:FCCLattice}) = (1.0, 1.0, 1.0)./sqrt(2)
 
