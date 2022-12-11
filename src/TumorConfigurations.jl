@@ -211,6 +211,7 @@ Base.getindex(M::MetaData{T}, ::Colon) where {T} = @inbounds M[eachindex(M)]
         M.misc
     )
     N._len = length(N.genotype)
+    index!(N)
     return N
 end
 
