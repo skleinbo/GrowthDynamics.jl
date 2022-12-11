@@ -4,11 +4,12 @@ import Distributions: Binomial, Exponential, cdf
 import Graphs: nv, vertices, add_vertex!, add_edge!
 using ..Lattices
 import Random: shuffle!
-using StatsBase: Weights,sample,mean
+using StatsBase: Weights, sample, mean
 import ..Phylogenies: add_snps!, sample_ztp
 import ..TumorConfigurations: TumorConfiguration, annotate_snps!, getfitness
 import ..TumorConfigurations: connect!, index, hassnps, lastgenotype, prune_phylogeny!, _resize!
 import ..TumorObservables: total_population_size
+import WeightedSampling: adjust_weight!, WeightedSampler, sample as smp, weight
 
 export eden_with_density!, exponential!, moran!, twonew!
 
@@ -357,47 +358,44 @@ function _eden_with_density!(
     I = CartesianIndices(lattice.data)
     Lin = LinearIndices(lattice.data)
 
-    dim = dimension(lattice)
     sz = size(lattice)
-    lin_N = sz[1]
     tot_N = length(lattice)
 
+    free_neighbors = [ count(x->!out_of_bounds(lattice, x) && state[x]==zero(G), neighbors(lattice, y)) for y in I ]
     fitness_lattice = [k != zero(G) ? getfitness(state, k) : 0.0 for k in lattice.data]
+    dr_lattice = [k != zero(G) ? d : 0.0 for k in lattice.data]
     br_lattice = zeros(Float64, size(lattice.data))
 
     nonzeros = count(x -> x != zero(G), lattice.data)
-    base_br = 1.0 # - d
+    base_br = 1.0
 
     nn = Lattices.Neighbors(lattice) # Initialize neighbors to the appr. type
     neighbor_indices = collect(1:length(nn))
 
     for k in 1:tot_N
-        br_lattice[k] = (1.0 - density!(nn, lattice, I[k])) * (base_br * fitness_lattice[k])
+        br_lattice[k] = free_neighbors[k]/nneighbors(lattice, I[k]) * (base_br * fitness_lattice[k])
     end
-    br_summary = reshape(sum(br_lattice, dims=1:dimension(lattice)-1), :)
-
-    size_cross = prod(size(lattice)[1:end-1]) # number of elements in one slice
+    br_sampler = WeightedSampler(reshape(br_lattice, :))
+    dr_sampler = WeightedSampler(reshape(dr_lattice, :))
 
     new = 0
     new_cart = nn[1]
     old = 0
     selected = 0
-    cumrate::Float64 = 0.0
     validneighbor = false
     action::Action = none
-    total_rate::Float64 = mapreduce(+, enumerate(lattice.data)) do x
-         x[2] != zero(G) ? d + br_lattice[x[1]] : 0.0
-    end
+    total_rate::Float64 = br_sampler.heap[1] + dr_sampler.heap[1]
     @debug total_rate
 
     @debug "Prune period is $prune_period"
-    @inbounds for t in 0:T
+    for t in 0:T
         if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
             prune_me!(state, mu)
         end
 
         onstep(state) && break
 
+        total_rate = br_sampler.heap[1] + dr_sampler.heap[1]
         ## Much cheaper than checking the whole lattice each iteration
         ## Leave the loop if lattice is empty
         if nonzeros == 0
@@ -407,8 +405,7 @@ function _eden_with_density!(
         if total_rate == 0.0
             @warn "Total rate is zero." maxlog=1
             continue
-        end
-        if total_rate < 0.0
+        elseif total_rate < 0.0
             @warn("Total propensity became negative ($total_rate) after $(state.t) steps.")
             total_rate = 0.0
             continue
@@ -421,60 +418,41 @@ function _eden_with_density!(
         ## Die, proliferate or be dormant
         who_and_what = rand() * total_rate
 
-        cumrate = 0.0
         selected = 1
         action = none        
         
         ## DEATH ##
-        if who_and_what < d*nonzeros # death
+        if who_and_what < dr_sampler.heap[1] # death
             action = die
-            _idx = floor(Int, who_and_what/d) # non-zero to die.
-            while state[selected]==zero(G) && selected != _idx && selected < tot_N
-                selected += 1
-            end
-            z::Int = (selected-1)÷size_cross + 1 # `slice' coordinate
+            selected = smp(dr_sampler, 1)
             ## DIE ##
             nonzeros -= 1
-            total_rate -= br_lattice[selected] + d
-            br_summary[z] -= br_lattice[selected]
 
             state[selected] = zero(G)
-            fitness_lattice[selected] = 0.
-            br_lattice[selected] = 0.
+            fitness_lattice[selected] = 0.0
+            adjust_weight!(dr_sampler, selected, 0)
+            adjust_weight!(br_sampler, selected, 0)
             ## Update birth-rates
             neighbors!(nn, lattice, I[selected])
             for n in nn
                 if !out_of_bounds(n, sz) && state[n] != zero(G)
                     j = Lin[n]
-                    local z::Int = (j-1)÷size_cross + 1
-                    total_rate -= br_lattice[j]
-                    br_summary[z] -= br_lattice[j]
-                    br_lattice[j] +=  1.0 / nneighbors(lattice, n) * fitness_lattice[j] * base_br
-                    total_rate += br_lattice[j]
-                    br_summary[z] += br_lattice[j]
+                    free_neighbors[j] += 1
+                    adjust_weight!(br_sampler, j,  free_neighbors[j] / nneighbors(lattice, n) * fitness_lattice[j] * base_br)
                 end
             end
             ondeath(state, selected)
             ## END DIE ##
         ## PROLIFERATE ##
         else # birth/mutation
-            who_and_what -= d*nonzeros
+            nonzeros==0 && continue
+            who_and_what -= dr_sampler.heap[1]
             action = proliferate
-            slice = 1
-            while cumrate + br_summary[slice] < who_and_what
-                cumrate += br_summary[slice]
-                selected += size_cross
-                slice += 1
-            end
+            selected = smp(br_sampler, 1)
             # @debug state.meta.misc["preselected"] = selected
-            while cumrate+br_lattice[selected] < who_and_what && selected < tot_N
-                cumrate += br_lattice[selected]
-                selected += 1
-            end
             if selected > tot_N
                 error("selected too large: $selected")
             end
-            z = selected÷size_cross + 1 # `slice' coordinate
             ## BIRTH & MUTATE ##
             old = selected
             new = old
@@ -491,13 +469,17 @@ function _eden_with_density!(
                     end
                 end
                 if !validneighbor
-                    @warn "No valid neighbor found." maxlog=1 I[old] nn state[nn]
-                    strict && throw(ErrorException("No valid neighbor found."))
+                    @warn "No valid neighbor found." I[old] nn
+                        strict && begin 
+                        global dbg =Dict(:br => br_sampler, :fn => free_neighbors)
+                        
+                        throw(ErrorException("No valid neighbor found."))
+                    end
+                    continue
                 end
                 nonzeros += 1
                 new = Lin[new_cart]
             end
-            znew::Int = (new-1)÷size_cross + 1 # `slice' coordinate
 
             ## Mutation ##
             genotype = state[old]
@@ -526,24 +508,15 @@ function _eden_with_density!(
             @inbounds state[new] = genotype
             fitness_lattice[new] = state.meta[g_id, Val(:fitness)]
 
-            if !b_grow
-                total_rate -= d + br_lattice[new]
-            end
-            br_summary[znew] -= br_lattice[new]
-            br_lattice[new] = (1.0 - density!(nn, lattice, I[new])) * base_br * fitness_lattice[new]
-            br_summary[znew] += br_lattice[new]
-            total_rate += d + br_lattice[new]
+            adjust_weight!(br_sampler, new,  free_neighbors[new]/nneighbors(lattice, I[new]) * base_br * fitness_lattice[new])
+            adjust_weight!(dr_sampler, new,  d)
 
             if b_grow
                 for n in nn
                     if !out_of_bounds(n, sz) && state[n] != zero(G)
                         j = Lin[n]
-                        local z::Int = (j-1)÷size_cross + 1
-                        total_rate -= br_lattice[j]
-                        br_summary[z] -= br_lattice[j]
-                        br_lattice[j] -=  (1.0 / nneighbors(lattice, n)) * (fitness_lattice[j] * base_br)
-                        br_summary[z] += br_lattice[j]
-                        total_rate += br_lattice[j]
+                        free_neighbors[j] -= 1
+                        adjust_weight!(br_sampler, j,  free_neighbors[j]/nneighbors(lattice, n) * fitness_lattice[j] * base_br)
                     end
                 end
             end
