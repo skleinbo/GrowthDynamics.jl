@@ -44,8 +44,13 @@ end
     @test all(I .== I′)
     @testset "Neighbors" begin
         @test nneighbors(lattice, (1,1)) == 2
-        @test nneighbors(lattice, (5,5)) == 2
+        @test nneighbors(lattice, (5,5)) == 3
         @test nneighbors(lattice, (3,3)) == 6
+        @test all(I) do i
+            n = nneighbors(lattice, i)
+            nb = neighbors(lattice, i)
+            count(x->!out_of_bounds(lattice, x), nb) == n
+        end
     end
     @test dist(lattice, CartesianIndex(1,1), CartesianIndex(5,5)) ≈ lattice.a*sqrt(4^2 + 4^2*sin(pi/3)^2)
     @test (lattice[3,3] = 1) == 1

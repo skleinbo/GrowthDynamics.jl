@@ -304,35 +304,28 @@ Base.@propagate_inbounds function neighbors!(nn::Neighbors{6,2}, ::HexagonalLatt
 end
 
 function nneighbors(::Type{HexagonalLattice{T, A}}, N, I) where {T, A}
-    if isodd(I[1])
-        if (I[1] == 1 || I[1] == N[1]) && 2<=I[2]<N[2]
-            return 4
-        elseif I[2] == 1 && 2<=I[1]<N[1]
-            return 3
-        elseif I[2] == N[2] && 2<=I[1]<N[1]
-            return 5
-        elseif (I[1] == N[1] && I[2] == N[2]) || (I[1] == 1 && I[2] == 1)
+    row, col = I[1], I[2]
+    if 1<col<N[2] && 1<row<N[1]
+        return 6
+    end
+
+    if col==1
+        if row==1 || isodd(row) && row==N[1]
             return 2
-        elseif I[1] == 1 && I[2] == N[2]
+        elseif isodd(row)
             return 3
         else
-            return 6
+            return 5
         end
-    else
-        if (I[1] == 1 || I[1] == N[1]) && 2<=I[2]<N[2]
-            return 4
-        elseif I[2] == 1 && 2<=I[1]<N[1]
-            return 5
-        elseif I[2] == N[2] && 2<=I[1]<N[1]
-            return 3
-        elseif I[1] == N[1]  && I[2] == N[2]
-            return 2
-        elseif I[1] == N[1] && I[2] == 1
+    elseif col==N[2]
+        if row==1 || isodd(row) && row==N[1] || iseven(row)
             return 3
         else
-            return 6
+            return 5
         end
     end
+
+    return 4
 end
 
 """
