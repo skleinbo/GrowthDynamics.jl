@@ -403,12 +403,11 @@ function _eden_with_density!(
             break
         end
         if total_rate == 0.0
-            @warn "Total rate is zero." maxlog=1
-            continue
+            @info "Total rate is zero. Lattice full and no death possible? Exiting." maxlog=1
+            break
         elseif total_rate < 0.0
-            @warn("Total propensity became negative ($total_rate) after $(state.t) steps.")
-            total_rate = 0.0
-            continue
+            error("""Total propensity became negative ($total_rate) after $(state.t) steps.
+                     This should not happen.""")
         end
 
         ########################
@@ -435,10 +434,12 @@ function _eden_with_density!(
             ## Update birth-rates
             neighbors!(nn, lattice, I[selected])
             for n in nn
-                if !out_of_bounds(n, sz) && state[n] != zero(G)
+                if !out_of_bounds(n, sz)
                     j = Lin[n]
                     free_neighbors[j] += 1
-                    adjust_weight!(br_sampler, j,  free_neighbors[j] / nneighbors(lattice, n) * fitness_lattice[j] * base_br)
+                    if  state[n] != zero(G)
+                        adjust_weight!(br_sampler, j,  free_neighbors[j] / nneighbors(lattice, n) * fitness_lattice[j] * base_br)
+                    end
                 end
             end
             ondeath(state, selected)
@@ -446,7 +447,6 @@ function _eden_with_density!(
         ## PROLIFERATE ##
         else # birth/mutation
             nonzeros==0 && continue
-            who_and_what -= dr_sampler.heap[1]
             action = proliferate
             selected = smp(br_sampler, 1)
             # @debug state.meta.misc["preselected"] = selected
@@ -456,7 +456,7 @@ function _eden_with_density!(
             ## BIRTH & MUTATE ##
             old = selected
             new = old
-            b_grow = onprebirth(state, selected) # Actual growth, or mutation only?
+            b_grow = onprebirth(state, old) # Actual growth, or mutation only?
             if b_grow
                 neighbors!(nn, lattice, I[old])
                 validneighbor = false
@@ -512,11 +512,14 @@ function _eden_with_density!(
             adjust_weight!(dr_sampler, new,  d)
 
             if b_grow
+                neighbors!(nn, lattice, I[new])
                 for n in nn
-                    if !out_of_bounds(n, sz) && state[n] != zero(G)
+                    if !out_of_bounds(n, sz)
                         j = Lin[n]
                         free_neighbors[j] -= 1
-                        adjust_weight!(br_sampler, j,  free_neighbors[j]/nneighbors(lattice, n) * fitness_lattice[j] * base_br)
+                        if state[n] != zero(G)
+                            adjust_weight!(br_sampler, j,  free_neighbors[j]/nneighbors(lattice, n) * fitness_lattice[j] * base_br)
+                        end
                     end
                 end
             end
