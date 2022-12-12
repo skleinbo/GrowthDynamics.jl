@@ -89,7 +89,7 @@ function exponential!(
     for step in 0:T
         if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
             @debug "Pruning..."
-            prune_me!(state, mu)
+            prune_phylogeny!(state)
         end
 
         Base.invokelatest(callback, state, state.t)
@@ -153,15 +153,10 @@ function exponential!(
         state.t += 1
     end
     if prune_on_exit
-        prune_me!(state, mu)
+        prune_phylogeny!(state)
     end
 
     return nothing
-end
-
-function prune_me!(state, mu)
-    prune_phylogeny!(state)
-    nothing
 end
 
 """
@@ -218,7 +213,7 @@ function moran!(
     @inbounds for t in 0:T
         if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
             @debug "Pruning..."
-            prune_me!(state, mu)
+            prune_phylogeny!(state)
         end
 
         callback(state, state.t)
@@ -283,7 +278,7 @@ function moran!(
         state.t += 1
     end
     if prune_on_exit
-        prune_me!(state, mu)
+        prune_phylogeny!(state)
     end
 end
 
@@ -361,6 +356,7 @@ function _eden_with_density!(
     sz = size(lattice)
     tot_N = length(lattice)
 
+    # TODO: Should require only one pass.
     free_neighbors = [ count(x->!out_of_bounds(lattice, x) && state[x]==zero(G), neighbors(lattice, y)) for y in I ]
     fitness_lattice = [k != zero(G) ? getfitness(state, k) : 0.0 for k in lattice.data]
     dr_lattice = [k != zero(G) ? d : 0.0 for k in lattice.data]
@@ -390,7 +386,7 @@ function _eden_with_density!(
     @debug "Prune period is $prune_period"
     for t in 0:T
         if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
-            prune_me!(state, mu)
+            prune_phylogeny!(state)
         end
 
         onstep(state) && break
@@ -540,7 +536,7 @@ function _eden_with_density!(
 
     ## Update the phylogeny
     if prune_on_exit
-        prune_me!(state, mu)
+        prune_phylogeny!(state)
     end
     @debug "Done at $(state.t)"
 end
@@ -623,7 +619,7 @@ function twonew!(
     @inbounds for t in 0:T
         if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
             @debug "Pruning..."
-            prune_me!(state, mu)
+            prune_phylogeny!(state)
         end
 
         callback(state, state.t)
@@ -668,7 +664,7 @@ function twonew!(
         state.t += 1
     end
     if prune_on_exit
-        prune_me!(state, mu)
+        prune_phylogeny!(state)
     end
 end
 
