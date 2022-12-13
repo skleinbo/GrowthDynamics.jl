@@ -3,26 +3,18 @@
 A _state_ is a collection of
 
 * either a `lattice<:RealLattice` if the model is spatial (see [lattices](@ref)), or a dummy placeholder `NoLattice` if it is not.
-* a phylogenetic tree, which is a directed graph where the root(s) are the wildtype(s).
-* meta data about the population and its genetics. See [Meta Data](@ref).
+* a phylogenetic tree, which is a directed graph where the root(s) represent the wildtype(s).
+* metadata about the population and its genetics. See [Metadata](@ref).
 * the time the state has been evolved for by invoking dynamics on it.
 
-States are of type `TumorConfiguration`.
+States are of type [`Population`](@ref).
 
-```@meta
-    CurrentModule = GrowthDynamics.TumorConfigurations
-```
-
-```@docs
-    TumorConfiguration
-```
-
-It is normally not required to manipulate meta data, phylogeny or lattice directly. Convenient methods to manipulate state are provided.
+It is normally not required to manipulate metadata, phylogeny or lattice directly. Convenient methods to manipulate state are provided.
 
 ```@setup getset
 using Graphs
 using GrowthDynamics
-using GrowthDynamics.TumorConfigurations
+using GrowthDynamics.Populations
 using GrowthDynamics.Lattices
 ```
 
@@ -51,10 +43,16 @@ using GrowthDynamics.Lattices
 Some convenience methods for common geometries are provided
 
 ```@docs
-uniform
-spheref
-spherer
-single_center
-half_space
-sphere_with_single_mutant_on_outer_shell
+    uniform
+    spheref
+    spherer
+    single_center
+    half_space
+    sphere_with_single_mutant_on_outer_shell
+```
+
+## API
+
+```@docs
+    Population
 ```

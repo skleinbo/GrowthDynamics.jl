@@ -1,14 +1,10 @@
 # [Lattices](@id lattices)
 
-```@meta
-    CurrentModule = GrowthDynamics.Lattices
-```
-
 Each agent occupies a site on a lattice. They provide a mapping between _coordinates_ and _indices_ of the underlying array.
 
-N.B.: The provided structures are not true lattices, since they do not extend arbitrarily, but have finite size.
+**N.B.**: The structures are not true lattices, because they do not extend to infinity, but have finite size.
 
-Currently, the following lattice types are provided
+Currently, the following lattices are provided
 
 * [`LineLattice`](@ref)
 * [`HexagonalLattice`](@ref)
@@ -21,9 +17,9 @@ These are subtypes of `RealLattice`. Additionally, a `NoLattice` type is provide
 
     Avoid manipulating the `data` field of a lattice directly.
     Doing so easily leads to an inconsistent state between lattice and
-    meta data.
+    metadata.
 
-    Use the getter and setter methods for [`TumorConfiguration`](@ref) instead.
+    Use the getter and setter methods for [`Population`](@ref) instead.
 
 ## Lattice Types
 
@@ -51,4 +47,13 @@ Each lattice type derives from `AbstractLattice` and implements the following me
     density
 ```
 
+## Radial geometries
 
+Populations often grow with approximate radial symmetry. One might then be interested in for example
+grouping cells with respect to their distance from an origin.
+
+```@docs
+    shell
+    isonshell
+    conicsection
+```

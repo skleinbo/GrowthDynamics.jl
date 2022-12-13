@@ -1,29 +1,25 @@
-# Meta Data
+# Metadata
 
-```@meta
-CurrentModule = GrowthDynamics.TumorConfigurations
-```
+Every [`Population`](@ref) has [`MetaData`](@ref) attached. They store for every genotype
 
-Every [`TumorConfiguration`](@ref) has [`MetaData`](@ref) attached. They contain for every genotype
+* population count. While in principle redundant, it is significantly cheaper to keep tabs during a simulation than to scan the entire lattice.
+* fitness value
+* TODO: death rate
+* mutations: either `nothing`, or a vector of `Int` if mutations are present
+* the time when the genotype entered the population
 
-* A population count. While in principle redundant, it is significantly cheaper than enumerating the lattice.
-* A fitness value
-* TODO: A death rate
-* Mutations: Either `nothing`, or a vector of `Int` if mutations are present.
-* A timestamp when the genotype entered the population.
+Additionally, the field `misc` is a dictionary for storing arbitrary user-defined key-value pairs.
 
-Additionally, `meta.misc` is a dictionary for storing arbitrary user-defined key-value pairs.
-
-Convenient getter and setter routines are provided. Let's demonstrate with an example similar to the one from the [Quick Start](@ref) section, but label genotypes with strings of fixed length (from [InlineStrings.jl](https://github.com/JuliaStrings/InlineStrings.jl))
+Convenient getter and setter methods are provided. Let's demonstrate on an example similar to the one from the [Quick Start](@ref) section, but label genotypes with strings of fixed length (from [InlineStrings.jl](https://github.com/JuliaStrings/InlineStrings.jl))
 
 ```@setup 1
 import Random
 Random.seed!(1234)
 
-import GrowthDynamics.TumorConfigurations: spheref
+import GrowthDynamics.Populations: spheref
 import GrowthDynamics.Lattices: HexagonalLattice
-using GrowthDynamics.LatticeTumorDynamics
-using GrowthDynamics.TumorObservables
+using GrowthDynamics.LatticeDynamics
+using GrowthDynamics.Observables
 import DataFrames: first # hide
 ```
 

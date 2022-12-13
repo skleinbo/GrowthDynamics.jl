@@ -10,15 +10,15 @@ Let's give an overview of the components acting together.
 
 ## States
 
-A state is a structure comprised of a lattice (see Lattices), each entry representing a member of the population, its value representing its genotype, and various metadata. In unstructered populations the lattice is simply a dummy.
+A state is a structure comprised of a lattice (see Lattices), each entry representing a member of the population, its value representing its genotype, and various metadata. In unstructured populations the lattice is simply a dummy.
 
-The metadata store information about the current state of the various genotypes, like number of individuals present, their fitness, and so on. Furthermore a phylogenetic tree is recorded during simulation, enabling access to observables like most-recent common ancestors, or tracking of lineages.
+The metadata store information about the current state of the various genotypes, like number of individuals present, their fitness, and so on. Furthermore, a phylogenetic tree is recorded during simulation, enabling access to observables like most-recent common ancestors, or tracking of lineages.
 
 ```@repl 1
-import GrowthDynamics.TumorConfigurations: spheref
+import GrowthDynamics.Populations: spheref
 import GrowthDynamics.Lattices: HexagonalLattice
-using GrowthDynamics.LatticeTumorDynamics
-using GrowthDynamics.TumorObservables
+using GrowthDynamics.LatticeDynamics
+using GrowthDynamics.Observables
 import DataFrames: first # hide
 
 state, _ = spheref(HexagonalLattice, 128, f=1/10, g1=0, g2=1)
@@ -43,11 +43,11 @@ eden_with_density!(state;
 show(state)
 ```
 
-We can plot (done using [Makie.jl]()) mathe distribution of fitness values to check if it conforms to expectation
+We can plot (done using [Makie.jl](https://makie.juliaplots.org/)) the distribution of fitness values to check if it conforms to expectation
 
 ```@example 1
 using CairoMakie #hide
-hist(state.meta[:, :fitness], axis=(xlabel="Fitness", ylabel="Frequency")) #hide
+hist(state.meta[:, :fitness], axis=(xlabel="Fitness", ylabel="Count")) #hide
 ```
 
 ## Observables

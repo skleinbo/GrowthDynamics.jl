@@ -187,6 +187,12 @@ end
     return dest
 end
 
+"""
+    index(M, g)
+
+Return the index of genotype `g` in, or `nothing` if `g` is not
+in meta data `M`.
+""" 
 @propagate_inbounds function index(M::MetaData{T}, g) where T
     return haskey(M.index, g) ? M.index[g] : nothing
 end
@@ -356,6 +362,20 @@ end
 ## type you are using, define it, e.g
 zero(::Type{String}) = "0"
 
+"""
+    Population{G, T}
+
+Represents a population on a lattice of type `T` with genotypes of data type `G`.
+
+# Fields
+
+* `lattice<:Lattices.AbstractLattice`
+* `phylogeny`: directed graph recording the ancestry of genotypes
+* `meta::MetaData`: metadata such as fitnesses, mutations, etc. See [`MetaData`](@ref).
+* `t::Int`: age in timesteps
+* `treal::Float64`: age in "real" time.
+* `observables`: dictionary to store observables in
+"""
 mutable struct Population{G, T <: Lattices.AbstractLattice}
     lattice::T
     phylogeny::SimpleDiGraph{Int}

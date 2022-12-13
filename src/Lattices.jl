@@ -27,9 +27,7 @@ export  conicsection,
         out_of_bounds,
         radius,
         shell,
-        spacings,
-        surface,
-        volume
+        spacings
 
 import Base: size, length, getindex, setindex!, maybeview, firstindex, lastindex
 import Base.Iterators: product
@@ -212,7 +210,7 @@ end
 
 Each site has six equidistant neighbors with a sixfold rotational symmetry.
 
-See https://en.wikipedia.org/wiki/Hexagonal_lattice
+See <https://en.wikipedia.org/wiki/Hexagonal_lattice>
 
 # Fields
 * `a`: lattice constant
@@ -226,7 +224,7 @@ julia> l = HexagonalLattice(1/2, ones(32,32))
 HexagonalLattice{Float64, Matrix{Float64}}(0.5, [1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0])
 
 julia> neighbors(l, (16,16))
-6-element StaticArrays.MVector{6, CartesianIndex{2}} with indices SOneTo(6):
+6-element StaticArraysCore.MVector{6, CartesianIndex{2}} with indices SOneTo(6):
  CartesianIndex(15, 16)
  CartesianIndex(15, 17)
  CartesianIndex(16, 17)
@@ -235,7 +233,7 @@ julia> neighbors(l, (16,16))
  CartesianIndex(16, 15)
 
 julia> coord.(Ref(l), ans)
-6-element StaticArrays.MVector{6, GeometryBasics.Point{2, Float32}} with indices SOneTo(6):
+6-element StaticArraysCore.MVector{6, GeometryBasics.Point{2, Float32}} with indices SOneTo(6):
  [7.5, 6.0621777]
  [8.0, 6.0621777]
  [8.25, 6.4951906]
@@ -348,7 +346,7 @@ end
 
 Three dimensional primitive cubic lattice. Each site has six equidistant neighbors with a fourfold rotational symmetry in each of the three planes.
 
-See https://en.wikipedia.org/wiki/Cubic_crystal_system
+See <https://en.wikipedia.org/wiki/Cubic_crystal_system>
 
 # Fields
 * `a`: lattice constant
@@ -362,7 +360,7 @@ julia> l = CubicLattice(1/2, ones(16,16,16))
 CubicLattice{Float64, Array{Float64, 3}}(0.5, [1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; … ;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0])
 
 julia> neighbors(l, (8,8,8))
-6-element StaticArrays.MVector{6, CartesianIndex{3}} with indices SOneTo(6):
+6-element StaticArraysCore.MVector{6, CartesianIndex{3}} with indices SOneTo(6):
  CartesianIndex(7, 8, 8)
  CartesianIndex(9, 8, 8)
  CartesianIndex(8, 7, 8)
@@ -371,7 +369,7 @@ julia> neighbors(l, (8,8,8))
  CartesianIndex(8, 8, 9)
 
 julia> coord.(Ref(l), ans)
-6-element StaticArrays.MVector{6, GeometryBasics.Point{3, Float32}} with indices SOneTo(6):
+6-element StaticArraysCore.MVector{6, GeometryBasics.Point{3, Float32}} with indices SOneTo(6):
  [3.0, 3.5, 3.5]
  [4.0, 3.5, 3.5]
  [3.5, 3.0, 3.5]
@@ -481,9 +479,9 @@ end
 """
     isonshell(L::RealLattice, p, r, o)
 
-    Determine whether a lattice point `p` is on a shell with radius `r` wrt.
-    the origin `o`. A shell is defined as the collection of points with |(p-o)|≤r+a/2
-    where `a` is the lattice spacing.
+Determine whether a lattice point `p` is on a shell with radius `r` wrt.
+the origin `o`. A shell is defined as the collection of points with |(p-o)|≤r+a/2
+where `a` is the lattice spacing.
 """
 @inline function isonshell(L::RealLattice, p, r, o=midpointcoord(L); a=spacings(L)[1])
     p′ = p .- o
@@ -588,7 +586,7 @@ end
 
 Three dimensional face-centered cubic lattice. Each site has twelve neighbors.
 
-See https://en.wikipedia.org/wiki/Cubic_crystal_system
+See <https://en.wikipedia.org/wiki/Cubic_crystal_system>
 
 # Fields
 * `a`: lattice constant
@@ -602,7 +600,7 @@ julia> l = FCCLattice(1/2, ones(16,16,16))
 FCCLattice{Float64, Array{Float64, 3}}(0.5, [1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; … ;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0])
 
 julia> neighbors(l, (8,8,8))
-12-element StaticArrays.MVector{12, CartesianIndex{3}} with indices SOneTo(12):
+12-element StaticArraysCore.MVector{12, CartesianIndex{3}} with indices SOneTo(12):
  CartesianIndex(7, 8, 8)
  CartesianIndex(9, 8, 8)
  CartesianIndex(9, 7, 8)
@@ -617,7 +615,7 @@ julia> neighbors(l, (8,8,8))
  CartesianIndex(8, 8, 7)
 
 julia> coord.(Ref(l), ans)
-12-element StaticArrays.MVector{12, GeometryBasics.Point{3, Float32}} with indices SOneTo(12):
+12-element StaticArraysCore.MVector{12, GeometryBasics.Point{3, Float32}} with indices SOneTo(12):
  [1.5, 3.75, 1.75]
  [2.0, 3.75, 1.75]
  [2.0, 3.25, 1.75]
@@ -790,7 +788,7 @@ Index of the coordinate `p` closest to the nearest site on lattice `L`. `p` is a
 @doc "Dimension of the lattice. Functionally equivalent to `ndims(lattice.data)`." dimension
 
 @doc raw"""
-neighbors(L::RealLattice, I)
+    neighbors(L::RealLattice, I)
 
 Vector of neighbors of index `I``. Returns `Vector{CartesianIndex{dimension(L)}}``.
 
@@ -798,7 +796,7 @@ Does not check for bounds.
 """ neighbors
 
 @doc raw"""
-neighbors!(n, L, I)
+    neighbors!(n, L, I)
 
 In-place version of `neighbors`.
 

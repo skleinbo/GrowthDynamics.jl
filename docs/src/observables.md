@@ -1,11 +1,11 @@
 # Observables
 
-List of built-in observables. They take a `TumorConfiguration` as the first and often only argument.
+List of built-in observables. They take a [`Population`](@ref) as the first and often only argument.
 
 ```@index
-Pages = ["observables.md"]
+    Pages = ["observables.md"]
 ```
 
 ```@autodocs
-Modules = [GrowthDynamics.TumorObservables]
+    Modules = [GrowthDynamics.Observables]
 ```
