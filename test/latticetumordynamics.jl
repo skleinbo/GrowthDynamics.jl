@@ -1,7 +1,7 @@
 import GrowthDynamics
 import GrowthDynamics.Lattices: CubicLattice
 using GrowthDynamics.LatticeTumorDynamics
-import GrowthDynamics.TumorObservables: total_population_size
+import GrowthDynamics.Observables: total_population_size
 
 @testset "eden_with_density" begin
     μ = 1e-2

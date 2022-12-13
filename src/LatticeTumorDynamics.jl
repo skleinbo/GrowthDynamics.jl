@@ -8,7 +8,7 @@ using StatsBase: Weights, sample, mean
 import ..Phylogenies: add_snps!, sample_ztp
 import ..Populations: Population, annotate_snps!, getfitness
 import ..Populations: connect!, index, hassnps, lastgenotype, prune_phylogeny!, _resize!
-import ..TumorObservables: total_population_size
+import ..Observables: total_population_size
 import WeightedSampling: adjust_weight!, WeightedSampler, sample as smp, weight
 
 export eden_with_density!, exponential!, moran!, twonew!

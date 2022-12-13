@@ -1,4 +1,4 @@
-module TumorObservables
+module Observables
 
 import Base.Iterators: filter
 import CoordinateTransformations: Spherical, SphericalFromCartesian
