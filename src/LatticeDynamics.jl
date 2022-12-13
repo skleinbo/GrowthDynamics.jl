@@ -1,4 +1,4 @@
-module LatticeTumorDynamics
+module LatticeDynamics
 
 import Distributions: Binomial, Exponential, cdf
 import Graphs: nv, vertices, add_vertex!, add_edge!
@@ -675,5 +675,5 @@ dynamics_dict = Dict(
     :eden_with_density => eden_with_density!,
 )
 
-## -- END module LatticeTumorDynamics --
+## -- END module LatticeDynamics --
 end

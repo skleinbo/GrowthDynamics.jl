@@ -11,7 +11,7 @@ end
 @testset "Populations" begin
     include("populations.jl")
 end
-@testset "LatticeTumorDynamics" begin
-    include("latticetumordynamics.jl")
+@testset "LatticeDynamics" begin
+    include("latticedynamics.jl")
 end
 end

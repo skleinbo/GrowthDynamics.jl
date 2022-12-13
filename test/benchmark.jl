@@ -25,7 +25,7 @@ suite["tc"]["meta"] = BenchmarkGroup()
 suite["tc"]["meta"]["push"] = BenchmarkGroup()
 
 for L in [32,64,128]
-    suite["dynamics"]["dop"][string(L)] = @benchmarkable LatticeTumorDynamics.die_or_proliferate!(state_spatial;DEBUG=false,
+    suite["dynamics"]["dop"][string(L)] = @benchmarkable LatticeDynamics.die_or_proliferate!(state_spatial;DEBUG=false,
             fitness=fit_func,
             d=0.0,
             T=2N,
