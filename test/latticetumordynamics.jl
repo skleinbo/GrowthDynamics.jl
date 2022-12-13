@@ -10,7 +10,7 @@ import GrowthDynamics.TumorObservables: total_population_size
     Nfinal=2^10
     fit_func(s, gold, gnew) = gnew==2 ? 1.3 : 1.0
     
-    tumor = GrowthDynamics.TumorConfigurations.single_center(CubicLattice, L, g1=0, g2=1)[1]
+    tumor = GrowthDynamics.Populations.single_center(CubicLattice, L, g1=0, g2=1)[1]
     eden_with_density!(tumor;DEBUG=false,
         fitness=fit_func,
         d=0.0,
@@ -32,7 +32,7 @@ end
     Nfinal=2^10
     fit_func(s, gold, gnew) = gnew==2 ? 1.3 : 1.0
     
-    tumor = GrowthDynamics.TumorConfigurations.nolattice_state()[1]
+    tumor = GrowthDynamics.Populations.nolattice_state()[1]
     moran!(tumor;DEBUG=false,
         fitness=fit_func,
         d=0.0,
@@ -55,7 +55,7 @@ end
     Nfinal=2^10
     fit_func(s, gold, gnew) = gnew==2 ? 1.3 : 1.0
     
-    tumor = GrowthDynamics.TumorConfigurations.nolattice_state()[1]
+    tumor = GrowthDynamics.Populations.nolattice_state()[1]
     exponential!(tumor;DEBUG=false,
         fitness=fit_func,
         d=0.0,
@@ -79,7 +79,7 @@ end
     Nfinal=2^10
     fit_func(s, gold, gnew) = gnew==2 ? 1.3 : 1.0
     
-    tumor = GrowthDynamics.TumorConfigurations.nolattice_state()[1]
+    tumor = GrowthDynamics.Populations.nolattice_state()[1]
     twonew!(tumor;DEBUG=false,
         fitness=fit_func,
         d=0.0,

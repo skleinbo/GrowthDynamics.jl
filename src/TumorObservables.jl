@@ -14,7 +14,7 @@ import StatsBase: countmap, mean, sample, var, Weights
 import ..Lattices
 import ..Lattices: CubicLattice, RealLattice, Index, midpoint, midpointcoord, coord, index, isonshell
 import ..Lattices: neighbors, neighbors!, Neighbors, out_of_bounds, spacings
-import ..TumorConfigurations: TumorConfiguration, index, hassnps
+import ..Populations: Population, index, hassnps
 
 using ..Phylogenies
 import ..Phylogenies: parent
@@ -47,7 +47,7 @@ export  allele_fractions,
         counts_on_shells_vec
 
 "Dictionary `(SNP, population count)`"
-function allele_size(S::TumorConfiguration, t=0)
+function allele_size(S::Population, t=0)
     X = Dict{Int, Int}()
     for v in S.meta
         isnothing(v.snps) && continue
@@ -63,12 +63,12 @@ function allele_size(S::TumorConfiguration, t=0)
 end
 
 """
-    sampled_allele_fractions(S::TumorConfiguration[, t=0, samples=length(S.meta.npops)])
+    sampled_allele_fractions(S::Population[, t=0, samples=length(S.meta.npops)])
 
 Randomly sample genotypes(!) and calculate frequencies of contained SNPs.
 Return a dictionary `(SNP, freq)`.
 """
-function sampled_allele_fractions(S::TumorConfiguration, samples=length(S.meta))
+function sampled_allele_fractions(S::Population, samples=length(S.meta))
     X = Dict{eltype(eltype(S.meta.snps)), Float64}()
     T = total_population_size(S)
     pop_samples = sample(1:length(S.meta),
@@ -86,7 +86,7 @@ function sampled_allele_fractions(S::TumorConfiguration, samples=length(S.meta))
 end
 
 "Dictionary of `(SNP, freq)`."
-allele_fractions(S::TumorConfiguration, t=0) = begin
+allele_fractions(S::Population, t=0) = begin
     as = allele_size(S, t)
     Dict(zip(keys(as), values(as) ./ total_population_size(S)))
 end
@@ -110,7 +110,7 @@ end
 
 Return a DataFrame with count, frequency of every polymorphism. Additionally sample from the population.
 """
-function allele_spectrum(state::TumorConfiguration; threshold=0.0, read_depth=total_population_size(state))
+function allele_spectrum(state::Population; threshold=0.0, read_depth=total_population_size(state))
   popsize = total_population_size(state)
   ## Set state to analyse
   as = allele_size(state, 0)
@@ -169,7 +169,7 @@ function total_population_size(L::Lattices.RealLattice{<:Integer})
 end
 
 "Total population size. Duh."
-function total_population_size(S::TumorConfiguration)
+function total_population_size(S::Population)
     sum(@view S.meta[:, :npop])
 end
 
@@ -189,15 +189,15 @@ function population_size(L::Lattices.RealLattice{T}, t) where T<:Integer
 end
 
 "Dictionary (genotype, population size)"
-function population_size(S::TumorConfiguration, t)
+function population_size(S::Population, t)
     zip(S.meta[:, :genotype], S.meta[:, :npop]) |> collect
 end
 
-function genotype_dict(S::TumorConfiguration{T, A}) where {T,A}
+function genotype_dict(S::Population{T, A}) where {T,A}
     return S.meta.index
 end
 
-function total_birthrate(S::TumorConfiguration{T, Lattices.RealLattice{T}}; baserate=1.0) where T
+function total_birthrate(S::Population{T, Lattices.RealLattice{T}}; baserate=1.0) where T
     L = S.lattice
     F = S.meta[:fitnesses]
     G = genotype_dict(S)
@@ -212,7 +212,7 @@ function total_birthrate(S::TumorConfiguration{T, Lattices.RealLattice{T}}; base
     total_rate
 end
 
-function total_birthrate(S::TumorConfiguration{T, Lattices.NoLattice{T}}; baserate=1.0) where T
+function total_birthrate(S::Population{T, Lattices.NoLattice{T}}; baserate=1.0) where T
     sum(S.meta[:npops] .* S.meta[:fitnesses]) * baserate
 end
 
@@ -286,7 +286,7 @@ function interface(v::AbstractVector, lattice::RealLattice; o=coord(lattice, mid
     return inter, cinter
 end
 
-function interface(v::AbstractVector, embedding::TumorConfiguration; o=coord(embedding.lattice, midpoint(embedding.lattice)),  g=2)
+function interface(v::AbstractVector, embedding::Population; o=coord(embedding.lattice, midpoint(embedding.lattice)),  g=2)
     # embed v into lattice
     # state = uniform(lat, L; g=0)
 
@@ -320,9 +320,9 @@ function interface(v::AbstractVector, embedding::TumorConfiguration; o=coord(emb
     # end
 end
 
-interface(state::TumorConfiguration{G, <:RealLattice}, g::G) where G = interface(state, ipositions(state, g))
+interface(state::Population{G, <:RealLattice}, g::G) where G = interface(state, ipositions(state, g))
 
-function interface(state::TumorConfiguration{G, <:RealLattice}, v::AbstractVector{<:Lattices.Index}) where G
+function interface(state::Population{G, <:RealLattice}, v::AbstractVector{<:Lattices.Index}) where G
     lat = state.lattice
     nn = Neighbors(lat)
     freenb = fill(false, size(nn))
@@ -355,9 +355,9 @@ function interface(state::TumorConfiguration{G, <:RealLattice}, v::AbstractVecto
     end
 end
 
-hasemptyneighbor(state::TumorConfiguration{G, A}, I::Index) where {G,A} = any(n->state[n]==zero(G), neighbors(state.lattice, I))
+hasemptyneighbor(state::Population{G, A}, I::Index) where {G,A} = any(n->state[n]==zero(G), neighbors(state.lattice, I))
 
-function icompetition(state::TumorConfiguration{G, <:RealLattice}, g::G) where G
+function icompetition(state::Population{G, <:RealLattice}, g::G) where G
     lat = state.lattice
     nv, ncomp = 0, 0 
     v = ipositions(state, g)
@@ -513,7 +513,7 @@ end
 
 Returns lattice indices of cells of genotype `g`.
 """
-function ipositions(state::TumorConfiguration, g)
+function ipositions(state::Population, g)
     findall(==(g), state.lattice.data)
 end
 
@@ -522,7 +522,7 @@ end
 
 Returns coordinates of cells of genotype `g`.
 """
-function positions(state::TumorConfiguration{T, <:Lattices.AbstractLattice{T,N}}, g) where {T,N}
+function positions(state::Population{T, <:Lattices.AbstractLattice{T,N}}, g) where {T,N}
     idx = ipositions(state, g)
     # dim = Lattices.dimension(state.lattice)
     convert(Vector{Pointf{N}}, map(I->Pointf{N}(Lattices.coord(state.lattice, I)), idx))
@@ -539,7 +539,7 @@ function explode_into_shells(v::Vector{T}, o, a; r0=0f0) where T<:Pointf
     Dict(r => Base.filter(x->r-a/2<=norm(x-o)<r+a/2, v) for r in r0:a:maxr+a)
 end
 
-function explode_into_shells(state::TumorConfiguration{G,A}, g::G,
+function explode_into_shells(state::Population{G,A}, g::G,
     o=midpointcoord(state.lattice), a=spacings(state.lattice)[1];
     r0=0.0
 ) where {G,A}
@@ -560,7 +560,7 @@ The "shell number" of a point is the integer closest to `|p-o|/a`.
 * `o=midpointcoord(state.lattice)`: center of shells
 * `a=spacing(state.lattice)`: spacing of shells
 """
-function counts_on_shells(state::TumorConfiguration{G,A}, g::G,
+function counts_on_shells(state::Population{G,A}, g::G,
     o=midpointcoord(state.lattice), a=spacings(state.lattice)[1];
 ) where {G,A}
     D = Dictionary{Int, Int}(;sizehint=maximum(size(state.lattice)))
@@ -577,7 +577,7 @@ function counts_on_shells(state::TumorConfiguration{G,A}, g::G,
     D
 end
 
-function counts_on_shells_vec(state::TumorConfiguration{G,A}, g::G,
+function counts_on_shells_vec(state::Population{G,A}, g::G,
     o=midpointcoord(state.lattice), a=spacings(state.lattice)[1];
     maxr
 ) where {G,A}
@@ -605,7 +605,7 @@ Creates a dictionary `genotype => trajectory` where `trajectory` is a vector of 
 
 Set `deleteone/zero=false` to keep the wildtype/count empty sites.
 """
-function popsize_on_shells(state::TumorConfiguration{T, <:RealLattice}, outer; a=spacings(state.lattice)[1], deleteone=true, deletezero=true) where T
+function popsize_on_shells(state::Population{T, <:RealLattice}, outer; a=spacings(state.lattice)[1], deleteone=true, deletezero=true) where T
     dist_mat = Lattices.euclidean_dist_matrix(state.lattice, Lattices.midpoint(state.lattice))
     shell_inds = map(1:outer) do r; findall(x-> r-a/2 < x <= r+a/2, dist_mat ); end
 
@@ -653,7 +653,7 @@ end
 #############################
 
 "Earliest living ancestor."
-function living_ancestor(S::TumorConfiguration, g)
+function living_ancestor(S::Population, g)
     ancestor = parent(S, g)
     while ancestor !== nothing && S.meta[ancestor.id, :npop] == 0
         ancestor = parent(S, ancestor.g)
@@ -662,7 +662,7 @@ function living_ancestor(S::TumorConfiguration, g)
 end
 
 ## TODO: Replace IndexedTables with DataFrames
-#= function phylo_hist(state::TumorConfiguration)
+#= function phylo_hist(state::Population)
     nb = neighborhood_dists(state.phylogeny, 1, nv(state.phylogeny), dir=:in)
     nb_table = table(map(nb) do x
         (state.meta[x[1], :genotype],x[2])
@@ -676,7 +676,7 @@ end
     join(ps_table, nb_table)
 end
 
-function cphylo_hist(state::TumorConfiguration)
+function cphylo_hist(state::Population)
     P = state.phylogeny
     nb = neighborhood_dists(P, 1, nv(P), dir=:in)
     ps_table = table(population_size(state, 0), pkey=[1])
@@ -708,14 +708,14 @@ end =#
 is_leaf(P::SimpleDiGraph, v) = length(inneighbors(P, v)) == 0
 
 """
-    common_snps(::TumorConfiguration; filterdead=true)
+    common_snps(::Population; filterdead=true)
 
 List polymorphisms that are common to all genotypes.
 
 # Optional arguments:
 - `filterdead=true`: exclude unpopulated genotypes?
 """
-function common_snps(S::TumorConfiguration; filterdead=true)
+function common_snps(S::Population; filterdead=true)
     firstpopulated = findfirst(v->v.npop > ifelse(filterdead, 0, -1), S.meta)
     if isnothing(firstpopulated)
         return Int[]
@@ -732,11 +732,11 @@ function common_snps(S::TumorConfiguration; filterdead=true)
 end
 
 """
-    polymorphisms(S::TumorConfiguration)
+    polymorphisms(S::Population)
 
 Vector of polymorphisms (segregating sites).
 """
-function polymorphisms(S::TumorConfiguration; filterdead=true)
+function polymorphisms(S::Population; filterdead=true)
     firstpopulated = findfirst(v->v.npop > ifelse(filterdead, 0, -1), S.meta)
     if isnothing(firstpopulated)
         return Set{Int}()
@@ -752,7 +752,7 @@ end
 """
 Return index of the most recent common ancestor between `(i,j)` in a phylogeny.
 """
-function mrca(S::TumorConfiguration, i::Integer, j::Integer)
+function mrca(S::Population, i::Integer, j::Integer)
     P = S.phylogeny
     @assert 1<=i<=nv(P) && 1<=j<=nv(P)
 
@@ -774,7 +774,7 @@ end
 """
 Return index of the most recent common ancestor in a phylogeny.
 """
-function mrca(S::TumorConfiguration)
+function mrca(S::Population)
     P = S.phylogeny
 
     _mrca = nv(P)
@@ -788,11 +788,11 @@ function mrca(S::TumorConfiguration)
     return _mrca
 end
 """
-    npolymorphisms(S::TumorConfiguration)
+    npolymorphisms(S::Population)
 
 Number of polymrphisms
 """
-npolymorphisms(S::TumorConfiguration) = length(polymorphisms(S))
+npolymorphisms(S::Population) = length(polymorphisms(S))
 
 function nsymdiff(A,B)
     x = 0
@@ -835,23 +835,23 @@ function nsymdiff(A,B)
 end
 
 """
-    pairwise(S::TumorConfiguration, i, j)
+    pairwise(S::Population, i, j)
 
 Number of pairwise genomic differences between genotype indices `i,j`.
 """
-function pairwise(S::TumorConfiguration, i, j)
+function pairwise(S::Population, i, j)
     si = S.meta[g=i, :snps]
     sj = S.meta[g=j, :snps]
     nsymdiff(si,sj)
 end
 
 """
-    pairwise(S::TumorConfiguration)
+    pairwise(S::Population)
 
 Matrix of pairwise differences.  
 `filterdead`: Do not include extinct genotypes.
 """
-function pairwise(S::TumorConfiguration;
+function pairwise(S::Population;
      genotypes=S.meta[:, :genotype], 
      filterdead=false
 )
@@ -873,7 +873,7 @@ end
 """
 Diversity (mean pairwise difference of mutations) of a population.
 """
-function mean_pairwise(S::TumorConfiguration)
+function mean_pairwise(S::Population)
     af = allele_fractions(S, 0)
     if length(af) > 0
         return mapreduce(x->2.0*x*(1-x), +, (af |> values |>collect))
@@ -898,7 +898,7 @@ function tajimasd(n, S, k)
     return (k - S/a1) / sqrt(e1*S + e2*S*(S-1))
 end
 
-tajimasd(S::TumorConfiguration) = tajimasd(total_population_size(S), npolymorphisms(S), mean_pairwise(S))
+tajimasd(S::Population) = tajimasd(total_population_size(S), npolymorphisms(S), mean_pairwise(S))
 
 
 ##end module

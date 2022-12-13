@@ -6,8 +6,8 @@ using ..Lattices
 import Random: shuffle!
 using StatsBase: Weights, sample, mean
 import ..Phylogenies: add_snps!, sample_ztp
-import ..TumorConfigurations: TumorConfiguration, annotate_snps!, getfitness
-import ..TumorConfigurations: connect!, index, hassnps, lastgenotype, prune_phylogeny!, _resize!
+import ..Populations: Population, annotate_snps!, getfitness
+import ..Populations: connect!, index, hassnps, lastgenotype, prune_phylogeny!, _resize!
 import ..TumorObservables: total_population_size
 import WeightedSampling: adjust_weight!, WeightedSampler, sample as smp, weight
 
@@ -45,7 +45,7 @@ No death.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
 function exponential!(
-    state::TumorConfiguration{Int64, NoLattice{Int64}};
+    state::Population{Int64, NoLattice{Int64}};
     fitness = g -> 1.0,
     label = (s, gold) -> lastgenotype(s)+1,
     T = 0,
@@ -182,7 +182,7 @@ is reach. After that individuals begin replacing each other.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
 function moran!(
-    state::TumorConfiguration{Int, NoLattice{Int}};
+    state::Population{Int, NoLattice{Int}};
     fitness = (s, gold, gnew) -> 1.0,
     label = (s, gold) -> lastgenotype(s)+1,
     T = 0,
@@ -323,7 +323,7 @@ function eden_with_density!(args...; mu=0.0, kwargs...)
     _eden_with_density!(args...; mu=mu_func(mu), kwargs...)
 end
 function _eden_with_density!(
-    state::TumorConfiguration{G, <:RealLattice};
+    state::Population{G, <:RealLattice};
     label = (s, gold) -> lastgenotype(s)+1,
     fitness = (s, gold, gnew) -> 1.0,
     T = 0,
@@ -566,7 +566,7 @@ is reach. After that individuals begin replacing each other.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
 function twonew!(
-    state::TumorConfiguration{Int64, NoLattice{Int64}};
+    state::Population{Int64, NoLattice{Int64}};
     fitness = (s, gold, gnew) -> 1.0,
     T = 0,
     mu::Float64 = 0.0,

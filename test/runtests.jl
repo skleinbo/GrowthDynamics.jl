@@ -8,8 +8,8 @@ end
 @testset "Geometry" begin
     include("geometrytests.jl")
 end
-@testset "TumorConfigurations" begin
-    include("tumorconfigurations.jl")
+@testset "Populations" begin
+    include("populations.jl")
 end
 @testset "LatticeTumorDynamics" begin
     include("latticetumordynamics.jl")

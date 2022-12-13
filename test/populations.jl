@@ -1,10 +1,10 @@
 import Dictionaries: IndexError
 using .Lattices
 import Graphs: Edge, edges, nv
-import GrowthDynamics.TumorConfigurations: MetaDatum
-using GrowthDynamics.TumorConfigurations
+import GrowthDynamics.Populations: MetaDatum
+using GrowthDynamics.Populations
 
-@testset "TumorConfigurations" begin
+@testset "Populations" begin
     @testset "MetaData" begin
         MD = MetaDatum((1,1024,1.0,[1,2,8],(1,1e-8)))
         @test MD.npop == 1024
@@ -30,7 +30,7 @@ using GrowthDynamics.TumorConfigurations
         push!(M, "P5")
         @test M[g="P5"].npop == 0
     end
-    @testset "TumorConfigurations" begin
+    @testset "Populations" begin
         NLconf = nolattice_state()[1]
         @test NLconf.meta.npop == [1]
         push!(NLconf, 2)
