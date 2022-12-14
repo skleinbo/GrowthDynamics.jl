@@ -21,7 +21,8 @@ makedocs(sitename="GrowthDynamics.jl",
         "Dynamics" => "dynamics.md",
         "Observables" => "observables.md"
     ],
-    clean=true)
+    clean = (@isdefined CLEAN) && !CLEAN ? false : true,
+    draft = (@isdefined DRAFT) && DRAFT ? true : false)
 
 deploydocs(
     repo = "github.com/skleinbo/GrowthDynamics.jl.git",

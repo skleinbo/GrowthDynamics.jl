@@ -1,13 +1,13 @@
-# States
+# Populations
 
-A _state_ is a collection of
+A _population_ is a collection of
 
 * either a `lattice<:RealLattice` if the model is spatial (see [lattices](@ref)), or a dummy placeholder `NoLattice` if it is not.
-* a phylogenetic tree, which is a directed graph where the root(s) represent the wildtype(s).
+* a phylogenetic tree, which is a directed graph where the root(s) represent the wild type(s).
 * metadata about the population and its genetics. See [Metadata](@ref).
 * the time the state has been evolved for by invoking dynamics on it.
 
-States are of type [`Population`](@ref).
+They are of type [`Population`](@ref).
 
 It is normally not required to manipulate metadata, phylogeny or lattice directly. Convenient methods to manipulate state are provided.
 
@@ -25,7 +25,9 @@ using GrowthDynamics.Lattices
     state[16,16,16] = 1
 
     # make it known first
-    push!(state, 1)
+    # last paremeter is the parental genotype
+    # because there is none yet, set it to `nothing`
+    add_genotype!(state, 1, nothing)
     state[16,16,16] = 1;
 
     state.meta
@@ -40,7 +42,8 @@ using GrowthDynamics.Lattices
 
 ## Convenience constructors
 
-Some convenience methods for common geometries are provided
+A handful of methods to generate common geometries are provided. They return a tuple
+(`population`,`auxilliary`). The latter holds information that might be nice to have. It is often `nothing`, but for example [`spherer`](@ref) returns a vector with all indices contained in the ball.
 
 ```@docs
     uniform
@@ -49,10 +52,30 @@ Some convenience methods for common geometries are provided
     single_center
     half_space
     sphere_with_single_mutant_on_outer_shell
+    sphere_with_diverse_outer_shell
+```
+
+An initial population without spatial structure can be constructed with
+
+```@docs
+nolattice_state
 ```
 
 ## API
 
+### Manipulating genotypes
+
 ```@docs
     Population
+    add_genotype!
+    remove_genotype!
+    push!
+```
+
+### Methods to add mutations
+
+```@docs
+add_snps!
+annotate_snps!
+annotate_lineage!
 ```

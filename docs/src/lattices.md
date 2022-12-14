@@ -1,6 +1,6 @@
 # [Lattices](@id lattices)
 
-Each agent occupies a site on a lattice. They provide a mapping between _coordinates_ and _indices_ of the underlying array.
+Each cell occupies a site on a lattice. A lattice provides a mapping between _coordinates_ and _indices_ of the underlying array.
 
 **N.B.**: The structures are not true lattices, because they do not extend to infinity, but have finite size.
 
@@ -11,7 +11,7 @@ Currently, the following lattices are provided
 * [`CubicLattice`](@ref)
 * [`FCCLattice`](@ref)
 
-These are subtypes of `RealLattice`. Additionally, a `NoLattice` type is provided for situations without a spatial structure.
+They are subtypes of `RealLattice`. Populations without spatial structure "live" on a [`NoLattice`](@ref).
 
 !!! warning
 
@@ -28,9 +28,10 @@ These are subtypes of `RealLattice`. Additionally, a `NoLattice` type is provide
     FCCLattice
     HexagonalLattice
     LineLattice
+    NoLattice
 ```
 
-Each lattice type derives from `AbstractLattice` and implements the following methods
+Each lattice type except `NoLattice` derives from `RealLattice` and implements the following methods
 
 ## Common Methods
 
