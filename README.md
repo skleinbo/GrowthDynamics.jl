@@ -1,6 +1,7 @@
 # GrowthDynamics.jl
 
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://skleinbo.github.io/GrowthDynamics.jl/dev/)
+[![](https://img.shields.io/badge/docs-stable-blue.svg)](https://skleinbo.github.io/GrowthDynamics.jl/stable/)
 
 Agent based population genetics in mixed and structured populations
 
