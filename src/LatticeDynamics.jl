@@ -38,16 +38,27 @@ end
 Run exponential growth on an unstructered population until carrying capacity is reached.
 No death. 
 
+Each generation consists of the following actions for every genotype:
+
+1. The number of decendents is drawn from a binomial distribution with parameters `n`, the 
+   population number of that genotype, and `p` given by `1-exp(-f/<f>)` with fitness value `f`.
+   That number as capped so as not to exceed the defined carrying capacity.
+2. Of those decendents the number of mutants is drawn from a binomial distribution according to
+   the mutation rate `mu`.
+
 # Arguments
-- `T::Int`: the number of steps (generations) to advance.
-- `fitness`: function that assigns a fitness value to a genotype `g::Int`.
-- `mu`: mutation rate.
-- `baserate`: progressing real time is measured in `1/baserate`.
-- `prune_period`: prune the phylogeny periodically after no. of steps.
-- `prune_on_exit`: prune before leaving the simulation loop.
-- `callback`: function of `state` and `time` to be called at each iteration.
-    Used primarily for collecting observables during the run.
-- `abort`: condition on `state` and `time` under which to end the run.
+- `T::Int`: number of steps to advance.
+- `fitness=(population, old_genotype, new_genotype)->1.0`: function that assigns a fitness value (default `1.0`) to a new genotype. 
+- `mu=0.0`: mutation rate; either a function or number.
+- `label=(population, old_genotype) -> lastgenotype(population)+1`: function that assigns the new genotype upon mutation. 
+- `makesnps=true`: generate SNPs during the simulation?
+- `mu_type=[:poisson, :fixed]`: number of mutations is fixed, or Poisson distributed.
+- `genome_length=10^9`: length of the genome.
+- `baserate=1.0`: progressing real time is measured in `1/baserate`.
+- `prune_period=0`: prune the phylogeny periodically after no. of steps, set to `0` to disable.
+- `prune_on_exit=true`: prune before leaving the simulation.
+- `onstep`: callback that is executed at the very beginning of every time step.
+- `ondeath`: callback that runs at the very end of a death event.
 """
 exponential!(args...; mu=0.0, kwargs...) = _exponential!(args...; mu=mu_func(mu), kwargs...)
 function _exponential!(
@@ -65,8 +76,6 @@ function _exponential!(
     baserate = 1.0,
     prune_period = 0,
     prune_on_exit = true,
-    onprebirth = (s, g_old)->true,
-    onpostbirth = (s, g_old, g_new)->nothing,
     onstep = s->false,
     kwargs...)
 
@@ -160,24 +169,27 @@ end
 """
     moran!(state::NoLattice{Int}; <keyword arguments>)
 
-(Extended) Moran dynamics on an unstructured population. Grow until carrying capacity
-is reach. After that individuals begin replacing each other.
+(Generalized) Moran dynamics on an unstructured population. Birth and death events are independent
+until the carrying capacity (keyword argument `K`) is reached. 
+After that individuals begin replacing each other like in the classic Moran model.
 
 # Arguments
 - `T::Int`: the number of steps to advance.
-- `fitness`: function that assigns a fitness value to a genotype `g::Int`.
-- `p_grow=1.0`: Probability with which to actually proliferate. If no proliferation happens, mutation might still occur.
-- `mu=0.0`: mutation rate.
-- `mu_type=[:poisson, :fixed]`: Number of mutations is fixed, or Poisson-distributed.
-- `genome_length=10^9`: Length of the haploid genome.
 - `d=0.0`: death rate.
 - `K=0`: Carrying capacity. Set to `0` for unlimited.
-- `baserate`: progressing real time is measured in `1/baserate`.
-- `prune_period`: prune the phylogeny periodically after no. of steps.
-- `prune_on_exit`: prune before leaving the simulation loop.
-- `callback`: function of `state` and `time` to be called at each iteration.
-    Used primarily for collecting observables during the run.
-- `abort`: condition on `state` and `time` under which to end the run.
+- `fitness=(population, old_genotype, new_genotype)->1.0`: function that assigns a fitness value (default `1.0`) to a new genotype. 
+- `mu=0.0`: mutation rate; either a function or number.
+- `label=(population, old_genotype) -> lastgenotype(population)+1`: function that assigns the new genotype upon mutation. 
+- `makesnps=true`: generate SNPs during the simulation?
+- `mu_type=[:poisson, :fixed]`: number of mutations is fixed, or Poisson distributed.
+- `genome_length=10^9`: length of the genome.
+- `baserate=1.0`: progressing real time is measured in `1/baserate`.
+- `prune_period=0`: prune the phylogeny periodically after no. of steps, set to `0` to disable.
+- `prune_on_exit=true`: prune before leaving the simulation.
+- `onstep`: callback that is executed at the very beginning of every time step.
+- `onprebirth`: callback that runs if a birth event is about to occur. Return value determines whether cell actually proliferates.
+- `onpostbirth`: callback that runs at the very end of a proliferation event.
+- `ondeath`: callback that runs at the very end of a death event.
 """
 moran!(args...; mu=0.0, kwargs...) = _moran!(args...; mu=mu_func(mu), kwargs...)
 function _moran!(
@@ -287,28 +299,75 @@ function _moran!(
 end
 
 """
-    eden_with_density!(state::RealLattice{Int}; <keyword arguments>)
+    eden_with_density!(state::Population)
 
-Moran-like dynamics on an spatially structured population. Each step is either a death or
-(potential) birth and mutation event.
+Cells proliferate to neighboring lattice sites with a rate proportional to the number of 
+free neighboring sites. A time step is either a birth, death, or mutation-only event.
 
-Individuals die at a rate `d`.
-Birthrate depends linearily on the number of neighbors.
+A custom `label` function must be provided if genotypes are not integers.
 
-# Arguments
-- `T::Int`: the number of steps to advance.
-- `fitness`: function that assigns a fitness value to a genotype. Takes arguments `(state, old genotype, new_genotype)`.
-- `p_grow=1.0`: Probability with which to actually proliferate. If no proliferation happens, mutation might still occur.
-- `mu=0.0`: mutation rate.
-- `mu_type=[:poisson, :fixed]`: Number of mutations is fixed, or Poisson-distributed.
-- `genome_length=10^9`: Length of the haploid genome.
+See the 'extended help' for signatures of the various callbacks.
+
+# Keyword arguments
+- `T::Int`: number of steps to advance.
 - `d=0.0`: death rate. Zero halts the dynamics after carrying capacity is reached.
+- `fitness=(population, old_genotype, new_genotype)->1.0`: function that assigns a fitness value (default `1.0`) to a new genotype. 
+- `mu=0.0`: mutation rate; either a function or number.
+- `label=(population, old_genotype) -> lastgenotype(population)+1`: function that assigns the new genotype upon mutation. 
+- `makesnps=true`: generate SNPs during the simulation?
+- `mu_type=[:poisson, :fixed]`: number of mutations is fixed, or Poisson distributed.
+- `genome_length=10^9`: length of the genome.
 - `baserate=1.0`: progressing real time is measured in `1/baserate`.
-- `prune_period=0`: prune the phylogeny periodically after no. of steps.
-- `prune_on_exit=true`: prune before leaving the simulation loop.
-- `callback`: function of `state` and `time` to be called at each iteration.
-    Used primarily for collecting observables during the run.
-- `abort`: condition on `state` and `time` under which to end the run.
+- `prune_period=0`: prune the phylogeny periodically after no. of steps, set to `0` to disable.
+- `prune_on_exit=true`: prune before leaving the simulation.
+- `onstep`: callback that is executed at the very beginning of every time step.
+- `onprebirth`: callback that runs if a birth event is about to occur. Return value determines whether cell actually proliferates.
+- `onpostbirth`: callback that runs at the very end of a proliferation event.
+- `ondeath`: callback that runs at the very end of a death event.
+
+# Extended help
+
+## Mutations
+
+The rate of mutations is steered by the keyword argument `mu`, which is either a number or a function.
+
+A number is automatically converted to an appropriate function.
+As a function it must have signature `mu(population, old_genotype, I_old, I_new)->(rate, p_mutate)::Tuple{Float64, Float64}` where
+* `old_genotype` is the genotype of the parent cell
+* `I_old`, `I_new` are the *linear* lattice indices of the parent and daughter cell.
+This way the mutation rate can depend on position as well as on mutations present in the
+parental genome.
+
+The output must be a tuple, where the first entry `rate` determines the number of mutations **if** mutations happen;
+the probability of which is given by the second entry `p_mutate`. The main reason for keeping these quantities separate is that
+one will often not generate SNPs during the simulation, because that process is rather costly, but generate them later on the
+basis of the final phylogeny.
+
+If `mu` is a number, it is implicitely wrapped in a function that returns `(mu, 1-exp(-mu))`, i.e. the mutation probability is
+the probability of at least one event under a Poisson distribution with rate `mu`.
+
+Setting `makesnps` to `true/false` determines whether SNPs are generated during the simulation. If it is set to `false`, the first value
+returned by `mu` is inconsequential.
+
+Finally, `label(population, old_genotype)->new_genotype` assigns the designation to a newly entering genotype. It defaults to numbering genotypes
+consecutively. See also [`rename!`](@ref).
+
+## Fitness
+
+When a new genotype enters due to a mutation event, it is assigned a fitness value
+given by a user-provides function `(population, old_genotype, new_genotype)->Float64` passed as
+keyword argument `fitness`. For example, to inherit the fitness, one would provide 
+`fitness=(p,og,ng)->p.meta[g=og; :fitness]`.
+
+## Callbacks
+
+Callbacks are triggered at certain stages of the simulation loop:
+
+* `onstep(population)::Bool` is executed at the beginning of each time step. If `true` is returned, the simulation ends.
+* `onprebirth(population, Iold)::Bool` is executed when a birth event is triggered, but *before* it is executed. If `false` is returned, the cell
+   will not proliferate, but might still mutate.
+* `onpostbirth(population, Iold, Inew)` is executed after proliferation and mutation are completed. Useful for collecting observables.
+* `ondeath(population, Idead)` is executed when a death event has finished.
 """
 eden_with_density!(args...; mu=0.0, kwargs...) = _eden_with_density!(args...; mu=mu_func(mu), kwargs...)
 function _eden_with_density!(

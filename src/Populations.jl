@@ -142,8 +142,18 @@ snpsfrom(::Nothing) = Int[]
 snpsfrom(v::Vector{Int}) = copy(v)
 
 hassnps(M::MetaData, v) = !isnothing(M[v, Val(:snps)]) && !isempty(M[v, Val(:snps)])
+"""
+    hassnps(M::MetaData; g)
+
+Return `true` if genotype contains mutations.
+"""
 hassnps(M::MetaData; g) = !isnothing(M[g; Val(:snps)]) && !isempty(M[g; Val(:snps)])
 
+"""
+    lastgenotype(M::MetaData)
+
+Return genotype that was added last.
+"""    
 lastgenotype(M::MetaData) = M[end, Val(:genotype)]
 
 """
@@ -190,13 +200,20 @@ end
 """
     index(M, g)
 
-Return the index of genotype `g` in, or `nothing` if `g` is not
+Return the index of genotype `g`, or `nothing` if `g` is not
 in meta data `M`.
 """ 
 @propagate_inbounds function index(M::MetaData{T}, g) where T
     return haskey(M.index, g) ? M.index[g] : nothing
 end
 
+"""
+    getindex(M::MetaData; g)
+
+Synonymous with `M[g=g] == M[;g]`.
+
+Return a named tuple with metdata about genotype `g`. 
+"""
 @propagate_inbounds function Base.getindex(M::MetaData{T}; g) where {T}
     M[index(M, g)]
 end
@@ -464,6 +481,7 @@ end
 Add genotype `G` to the population and connect it to `parent` in the phylogeny.
 `G` is either a genotype or a full `MetaDatum`.
 `parent` defaults to the first genotype, i.e. the root of the phylogenetic tree.
+If `parent=nothing`, the genotype will not be connected to the tree.
 
 See also: [`MetaDatum`](@ref), [`remove_genotype!`](@ref)
 """
@@ -870,7 +888,7 @@ be `nothing`. =#
     nolattice_state()
 
 Model without spatial structure.  
-Populated with one individual of genotype `1::Int` with fitness 1.0.
+Populated with one individual of genotype `1` with fitness 1.0.
 """
 function nolattice_state()
     state = Population(Lattices.NoLattice())
@@ -882,9 +900,11 @@ end
 
 
 """
-    uniform(::Type{T<:RealLattice}, L; g=0, a=1.0)
+    uniform(T, L; g=0, a=1.0)
     
-Return a configuration on a lattice of type `T` with linear extension `L`, filled with genotype `g`.
+A population on a lattice of type `T` with linear extension `L`, filled with genotype `g`.
+
+Return `(population, nothing)`.
 
 # Example
 
@@ -902,9 +922,11 @@ function uniform(T::Type{LT}, L::Int; g=0) where LT<:Lattices.RealLattice
 end
 
 """
-    single_center(::Type{T<:RealLattice}, L; g1=1, g2=2)
+    single_center(T, L; g1=1, g2=2)
 
-Put a single cell of genotype `g2` at the midpoint of a lattice filled with `g1`.
+A single cell of genotype `g2` at the midpoint of a lattice of type `T` filled with `g1`.
+
+Return `(population, midpoint::Index)`
 """
 function single_center(::Type{LT}, L::Int; g1=0, g2=1) where LT<:Lattices.RealLattice
     state, _ = uniform(LT, L; g=g1)
@@ -916,10 +938,13 @@ function single_center(::Type{LT}, L::Int; g1=0, g2=1) where LT<:Lattices.RealLa
 end
 
 """
-    half_space(::Type{T<:RealLattice}, L; g1=1, g2=2)
+    half_space(T, L; g1=1, g2=2)
 
-Instantiates a population of genotype `g1` on a lattice of type `T`. 
-Fills the last dimension with `g2` up to fraction `f`
+A population of genotype `g1` on a lattice of type `T`. 
+Fill the last dimension with `g2` up to fraction `f`
+
+Return `(population, fill_to)` with `fill_to` defined as
+`state[:,..., 1:fill_to] == g2` and `state[:,..., fill_to+1:end] == g1`.
 
 # Example
 
@@ -952,10 +977,12 @@ function half_space(::Type{LT}, L::Int; f=1/2, g1=0, g2=1) where LT<:Lattices.Re
 end
 
 """
-    spherer(::Type{T}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
+    spherer(T, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
 
-Fill lattice of type `T` (e.g `CubicLattice`) with genotype `g1` and put a (L2-)sphere
+Fill lattice of type `T` (e.g `CubicLattice`) with genotype `g1` and put a (L2-)ball
 of approx. radius `r` with genotype `g2` at the center.
+
+Return `(population, idx_ball)` with `idx_ball` being the indices of sites within the ball.
 """
 function spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
     if r < 0
@@ -993,10 +1020,12 @@ function spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealL
 end
 
 """
-    spheref(::Type{T}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
+    spheref(T, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
 
-Fill lattice of type `T` (e.g `CubicLattice`) with genotype `g1` and put a (L2-)sphere with genotype `g2`
+Fill lattice of type `T` (e.g `CubicLattice`) with genotype `g1` and put a (L2-)ball with genotype `g2`
 that occupies approx. a fraction `f` of the lattice at the center.
+
+Return `(population, idx_ball)` with `idx_ball` being the indices of sites within the ball.
 """
 function spheref(::Type{LT}, L::Int; f = 1 / 10, g1::G=0, g2::G=1) where {G,LT<:Lattices.RealLattice}
     if !(0.0<=f<=1)
@@ -1038,6 +1067,15 @@ function spheref(::Type{LT}, L::Int; f = 1 / 10, g1::G=0, g2::G=1) where {G,LT<:
     return state, sphere
 end
 
+"""
+    sphere_with_diverse_outer_shell(T, L; r)
+
+A lattice of type `T` (e.g `CubicLattice`) with an (L2-)ball of genotype `1`
+and radius `r` at the center. Each site on the outermost shell is populated consecutively with 
+a different genotype, starting from `2`.
+
+Return `(population, idx_shell)` with `idx_shell` being the indices of the outer ("diverse") shell.
+"""
 function sphere_with_diverse_outer_shell(::Type{LT}, L::Int; r) where LT<:Lattices.RealLattice
     state, _ = spherer(LT, L; r, g1=0, g2=1)
     # all indices with distance m
@@ -1054,10 +1092,15 @@ function sphere_with_diverse_outer_shell(::Type{LT}, L::Int; r) where LT<:Lattic
 end
 
 """
-    sphere_with_single_mutant_on_outer_shell(::Type{<:RealLattice}, L::Int; r, s=1.0)
+    sphere_with_single_mutant_on_outer_shell(T, L::Int; r, s=1.0)
 
-Fill a ball of radius `r` with genotype `1`.
-Place a single cell of genotype `2` on the outermost shell at random.
+A lattice of type `T` (e.g `CubicLattice`) with an (L2-)ball of genotype `1`
+and radius `r` at the center. One random site on the outermost shell is populated 
+with genotype `2` that has fitness `s`.
+
+Return `(population, (idx_shell, idx_mutant))` with `idx_shell` being
+the indices of the outer shell, and `idx_mutant` the index
+of the mutant genotype.
 """
 function sphere_with_single_mutant_on_outer_shell(::Type{LT}, L::Int; r, s=1.0) where LT<:Lattices.RealLattice
     state, _ = spherer(LT, L; r, g1=0, g2=1)
@@ -1072,7 +1115,7 @@ function sphere_with_single_mutant_on_outer_shell(::Type{LT}, L::Int; r, s=1.0) 
     push!(state.meta[end, :snps], g)
 
     state.meta[2, :fitness] = s
-    state, shell, i
+    state, (shell, i)
 end
 
 
