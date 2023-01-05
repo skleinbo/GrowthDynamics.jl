@@ -13,17 +13,9 @@ import WeightedSampling: adjust_weight!, WeightedSampler, sample as smp, weight
 
 export eden_with_density!, exponential!, moran!, twonew!
 
-occupied(m,n,s,N) = @inbounds m < 1 || m > N || n < 1 || n > N || s[m,n] != 0
-growth_rate(nw,basebr) = basebr * (1 - 1 / 6 * nw)
-
 @enum Action none=0 proliferate=1 mutate=2 die=3
 
-
-## Weird method to generate rand(1:N)
-## ~3x speedup
-@inline rand1toN(N) = rand(1:N)
-
-const MutationProfile = Tuple{Symbol,Float64,Int64} # (rate, :poisson/:fixed, genome length)
+const MutationProfile = Tuple{Symbol,Float64,Int64} # (:poisson/:fixed, rate, genome length)
 
 ###--- Start of simulation methods ---###
 
@@ -473,11 +465,12 @@ function _eden_with_density!(
                     end
                     continue
                 end
+
                 nonzeros += 1
                 new = Lin[new_cart]
             end
 
-            ## Mutation ##
+            ## MUTATION ##
             genotype = state[old]
             g_id::Int = index(state.meta, genotype)
             if !b_grow
