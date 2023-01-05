@@ -6,8 +6,7 @@ using   Distributions,
 import Base: parent
 import ..Lattices: AbstractLattice
 
-export  add_snps!,
-        children,
+export  children,
         df_traversal,
         has_children,
         harm,
@@ -78,49 +77,5 @@ nchildren(P::SimpleDiGraph, v) = length(children(P, v))
 "Does a genotype have any children?"
 has_children(S, g) = nchildren(S, g) > 0
 isleaf(args...) = !has_children(args...)
-
-
-
-"""
-Take a vector of SNPS and add new ones, or replace them. Typically called from
-dynamics during a mutation event.
-
-* `μ`: genome wide rate (Poisson) / count (uniform)
-* `L=10^9`: length of the genome
-* `allow_multiple=false`: Allow for a site to mutate more than once.
-* `kind=:poisson` Either `:poisson` or `:fixed`
-- `replace=false` Replace existing SNPs.
-"""
-function add_snps!(S::Vector, μ;
-    L=10^9, allow_multiple=false, kind=:poisson, replace=false)
-
-    if replace
-        empty!(S)
-    end
-
-    if kind == :poisson
-        count = sample_ztp(μ)
-    else
-        count = μ
-    end
-
-    if allow_multiple
-        append!(S, rand(1:L, count))
-    else # randomize `count` _new_ SNPs
-        j = 0
-        while j < count
-            s = rand(1:L)
-            if !(s in S)
-                push!(S, s)
-                j += 1
-            end
-        end
-    end
-    sort!(S)
-    S
-end
-
-
-
 
 end ## MODULE ##

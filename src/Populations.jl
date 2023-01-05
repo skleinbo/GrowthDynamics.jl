@@ -15,10 +15,10 @@ import ..Lattices: AbstractLattice, RealLattice, TypedLattice
 import ..Lattices: coord, dimension, index, isonshell, radius, realsize, midpoint, dist, spacings
 import ..Lattices: sitesperunitcell
 import LinearAlgebra: norm
-import ..Phylogenies: add_snps!, children, df_traversal, isroot, isleaf, nchildren, parent, sample_ztp
+import ..Phylogenies: children, df_traversal, isroot, isleaf, nchildren, parent, sample_ztp
 import StatsBase
 
-export add_genotype!, connect!, half_space, hassnps, lastgenotype, nolattice_state, MetaData
+export add_genotype!, add_snps!, connect!, half_space, hassnps, lastgenotype, nolattice_state, MetaData, MetaDatum, index!
 export push!, remove_genotype!, single_center, spheref, spherer, sphere_with_diverse_outer_shell
 export sphere_with_single_mutant_on_outer_shell, Population, uniform
 
@@ -433,7 +433,6 @@ end
     state
 end
 
-
 """
     add_genotype!(S::Population, G, parent)
 
@@ -599,6 +598,79 @@ function parent(S::Population, g)
         return nothing
     end
     return (id=n[1], g=S.meta[n[1], :genotype])
+end
+
+"""
+    add_snps!(state::Population, g, μ)
+
+Randomize and add mutations to genotype `g`, or replace them.
+`μ` is the genome wide mutation rate (Poisson) or mutation count (fixed).
+
+__Note:__ `allow_multiple` is much faster if the number of mutations
+already present is large.
+
+## Keyword arguments
+
+* `L=10^9`: length of the genome
+* `allow_multiple=false`: allow for a site to mutate more than once.
+* `kind=:poisson`: either `:poisson` or `:fixed`
+- `replace=false`: replace existing SNPs.
+"""
+function add_snps!(state::Population, g, args...; kwargs...)
+    if isnothing(state.meta[g=g, :snps])
+        state.meta[g=g, :snps] = Int[]
+    end
+    add_snps!(S.meta[g=g, :snps], args...; kwargs...)
+
+    return state[g=g, :snps] 
+end
+
+"""
+    add_snps!(state::Population, g, v::Vector{Int})
+
+Add mutations `v` to genotype `g`.
+No checks for duplications are performed. 
+
+Return a vector of all mutations. 
+"""
+function add_snps!(state::Population, g, v::Vector{Int})
+    if isnothing(state.meta[g=g, :snps])
+        state.meta[g=g, :snps] = Int[]
+    end
+    append!(state[g=g, :snps], v)
+
+    return state[g=g, :snps] 
+end
+
+
+function add_snps!(S::Vector{Int}, μ;
+    L=10^9, allow_multiple=false, kind=:poisson, replace=false)
+
+    if replace
+        empty!(S)
+    end
+
+    if kind == :poisson
+        count = sample_ztp(μ)
+    else
+        count = μ
+    end
+
+    if allow_multiple
+        append!(S, rand(1:L, count))
+    else # randomize `count` _new_ SNPs
+        j = 0
+        while j < count
+            s = rand(1:L)
+            if !(s in S)
+                push!(S, s)
+                j += 1
+            end
+        end
+    end
+    sort!(S)
+
+    return S
 end
 
 """

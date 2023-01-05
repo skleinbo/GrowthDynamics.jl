@@ -5,8 +5,8 @@ import Graphs: nv, vertices, add_vertex!, add_edge!
 using ..Lattices
 import Random: shuffle!
 using StatsBase: Weights, sample, mean
-import ..Phylogenies: add_snps!, sample_ztp
-import ..Populations: Population, annotate_snps!, getfitness
+import ..Phylogenies: sample_ztp
+import ..Populations: Population, add_snps!, annotate_snps!, getfitness
 import ..Populations: connect!, index, hassnps, lastgenotype, prune_phylogeny!, _resize!
 import ..Observables: total_population_size
 import WeightedSampling: adjust_weight!, WeightedSampler, sample as smp, weight
