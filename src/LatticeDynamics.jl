@@ -324,9 +324,9 @@ function eden_with_density!(args...; mu=0.0, kwargs...)
 end
 function _eden_with_density!(
     state::Population{G, <:RealLattice};
+    T,
     label = (s, gold) -> lastgenotype(s)+1,
     fitness = (s, gold, gnew) -> 1.0,
-    T = 0,
     mu::Function,
     mu_type = :poisson,
     makesnps=true,
