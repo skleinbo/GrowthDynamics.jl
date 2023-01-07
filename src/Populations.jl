@@ -136,8 +136,8 @@ function MetaData(g::Vector{T}, n::Vector{<:Integer}) where {T}
     M
 end
 
-hassnps(M::MetaData, v) = !isnothing(M[v, :snps]) && !isempty(M[v, :snps])
-hassnps(M::MetaData; g) = !isnothing(M[g; :snps]) && !isempty(M[g; :snps])
+hassnps(M::MetaData, v) = !isnothing(M[v, Val(:snps)]) && !isempty(M[v, Val(:snps)])
+hassnps(M::MetaData; g) = !isnothing(M[g; Val(:snps)]) && !isempty(M[g; Val(:snps)])
 
 lastgenotype(M::MetaData) = M[end, Val(:genotype)]
 
