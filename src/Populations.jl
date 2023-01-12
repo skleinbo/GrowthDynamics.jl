@@ -136,6 +136,10 @@ function MetaData(g::Vector{T}, n::Vector{<:Integer}) where {T}
     M
 end
 
+snpsfrom(M::MetaData, g) = snpsfrom(M[g=g, Val(:snps)])
+snpsfrom(::Nothing) = Int[]
+snpsfrom(v::Vector{Int}) = copy(v)
+
 hassnps(M::MetaData, v) = !isnothing(M[v, Val(:snps)]) && !isempty(M[v, Val(:snps)])
 hassnps(M::MetaData; g) = !isnothing(M[g; Val(:snps)]) && !isempty(M[g; Val(:snps)])
 
@@ -617,10 +621,8 @@ already present is large.
 - `replace=false`: replace existing SNPs.
 """
 function add_snps!(state::Population, g, args...; kwargs...)
-    if isnothing(state.meta[g=g, :snps])
-        state.meta[g=g, :snps] = Int[]
-    end
-    add_snps!(S.meta[g=g, :snps], args...; kwargs...)
+    state.meta[g=g, :snps] = snpsfrom(state.meta, g)
+    add_snps!(state.meta[g=g, :snps], args...; kwargs...)
 
     return state[g=g, :snps] 
 end
@@ -634,9 +636,7 @@ No checks for duplications are performed.
 Return a vector of all mutations. 
 """
 function add_snps!(state::Population, g, v::Vector{Int})
-    if isnothing(state.meta[g=g, :snps])
-        state.meta[g=g, :snps] = Int[]
-    end
+    state.meta[g=g, :snps] = snpsfrom(state.meta, g)
     append!(state[g=g, :snps], v)
 
     return state[g=g, :snps] 
