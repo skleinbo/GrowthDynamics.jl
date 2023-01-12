@@ -6,8 +6,8 @@ using ..Lattices
 import Random: shuffle!
 using StatsBase: Weights, sample, mean
 import ..Phylogenies: sample_ztp
-import ..Populations: Population, add_snps!, annotate_snps!, getfitness
-import ..Populations: connect!, index, hassnps, lastgenotype, prune_phylogeny!, _resize!
+import ..Populations: Population, add_genotype!, add_snps!, annotate_snps!, getfitness
+import ..Populations: connect!, index, hassnps, lastgenotype, prune_phylogeny!, _resize!, snpsfrom
 import ..Observables: total_population_size
 import WeightedSampling: adjust_weight!, WeightedSampler, sample as smp, weight
 
@@ -311,9 +311,7 @@ Birthrate depends linearily on the number of neighbors.
     Used primarily for collecting observables during the run.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
-function eden_with_density!(args...; mu=0.0, kwargs...)
-    _eden_with_density!(args...; mu=mu_func(mu), kwargs...)
-end
+eden_with_density!(args...; mu=0.0, kwargs...) = _eden_with_density!(args...; mu=mu_func(mu), kwargs...)
 function _eden_with_density!(
     state::Population{G, <:RealLattice};
     T,
@@ -321,7 +319,7 @@ function _eden_with_density!(
     fitness = (s, gold, gnew) -> 1.0,
     mu::Function,
     mu_type = :poisson,
-    makesnps=true,
+    makesnps = true,
     genome_length = 10^9,
     replace_mutations = false,
     allow_multiple = false,
@@ -333,8 +331,8 @@ function _eden_with_density!(
     onpostbirth = (s, Iold, Inew)->nothing,
     ondeath = (s, I)->nothing,
     onstep = s->false,
-    sizehint=0,
-    strict=false,
+    sizehint = 0,
+    strict = false,
     kwargs...) where G
 
     if sizehint > length(state.meta.genotype)
@@ -481,14 +479,13 @@ function _eden_with_density!(
                 new_genotype = label(state, g_id)
 
                 if new_genotype != genotype
-                    push!(state, new_genotype)
+                    add_genotype!(state, new_genotype, genotype)
                     if makesnps
-                        new_snps = hassnps(state.meta, g_id) ? copy(state.meta[g_id, Val(:snps)]) : Int[]
-                        add_snps!(new_snps, thismu, L = genome_length, kind=mu_type, allow_multiple = allow_multiple, replace = replace_mutations)
+                        new_snps = snpsfrom(state.meta, genotype)
+                        add_snps!(new_snps, thismu, L = genome_length, count=mu_type, allow_multiple = allow_multiple, replace = replace_mutations)
                         state.meta[end, Val(:snps)] = new_snps
                     end
                     state.meta[end, Val(:fitness)] = fitness(state, genotype, new_genotype)
-                    add_edge!(state.phylogeny, nv(state.phylogeny), g_id)
                     genotype = new_genotype
                     g_id = lastindex(state.meta)
                 end
@@ -524,7 +521,7 @@ function _eden_with_density!(
 
 
         state.t += 1
-        state.treal += -1.0 / (baserate*total_rate) * log(1.0 - rand())
+        state.treal += -log(1.0 - rand())/(baserate*total_rate)
     end
 
     ## Update the phylogeny
@@ -533,7 +530,6 @@ function _eden_with_density!(
     end
     @debug "Done at $(state.t)"
 end
-
 
 """
     twonew!(state::NoLattice{Int}; <keyword arguments>)
