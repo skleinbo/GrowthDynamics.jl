@@ -644,23 +644,23 @@ end
 
 
 function add_snps!(S::Vector{Int}, μ;
-    L=10^9, allow_multiple=false, kind=:poisson, replace=false)
+    L=10^9, allow_multiple=false, count=:poisson, replace=false)
 
     if replace
         empty!(S)
     end
 
-    if kind == :poisson
-        count = sample_ztp(μ)
+    if count === :poisson
+        n = sample_ztp(μ)
     else
-        count = μ
+        n = μ
     end
 
     if allow_multiple
-        append!(S, rand(1:L, count))
-    else # randomize `count` _new_ SNPs
+        append!(S, rand(1:L, n))
+    else # randomize `n` _new_ SNPs
         j = 0
-        while j < count
+        while j < n
             s = rand(1:L)
             if !(s in S)
                 push!(S, s)
