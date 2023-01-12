@@ -17,6 +17,19 @@ export eden_with_density!, exponential!, moran!, twonew!
 
 const MutationProfile = Tuple{Symbol,Float64,Int64} # (:poisson/:fixed, rate, genome length)
 
+function mu_func(mu)
+    if mu isa Real
+        function(args...)
+            (mu, 1.0 - exp(-mu))
+        end
+    else
+        function(args...)
+            _mu = mu(args...)
+            (_mu, 1.0-exp(-_mu))
+        end
+    end
+end
+
 ###--- Start of simulation methods ---###
 
 """
@@ -271,19 +284,6 @@ function moran!(
     end
     if prune_on_exit
         prune_phylogeny!(state)
-    end
-end
-
-function mu_func(mu)
-    if mu isa Real
-        function(args...)
-            (mu, 1.0 - exp(-mu))
-        end
-    else
-        function(args...)
-            _mu = mu(args...)
-            (_mu, 1.0-exp(-_mu))
-        end
     end
 end
 
