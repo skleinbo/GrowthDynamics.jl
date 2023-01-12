@@ -40,10 +40,8 @@ end
         mu=μ,
         makesnps=true,
         prune_on_exit=false,
-        det_growth=false,
-        det_mutations=false,
         K=Nfinal÷2,
-        abort=s->total_population_size(s) >= Nfinal || s.t >= Nfinal
+        onstep=s->total_population_size(s) >= Nfinal || s.t >= Nfinal
     )
     @test total_population_size(tumor) == Nfinal÷2
 end
@@ -66,7 +64,7 @@ end
         prune_on_exit=true,
         det_growth=false,
         K=Nfinal÷2,
-        abort=s->total_population_size(s) >= Nfinal || s.t >= Nfinal
+        onstep=s->total_population_size(s) >= Nfinal || s.t >= Nfinal
     )
     @test total_population_size(tumor) == Nfinal÷2
     @test tumor.t == Nfinal

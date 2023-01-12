@@ -49,24 +49,25 @@ No death.
     Used primarily for collecting observables during the run.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
-function exponential!(
+exponential!(args...; mu=0.0, kwargs...) = _exponential!(args...; mu=mu_func(mu), kwargs...)
+function _exponential!(
     state::Population{Int64, NoLattice{Int64}};
-    fitness = g -> 1.0,
+    T,
+    K = 0, # Carrying capacity
     label = (s, gold) -> lastgenotype(s)+1,
-    T = 0,
-    mu::Float64 = 0.0,
+    fitness = g -> 1.0,
+    mu::Function,
     mu_type = :poisson,
     makesnps = true,
     genome_length = 10^9,
     replace_mutations = false,
     allow_multiple = false,
-    K = 0, # Carrying capacity
     baserate = 1.0,
     prune_period = 0,
     prune_on_exit = true,
-    DEBUG = false,
-    callback = (s, t) -> begin end,
-    abort = s -> false,
+    onprebirth = (s, g_old)->true,
+    onpostbirth = (s, g_old, g_new)->nothing,
+    onstep = s->false,
     kwargs...)
 
     # P = state.phylogeny
@@ -82,12 +83,6 @@ function exponential!(
     Ntotal = sum(npops)
     total_rate = sum(rates)
 
-    if mu_type == :fixed
-        p_mu = 1.0
-    else
-        p_mu = 1.0 - exp(-mu)
-    end
-
     wrates = Weights(rates, total_rate)
     wnpops = Weights(npops, Ntotal)
 
@@ -97,10 +92,8 @@ function exponential!(
             prune_phylogeny!(state)
         end
 
-        Base.invokelatest(callback, state, state.t)
-        if abort(state)
-            break
-        end
+        onstep(state) && break
+
         # Recalculate rates
         @views npops = meta[:, Val(:npop)]
         @views fitness_vec = meta[:, Val(:fitness)]
@@ -112,10 +105,9 @@ function exponential!(
         wrates = Weights(rates, total_rate)
         wnpops = Weights(npops, Ntotal)
 
-        state.treal += 1.0 / (baserate * mean_fitness)
 
-         # need to collect, or new genotypes will be iterated too!
-        for (genotype, j) in collect(pairs(meta.index))
+        # need to collect, or new genotypes will be iterated too!
+        for (g_old, j) in collect(pairs(meta.index))
             npop = meta[j, Val(:npop)]
             if npop == 0
                 continue
@@ -132,20 +124,20 @@ function exponential!(
             if nplus <= 0
                 continue
             end
+            
+            thismu, p_mu = mu(state, g_old)
             nmutants = rand(Binomial(nplus, p_mu)) # How many of those mutate?
             for _ in 1:nmutants
-                new_genotype = label(state, genotype)
-                if new_genotype != genotype && fitness(state, genotype, new_genotype) != -Inf # -Inf indicates no mutation possible
-                    push!(state, new_genotype)
-                    idxnew = lastindex(meta)
-                    connect!(state, idxnew, j)
+                g_new = label(state, g_old)
+                if g_new != g_old && fitness(state, g_old, g_new) != -Inf # -Inf indicates no mutation possible
+                    idxnew = add_genotype!(state, g_new, g_old)
 
-                    meta[idxnew, Val(:fitness)] = new_fitness = fitness(state, genotype, new_genotype)
+                    meta[idxnew, Val(:fitness)] = new_fitness = fitness(state, g_old, g_new)
                     meta[idxnew, Val(:npop)] = 1
                     if makesnps
-                        new_snps = isnothing(state.meta[j, Val(:snps)]) ? Int[] : copy(state.meta[j, Val(:snps)])
-                        add_snps!(new_snps, mu, L = genome_length, allow_multiple = allow_multiple, replace = replace_mutations)
-                        state.meta[end, Val(:snps)] = new_snps
+                        new_snps = snpsfrom(state.meta, g_old)
+                        add_snps!(new_snps, thismu; count = mu_type, L = genome_length, allow_multiple = allow_multiple, replace = replace_mutations)
+                        state.meta[idxnew, Val(:snps)] = new_snps
                     end
                 else # if mutation is impossible
                     nmutants -= 1
@@ -155,6 +147,7 @@ function exponential!(
             Ntotal += nplus # keep track in the loop, because otherwise may overshoot K
         end
 
+        state.treal += 1.0 / (baserate * mean_fitness)
         state.t += 1
     end
     if prune_on_exit
@@ -186,34 +179,37 @@ is reach. After that individuals begin replacing each other.
     Used primarily for collecting observables during the run.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
-function moran!(
+moran!(args...; mu=0.0, kwargs...) = _moran!(args...; mu=mu_func(mu), kwargs...)
+function _moran!(
     state::Population{Int, NoLattice{Int}};
-    fitness = (s, gold, gnew) -> 1.0,
+    T,
+    K::Int64 = 0, # carrying capacity
     label = (s, gold) -> lastgenotype(s)+1,
-    T = 0,
-    mu::Float64 = 0.0,
+    fitness = (s, gold, gnew) -> 1.0,
+    mu::Function,
     mu_type = :poisson,
     makesnps = true,
     genome_length = 10^9,
     replace_mutations = false,
     allow_multiple = false,
-    d::Float64 = 0.0,
-    p_grow = 1.0,
+    d = 0.0,
+    baserate = 1.0,
     prune_period = 0,
     prune_on_exit = true,
-    callback = (s, t) -> begin end,
-    abort = s -> false,
-    K::Int64 = 0, # carrying capacity
+    onprebirth = (s, g_old)->true,
+    onpostbirth = (s, g_old, g_new)->nothing,
+    ondeath = (s, g)->nothing,
+    onstep = s->false,
     kwargs...)
 
-    rates = state.meta[:, :fitness] .* state.meta[:, :npop]
+    rates = state.meta[:, Val(:fitness)] .* state.meta[:, Val(:npop)]
 
     Ntotal = total_population_size(state)
     total_rate = sum(rates) + d*Ntotal
 
-    p_mu = mu_type==:poisson ? 1.0 - exp(-mu) : 1.0
-
     old = 0
+
+    reaction::Action = none
 
     @inbounds for t in 0:T
         if prune_period > 0 && state.t > 0 && (state.t) % prune_period == 0
@@ -221,65 +217,68 @@ function moran!(
             prune_phylogeny!(state)
         end
 
-        callback(state, state.t)
-        if abort(state)
-            break
-        end
+        onstep(state) && break
 
         wrates = Weights(rates, total_rate - d*Ntotal)
         wnpops = Weights((@view state.meta[:, Val(:npop)]), Ntotal)
 
-        b_die = rand() < d / (total_rate/Ntotal)
+        reaction = rand() < d / (total_rate/Ntotal) ? die : proliferate
 
-        if b_die
-            die = sample(wnpops)
-            rates[die] -= state.meta[die, Val(:fitness)]
-            total_rate -= state.meta[die, Val(:fitness)] + d
-            state.meta[die, Val(:npop)] -= 1
+        if reaction == die
+            gid = sample(wnpops)
+            g = state.meta[gid, :genotype]
+            rates[gid] -= state.meta[g=g, Val(:fitness)]
+            total_rate -= state.meta[g=g, Val(:fitness)] + d
+            state.meta[g=g, Val(:npop)] -= 1
             Ntotal -= 1
+            ondeath(state, g)
         else
             ## Pick one to proliferate
             old = sample(wrates)
-            b_grow = p_grow==1.0 || rand() < p_grow
+            g_old = state.meta[old, Val(:genotype)]
+            b_grow = onprebirth(state, g_old)
             if !b_grow
-                rates[old] -= state.meta[old, Val(:fitness)]
-                total_rate -= state.meta[old, Val(:fitness)] + d
-                state.meta[old, Val(:npop)] -= 1
+                rates[old] -= state.meta[g=g_old, Val(:fitness)]
+                total_rate -= state.meta[g=g_old, Val(:fitness)] + d
+                state.meta[g=g_old, Val(:npop)] -= 1
                 Ntotal -= 1
             end
     
-            genotype = state.meta[old, Val(:genotype)]
+
+            thismu, p_mu = mu(state, g_old)
             if rand() < p_mu
-                new_genotype = label(state, genotype)
-                if new_genotype != genotype
-                    push!(state, new_genotype)
+                g_new = label(state, g_old)
+                if g_new != g_old
+                    add_genotype!(state, g_new, g_old)
                     if makesnps
-                        new_snps = isnothing(state.meta[old, Val(:snps)]) ? Int[] : copy(state.meta[old, Val(:snps)])
-                        add_snps!(new_snps, mu, L = genome_length, allow_multiple = allow_multiple, replace = replace_mutations)
+                        new_snps = snpsfrom(state.meta, g_old)
+                        add_snps!(new_snps, thismu; count = mu_type, L = genome_length, allow_multiple = allow_multiple, replace = replace_mutations)
                         state.meta[end, Val(:snps)] = new_snps
                     end
-                    state.meta[end, Val(:fitness)] = fitness(state, genotype, new_genotype)
+                    state.meta[end, Val(:fitness)] = fitness(state, g_old, g_new)
                     push!(rates, 0.0)
-                    connect!(state, nv(state.phylogeny), old)
                     old = lastindex(state.meta)
                 end
+            else
+                g_new = g_old
             end
-            rates[old] += state.meta[old, Val(:fitness)]
-            total_rate += state.meta[old, Val(:fitness)] + d
-            state.meta[old, Val(:npop)] += 1
+            rates[old] += state.meta[g=g_old, Val(:fitness)]
+            total_rate += state.meta[g=g_old, Val(:fitness)] + d
+            state.meta[g=g_old, Val(:npop)] += 1
             Ntotal += 1
 
             # If carrying capacity is reached, one needs to die.
             if Ntotal>K>0
-                die = sample(wnpops)
-                rates[die] -= state.meta[die, Val(:fitness)]
-                total_rate -= state.meta[die, Val(:fitness)] + d
-                state.meta[die, Val(:npop)] -= 1
+                to_die = sample(wnpops)
+                rates[to_die] -= state.meta[to_die, Val(:fitness)]
+                total_rate -= state.meta[to_die, Val(:fitness)] + d
+                state.meta[to_die, Val(:npop)] -= 1
                 Ntotal -= 1
             end
+            onpostbirth(state, g_old, g_new)
         end
 
-        state.treal += -1.0 / total_rate * log(1.0 - rand())
+        state.treal += -log(1.0 - rand())/(baserate*total_rate)
         state.t += 1
     end
     if prune_on_exit
@@ -657,9 +656,7 @@ function twonew!(
     end
 end
 
-
-
-dynamics_dict = Dict(
+const dynamics_dict = Dict(
     :moran => moran!,
     :eden_with_density => eden_with_density!,
 )
