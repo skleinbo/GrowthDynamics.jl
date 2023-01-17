@@ -7,7 +7,7 @@ import Random: shuffle!
 using StatsBase: Weights, sample, mean
 import ..Phylogenies: sample_ztp
 import ..Populations: Population, add_genotype!, add_snps!, annotate_snps!, getfitness
-import ..Populations: connect!, index, hassnps, lastgenotype, prune_phylogeny!, _resize!, snpsfrom
+import ..Populations: connect!, index, hassnps, lastgenotype, prune_phylogeny!, _resize!, rename!, snpsfrom
 import ..Observables: total_population_size
 import WeightedSampling: adjust_weight!, WeightedSampler, sample as smp, weight
 

@@ -6,6 +6,7 @@ import Base: length, @propagate_inbounds, push!, resize!, setindex!, similar, si
 import Base.Broadcast: Broadcasted, BroadcastStyle
 import Base.Iterators: product
 import CoordinateTransformations: SphericalFromCartesian
+import DataFrames: rename!
 import Dictionaries: Dictionary, index
 import Graphs: SimpleDiGraph, add_vertex!, add_vertices!, add_edge!, induced_subgraph
 import Graphs: add_edge!, inneighbors, nv, outneighbors, rem_vertex!
@@ -20,7 +21,7 @@ import StatsBase
 
 export add_genotype!, add_snps!, connect!, half_space, hassnps, lastgenotype, nolattice_state, MetaData, MetaDatum, index!
 export push!, remove_genotype!, single_center, spheref, spherer, sphere_with_diverse_outer_shell
-export sphere_with_single_mutant_on_outer_shell, Population, uniform
+export sphere_with_single_mutant_on_outer_shell, Population, prune_phylogeny!, rename!, uniform
 
 const SNPSType = Union{Nothing, Vector{Int}}
 
@@ -530,6 +531,25 @@ function remove_genotype!(S::Population{T, <:Lattices.TypedLattice{T}}, g::T; br
     return remove_genotype_from_phylogeny!(S.phylogeny, v) && remove_genotype_from_metadata!(S.meta, g)
 end
 
+"""
+    rename!(S, g1 => g2)
+
+Rename genotype `g1` to `g2`.
+"""
+function rename!(S::Population{T, <:Lattices.TypedLattice{T}}, x::Pair{T,T}) where T
+    rename!(S.meta, x)
+    if S.lattice isa RealLattice
+        S.lattice.data[ S.lattice.data.==x[1] ] .= x[2]
+    end
+    nothing
+end
+function rename!(M::MetaData{T}, x::Pair{T,T}) where T
+    @boundscheck if x[2] in M.index
+        throw(ArgumentError("cannot rename to existing genotype $(x[2])"))
+    end
+    M[g=x[1], Val(:genotype)] = x[2]
+    nothing
+end
 
 ### similar et al. ###
 # // TODO: Generalize

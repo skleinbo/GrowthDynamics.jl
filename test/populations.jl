@@ -29,6 +29,9 @@ using GrowthDynamics.Populations
         @test M[:genotype, g="3+"] == "3+"
         push!(M, "P5")
         @test M[g="P5"].npop == 0
+        gid = index(M, "P5")
+        rename!(M, "P5"=>"TEST")
+        @test M[gid, :genotype] == "TEST"
     end
     @testset "Populations" begin
         NLconf = nolattice_state()[1]
@@ -50,6 +53,11 @@ using GrowthDynamics.Populations
             conf[fill(9, dim)...] = 0
             @test sum(conf.meta[:, :npop]) == length(lat)-1
             @test (conf[:] .= 1).meta[g=1, :npop] == length(conf.lattice)
+            ## rename!
+            @test_throws ArgumentError rename!(conf, 1=>2)
+            n1 = conf.meta[g=1, :npop]
+            rename!(conf, 1=>1000)
+            @test conf.meta[g=1000, :npop] == n1 == count(==(1000), conf.lattice.data)
             ##
             for f in [i//10 for i in 1:10]
                 conf = half_space(l, 9; f=f, g1=1, g2=2)[1]
