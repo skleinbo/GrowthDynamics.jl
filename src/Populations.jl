@@ -27,7 +27,7 @@ const SNPSType = Union{Nothing, Vector{Int}}
 
 ##-- METADATA for efficiently storing population information --##
 const MetaDatumFields = (:genotype, :npop, :fitness, :snps, :age)
-const MetaDatumFieldTypes{T,S<:SNPSType} = Tuple{T,Int64,Float64,S,Tuple{Int64,Float64}}
+const MetaDatumFieldTypes{T,S<:SNPSType} = Tuple{T,Int,Float64,S,Tuple{Int,Float64}}
 
 """
     MetaDatum{T,S}
@@ -73,7 +73,7 @@ information.
 See also [`MetaDatum`](@ref)
 """
 mutable struct MetaData{T} <: AbstractArray{MetaDatum{T,S} where S<:SNPSType, 1}
-    _len::Int64
+    _len::Int
     index::Dictionary{T, Int}
     genotype::Vector{T}
     npop::Vector{Int}
@@ -100,7 +100,7 @@ function MetaData{T}(::UndefInitializer, n) where T
         Vector{Int}(undef, n),
         Vector{Float64}(undef, n),
         Vector{SNPSType}(undef, n),
-        Vector{Tuple{Int64,Float64}}(undef, n),
+        Vector{Tuple{Int,Float64}}(undef, n),
         Dict()
     )
 end
@@ -294,7 +294,7 @@ Base.push!(M::MetaData, D::MetaDatum) = push!(M, values(D))
     i = lastindex(M)+1
     int_length = length(M.genotype) # internal length
     if i >= int_length
-        _resize!(M, ceil(Int64, max(1, int_length*2)))
+        _resize!(M, ceil(Int, max(1, int_length*2)))
     end
     M._len = i
     setindex!(M, D, i)
@@ -396,7 +396,7 @@ connect!(T::Population, a::Int, b::Int) = add_edge!(T.phylogeny, a, b)
 
 @propagate_inbounds Base.setindex!(T::Population, v, ind::CartesianIndex) = setindex!(T, v, Tuple(ind)...)
 
-@propagate_inbounds function Base.setindex!(T::Population{S, <:AbstractLattice{S, A}}, v, ind::Vararg{Int64}) where {S,A}
+@propagate_inbounds function Base.setindex!(T::Population{S, <:AbstractLattice{S, A}}, v, ind::Vararg{Int}) where {S,A}
     z = zero(S)
     L = T.lattice.data
     g_old = L[ind...]
@@ -797,7 +797,7 @@ Remove unpopulated genotypes from the phylogenetic tree and meta data.
 Any gap in the phylogeny is bridged.
 """
 function prune_phylogeny!(S::Population{G,L}) where {G,L}
-    P = S.phylogeny::SimpleDiGraph{Int64}
+    P = S.phylogeny::SimpleDiGraph{Int}
 
     function bridge!(s, d)
         children = inneighbors(P, d)
@@ -833,7 +833,7 @@ function prune_phylogeny!(S::Population{G,L}) where {G,L}
         # @debug "Removing vertex" v
         # rem_vertex!(P, v)
     end
-    S.phylogeny = induced_subgraph(P, subvertices)[1]::SimpleDiGraph{Int64}
+    S.phylogeny = induced_subgraph(P, subvertices)[1]::SimpleDiGraph{Int}
     S.meta = @inbounds S.meta[subvertices]
     return S.phylogeny, S.meta
 end
@@ -850,7 +850,7 @@ be `nothing`. =#
     nolattice_state()
 
 Model without spatial structure.  
-Populated with one individual of genotype `1::Int64` with fitness 1.0.
+Populated with one individual of genotype `1::Int` with fitness 1.0.
 """
 function nolattice_state()
     state = Population(Lattices.NoLattice())

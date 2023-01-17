@@ -60,7 +60,7 @@ Dummy 'lattice' for systems without spatial structure."
 """
 struct NoLattice{T} <: AbstractLattice{T, 0} end
 
-NoLattice() = NoLattice{Int64}()
+NoLattice() = NoLattice{Int}()
 size(L::NoLattice) = ()
 size(L::NoLattice, i...) = 0
 length(L::NoLattice) = 0

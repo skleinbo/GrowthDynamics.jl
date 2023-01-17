@@ -131,8 +131,8 @@ function allele_spectrum(state::Population; threshold=0.0, read_depth=total_popu
   as.depth = fill(read_depth, size(as,1))
 
   if sample_percent < 1.0
-    allele_sample_size = ceil(Int64, sample_percent*size(as,1))
-    as.samples = rand(Multinomial(round(Int64,sample_percent*sum(as.npop)), as.npop/sum(as.npop)))
+    allele_sample_size = ceil(Int, sample_percent*size(as,1))
+    as.samples = rand(Multinomial(round(Int,sample_percent*sum(as.npop)), as.npop/sum(as.npop)))
   else
     allele_sample_size = size(as,1)
     as.samples = as.npop
@@ -154,8 +154,8 @@ function allele_spectrum(as::DataFrame; threshold=0.0, read_depth=sum(as.npop))
   as.depth = fill(read_depth, size(as,1))
 
   if sample_percent < 1.0
-    allele_sample_size = ceil(Int64, sample_percent*size(as,1))
-    as.samples = rand(Multinomial(round(Int64,sample_percent*sum(as.npop)), as.npop/sum(as.npop)))
+    allele_sample_size = ceil(Int, sample_percent*size(as,1))
+    as.samples = rand(Multinomial(round(Int,sample_percent*sum(as.npop)), as.npop/sum(as.npop)))
   else
     allele_sample_size = size(as,1)
     as.samples = as.npop
@@ -174,7 +174,7 @@ function total_population_size(S::Population)
 end
 
 function population_size(L::Lattices.RealLattice{T}, t) where T<:Integer
-    D = Dict{T, Int64}()
+    D = Dict{T, Int}()
     for x in L.data
         if x==0
             continue
@@ -860,7 +860,7 @@ function pairwise(S::Population;
     else
         itr = genotypes
     end
-    X = Matrix{Int64}(undef, length(itr), length(itr))
+    X = Matrix{Int}(undef, length(itr), length(itr))
     for (i,g1) in enumerate(itr), (j, g2) in enumerate(itr)
         if j<i
             continue

@@ -15,7 +15,7 @@ export eden_with_density!, exponential!, moran!, twonew!
 
 @enum Action none=0 proliferate=1 mutate=2 die=3
 
-const MutationProfile = Tuple{Symbol,Float64,Int64} # (:poisson/:fixed, rate, genome length)
+const MutationProfile = Tuple{Symbol,Float64,Int} # (:poisson/:fixed, rate, genome length)
 
 function mu_func(mu)
     if mu isa Real
@@ -51,7 +51,7 @@ No death.
 """
 exponential!(args...; mu=0.0, kwargs...) = _exponential!(args...; mu=mu_func(mu), kwargs...)
 function _exponential!(
-    state::Population{Int64, NoLattice{Int64}};
+    state::Population{Int, NoLattice{Int}};
     T,
     K = 0, # Carrying capacity
     label = (s, gold) -> lastgenotype(s)+1,
@@ -183,7 +183,7 @@ moran!(args...; mu=0.0, kwargs...) = _moran!(args...; mu=mu_func(mu), kwargs...)
 function _moran!(
     state::Population{Int, NoLattice{Int}};
     T,
-    K::Int64 = 0, # carrying capacity
+    K::Int = 0, # carrying capacity
     label = (s, gold) -> lastgenotype(s)+1,
     fitness = (s, gold, gnew) -> 1.0,
     mu::Function,
@@ -554,7 +554,7 @@ is reach. After that individuals begin replacing each other.
 - `abort`: condition on `state` and `time` under which to end the run.
 """
 function twonew!(
-    state::Population{Int64, NoLattice{Int64}};
+    state::Population{Int, NoLattice{Int}};
     fitness = (s, gold, gnew) -> 1.0,
     T = 0,
     mu::Float64 = 0.0,
@@ -570,7 +570,7 @@ function twonew!(
     DEBUG = false,
     callback = (s, t) -> begin end,
     abort = s -> false,
-    K::Int64 = typemax(Int64), # carrying capacity
+    K::Int = typemax(Int), # carrying capacity
     kwargs...)
 
     rates = state.meta[:, :fitness] .* state.meta[:, :npop]

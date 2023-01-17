@@ -9,7 +9,7 @@ using GrowthDynamics.Populations
         MD = MetaDatum((1,1024,1.0,[1,2,8],(1,1e-8)))
         @test MD.npop == 1024
         @test_throws MethodError MetaDatum((1,1024,1,[1,2,8],(1,1e-8))) # fitness is not a Float64
-        @test eltype(MetaData(Int64).genotype) == Int64
+        @test eltype(MetaData(Int).genotype) == Int
         @test MetaData(MD).npop == [MD.npop]
         @test_throws ArgumentError MetaData([1,2],[10,20,30])
         @test sum(MetaData([1,2,3],[10,20,30]).npop) == 60
