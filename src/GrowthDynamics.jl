@@ -1,30 +1,20 @@
 module GrowthDynamics
 
-export  Lattices,
-        LatticeTumorDynamics
-
-import Printf: @sprintf
-
-using DataFrames
-using FileIO
-using Graphs
-
-linspace(start,stop,length) = range(start, stop=stop, length=length)
-DEBUG = false
+import Reexport: @reexport
 
 include("Lattices.jl")
 include("RoughInterfaces.jl")
 include("Phylogenies.jl")
-include("TumorConfigurations.jl")
-# @reexport using .TumorConfigurations
-include("TumorObservables.jl")
-include("LatticeTumorDynamics.jl")
+include("Populations.jl")
+include("Observables.jl")
+include("LatticeDynamics.jl")
 include("AnalysisMethods.jl")
 include("PrettyPrinting.jl")
 
-# @reexport using .LatticeTumorDynamics
-# @reexport using .TumorObservables
-# @reexport using .AnalysisMethods
-# @reexport using .Phylogenies
+@reexport using .Lattices
+@reexport using .LatticeDynamics
+@reexport using .Phylogenies
+@reexport using .Populations
+@reexport using .Observables
 
 end

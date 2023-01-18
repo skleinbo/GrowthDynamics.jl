@@ -1,6 +1,6 @@
-src/temp/
+*/temp/
 docs/build/
-/Manifest.toml
+Manifest.toml
 /docs/Manifest.toml
 *.jl.*.mem
 workspace*

@@ -16,6 +16,7 @@ export  conicsection,
         density!,
         dimension,
         dist,
+        gindex,
         index,
         isonshell,
         midpoint,
@@ -26,8 +27,7 @@ export  conicsection,
         out_of_bounds,
         radius,
         shell,
-        spacings,
-        volume
+        spacings
 
 import Base: size, length, getindex, setindex!, maybeview, firstindex, lastindex
 import Base.Iterators: product
@@ -40,6 +40,9 @@ using Rotations
 using StaticArrays
 
 include("Geometry.jl")
+
+# backwards compatibility with 0.6
+const gindex = index
 
 const Index{N} = Union{CartesianIndex{N}, NTuple{N, T}} where T
 
@@ -55,7 +58,7 @@ Dummy 'lattice' for systems without spatial structure."
 """
 struct NoLattice{T} <: AbstractLattice{T, 0} end
 
-NoLattice() = NoLattice{Int64}()
+NoLattice() = NoLattice{Int}()
 size(L::NoLattice) = ()
 size(L::NoLattice, i...) = 0
 length(L::NoLattice) = 0
@@ -207,7 +210,7 @@ end
 
 Each site has six equidistant neighbors with a sixfold rotational symmetry.
 
-See https://en.wikipedia.org/wiki/Hexagonal_lattice
+See <https://en.wikipedia.org/wiki/Hexagonal_lattice>
 
 # Fields
 * `a`: lattice constant
@@ -221,7 +224,7 @@ julia> l = HexagonalLattice(1/2, ones(32,32))
 HexagonalLattice{Float64, Matrix{Float64}}(0.5, [1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0])
 
 julia> neighbors(l, (16,16))
-6-element StaticArrays.MVector{6, CartesianIndex{2}} with indices SOneTo(6):
+6-element StaticArraysCore.MVector{6, CartesianIndex{2}} with indices SOneTo(6):
  CartesianIndex(15, 16)
  CartesianIndex(15, 17)
  CartesianIndex(16, 17)
@@ -230,7 +233,7 @@ julia> neighbors(l, (16,16))
  CartesianIndex(16, 15)
 
 julia> coord.(Ref(l), ans)
-6-element StaticArrays.MVector{6, GeometryBasics.Point{2, Float32}} with indices SOneTo(6):
+6-element StaticArraysCore.MVector{6, GeometryBasics.Point{2, Float32}} with indices SOneTo(6):
  [7.5, 6.0621777]
  [8.0, 6.0621777]
  [8.25, 6.4951906]
@@ -266,17 +269,17 @@ function coord(L::HexagonalLattice, I::Index{2})
     if iseven(I[1])
         x += 1/2*L.a
     end
-    Point2f0(x,y)
+    Point2f(x,y)
 end
 
 function index(L::HexagonalLattice, p)
     x,y, = Tuple(p)
-    n = round(Int, y*√3/L.a) + 1 
+    n = round(Int, y/sin(pi/3)/L.a) + 1 
     if iseven(n)
         x -= 1/2*L.a
     end
     m = round(Int, x/L.a+1)
-    return CartesianIndex(m,n)
+    return CartesianIndex(n,m)
 end
 
 Base.@propagate_inbounds function neighbors!(nn::Neighbors{6,2}, ::HexagonalLattice, I)
@@ -299,35 +302,28 @@ Base.@propagate_inbounds function neighbors!(nn::Neighbors{6,2}, ::HexagonalLatt
 end
 
 function nneighbors(::Type{HexagonalLattice{T, A}}, N, I) where {T, A}
-    if isodd(I[1])
-        if (I[1] == 1 || I[1] == N[1]) && 2<=I[2]<N[2]
-            return 4
-        elseif I[2] == 1 && 2<=I[1]<N[1]
-            return 3
-        elseif I[2] == N[2] && 2<=I[1]<N[1]
-            return 5
-        elseif (I[1] == N[1] && I[2] == N[2]) || (I[1] == 1 && I[2] == 1)
+    row, col = I[1], I[2]
+    if 1<col<N[2] && 1<row<N[1]
+        return 6
+    end
+
+    if col==1
+        if row==1 || isodd(row) && row==N[1]
             return 2
-        elseif I[1] == 1 && I[2] == N[2]
+        elseif isodd(row)
             return 3
         else
-            return 6
+            return 5
         end
-    else
-        if (I[1] == 1 || I[1] == N[1]) && 2<=I[2]<N[2]
-            return 4
-        elseif I[2] == 1 && 2<=I[1]<N[1]
-            return 5
-        elseif I[2] == N[2] && 2<=I[1]<N[1]
-            return 3
-        elseif I[1] == N[1]  && I[2] == N[2]
-            return 2
-        elseif I[1] == N[1] && I[2] == 1
+    elseif col==N[2]
+        if row==1 || isodd(row) && row==N[1] || iseven(row)
             return 3
         else
-            return 6
+            return 5
         end
     end
+
+    return 4
 end
 
 """
@@ -350,7 +346,7 @@ end
 
 Three dimensional primitive cubic lattice. Each site has six equidistant neighbors with a fourfold rotational symmetry in each of the three planes.
 
-See https://en.wikipedia.org/wiki/Cubic_crystal_system
+See <https://en.wikipedia.org/wiki/Cubic_crystal_system>
 
 # Fields
 * `a`: lattice constant
@@ -364,7 +360,7 @@ julia> l = CubicLattice(1/2, ones(16,16,16))
 CubicLattice{Float64, Array{Float64, 3}}(0.5, [1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; … ;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0])
 
 julia> neighbors(l, (8,8,8))
-6-element StaticArrays.MVector{6, CartesianIndex{3}} with indices SOneTo(6):
+6-element StaticArraysCore.MVector{6, CartesianIndex{3}} with indices SOneTo(6):
  CartesianIndex(7, 8, 8)
  CartesianIndex(9, 8, 8)
  CartesianIndex(8, 7, 8)
@@ -373,7 +369,7 @@ julia> neighbors(l, (8,8,8))
  CartesianIndex(8, 8, 9)
 
 julia> coord.(Ref(l), ans)
-6-element StaticArrays.MVector{6, GeometryBasics.Point{3, Float32}} with indices SOneTo(6):
+6-element StaticArraysCore.MVector{6, GeometryBasics.Point{3, Float32}} with indices SOneTo(6):
  [3.0, 3.5, 3.5]
  [4.0, 3.5, 3.5]
  [3.5, 3.0, 3.5]
@@ -389,7 +385,7 @@ end
 
 CubicLattice(L::Integer) = CubicLattice(1.0, fill(0, L,L,L))
 
-coord(L::CubicLattice, I::Index{3})::Point3f0 = L.a .* (Point3f0(Tuple(I)) .- 1)
+coord(L::CubicLattice, I::Index{3})::Point3f = L.a .* (Point3f(Tuple(I)) .- 1)
 
 function index(L::CubicLattice, p)
     return  CartesianIndex(Tuple(round.(Int, p ./ L.a) .+ 1))
@@ -481,25 +477,23 @@ function isonplane(L::Lattices.CubicLattice, P::Plane)
 end
 
 """
-    isonshell(L::CubicLattice, p, r, o)
+    isonshell(L::RealLattice, p, r, o)
 
-    Determine whether a lattice point `p` is on a shell with radius `r` wrt.
-    the origin `o`. A shell is defined as the collection of points with |(p-o)|≤r+a/2
-    where `a` is the lattice spacing.
+Determine whether a lattice point `p` is on a shell with radius `r` wrt.
+the origin `o`. A shell is defined as the collection of points with |(p-o)|≤r+a/2
+where `a` is the lattice spacing.
 """
-@inline function isonshell(L::RealLattice, p, r, o=coord(L, midpoint(L)))
-    a = spacings(L)[1] / 2
-
+@inline function isonshell(L::RealLattice, p, r, o=midpointcoord(L); a=spacings(L)[1])
     p′ = p .- o
-    r-a < norm(p′) ≤ r+a
+    r-a/2 ≤ norm(p′) < r+a/2
 end
 
 """
-    shell(L::CubicLattice, r, o=coord(L, midpoint(L)))
+    shell(L::CubicLattice, r, o=midpointcoord(L))
 
 Return indices of shell of radius `r` around `o`.
 """
-function shell(L::RealLattice, r, o=coord(L, midpoint(L)))
+function shell(L::RealLattice, r, o=midpointcoord(L))
     expected_surface = round(Int, Lattices.volume(r, 3)  -Lattices.volume(r-1, 3))
     out = Vector{CartesianIndex{3}}(undef, expected_surface)
     j = 0
@@ -530,7 +524,7 @@ struct HCPLattice{T, A<:AbstractArray{T,3}} <: AbstractLattice{T, 3}
     data::A
 end
 
-coord(L::HCPLattice, I::Index{3}) = Point3f0(L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2],I[3]))
+coord(L::HCPLattice, I::Index{3}) = Point3f(L.a .* (I[1] - 1/2*I[2],sqrt(3)/2*I[2],I[3]))
 ## TODO: index(::HCPLattice)
 function index(L::HCPLattice)
 end
@@ -592,7 +586,7 @@ end
 
 Three dimensional face-centered cubic lattice. Each site has twelve neighbors.
 
-See https://en.wikipedia.org/wiki/Cubic_crystal_system
+See <https://en.wikipedia.org/wiki/Cubic_crystal_system>
 
 # Fields
 * `a`: lattice constant
@@ -606,7 +600,7 @@ julia> l = FCCLattice(1/2, ones(16,16,16))
 FCCLattice{Float64, Array{Float64, 3}}(0.5, [1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; … ;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0;;; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0; … ; 1.0 1.0 … 1.0 1.0; 1.0 1.0 … 1.0 1.0])
 
 julia> neighbors(l, (8,8,8))
-12-element StaticArrays.MVector{12, CartesianIndex{3}} with indices SOneTo(12):
+12-element StaticArraysCore.MVector{12, CartesianIndex{3}} with indices SOneTo(12):
  CartesianIndex(7, 8, 8)
  CartesianIndex(9, 8, 8)
  CartesianIndex(9, 7, 8)
@@ -621,7 +615,7 @@ julia> neighbors(l, (8,8,8))
  CartesianIndex(8, 8, 7)
 
 julia> coord.(Ref(l), ans)
-12-element StaticArrays.MVector{12, GeometryBasics.Point{3, Float32}} with indices SOneTo(12):
+12-element StaticArraysCore.MVector{12, GeometryBasics.Point{3, Float32}} with indices SOneTo(12):
  [1.5, 3.75, 1.75]
  [2.0, 3.75, 1.75]
  [2.0, 3.25, 1.75]
@@ -642,7 +636,7 @@ struct FCCLattice{T, A<:AbstractArray{T,3}} <:AbstractLattice{T, 3}
 end
 FCCLattice(L::Integer) = FCCLattice(1.0, fill(0, sitesperunitcell(FCCLattice, L)))
 
-function coord(L::FCCLattice, I::Index{3})::Point3f0
+function coord(L::FCCLattice, I::Index{3})::Point3f
     a = L.a
     ix,iy,iz = Tuple(I) .- 1
     z = a/2*iz
@@ -652,7 +646,7 @@ function coord(L::FCCLattice, I::Index{3})::Point3f0
     else
         y = ifelse(isodd(ix), a*iy, a*iy + a/2)
     end
-    return Point3f0(x,y,z)
+    return Point3f(x,y,z)
 end
 
 function index(L::FCCLattice, p)
@@ -691,9 +685,17 @@ Base.@propagate_inbounds function neighbors!(nn::Neighbors{12,3}, L::FCCLattice,
     nothing
 end
 
-function nneighbors(::Type{FCCLattice{T, A}}, N, I) where {T, A}
-    coord = coordination(FCCLattice)
+function nneighbors(lattice::FCCLattice{T, A}, I) where {T, A}
+    if any( Tuple(I).==1 .|| Tuple(I).==size(lattice) )
+        return count(i->!out_of_bounds(lattice, i), neighbors(lattice, I))
+    else
+        return coordination(FCCLattice)
+    end
+end
 
+# FIXME: Wrong at the boundaries
+function nneighbors(::Type{FCCLattice{T, A}}, N, I) where {T, A}
+    coordination(FCCLattice)
 end
 
 ## --- END FCC lattice (3D) -- ##
@@ -711,15 +713,16 @@ dimension(::Type{HCPLattice}) = 3
 coordination(L::RealLattice) = coordination(typeof(L))
 coordination(::Type{LineLattice{T, A}}) where {T, A} = 2
 coordination(::Type{HexagonalLattice{T, A}}) where {T, A} = 6
-# coordination(::Type{CubicLattice{T, A}}) where {T, A} = 6
 coordination(::Type{T}) where T<:CubicLattice = 6
 coordination(::Type{T}) where T<:FCCLattice = 12
 coordination(::Type{HCPLattice{T, A}}) where {T, A} = 12
 
-spacings(L::LineLattice) = (L.a,)
-spacings(L::HexagonalLattice) = (L.a, L.a)
-spacings(L::CubicLattice) = (L.a, L.a, L.a)
-spacings(L::FCCLattice) = (L.a, L.a, L.a)
+spacings(L::RealLattice) = L.a .* spacings(typeof(L))
+# If only lattice type is given, assume lattice constant==1.0
+spacings(::Type{<:LineLattice}) = (1.0,)
+spacings(::Type{<:HexagonalLattice}) = (1.0, 1.0)./sqrt(2)
+spacings(::Type{<:CubicLattice}) = (1.0, 1.0, 1.0)
+spacings(::Type{<:FCCLattice}) = (1.0, 1.0, 1.0)./sqrt(2)
 
 sitesperunitcell(::Type{FCCLattice}, L) = (2L+1, L+1, 2L+1)
 sitesperunitcell(::Type{LT}, L) where LT<:AbstractLattice = ntuple(_->L+1, dimension(LT))
@@ -743,29 +746,26 @@ end
 ## Intersections ##
 ###################
 
-function conicsection(L::AbstractLattice{<:Any, 3}, coords, Ω; axis=Point3f0(0,0,-1), o=Lattices.coord(L, Lattices.midpoint(L)))
+"""
+    conicsection(L, points, Ω; axis, o)
+
+Filter those `points` that lie within a conic section of opening angle `Ω` around `axis` emanating from origin `o`.
+"""
+function conicsection(L::AbstractLattice{<:Any, 3}, points, Ω; axis=Vec3f(0,0,-1), o=midpointcoord(L))
     ## !! WARNING: ϕ is the azimuth angle in CoordinateTransformations !!
     cts = SphericalFromCartesian()
-    # rotY = @SMatrix [ cos(ϕoff) 0 -sin(ϕoff);
-    #                  0         1    0;
-    #                  sin(ϕoff) 0  cos(ϕoff) ]
 
-    # rotZ = @SMatrix [ cos(θoff) -sin(θoff) 0;
-    #                   sin(θoff)  cos(θoff) 0;
-    #                   0         0          1]
-    z = Point3f0(0,0,1)
+    z = Vec3f(0,0,1)
     _axis = cross(axis, z)
-    # @show _axis
     if iszero(_axis)
-        _axis = Point3f0(0,1,0)
+        _axis = Vec3f(0,1,0)
     else
         _axis = normalize(_axis)
     end
     angle_zdir = acos(dot(z, axis)/norm(axis))
-    # @show angle_zdir
     rot = AngleAxis(angle_zdir, _axis...)
-    # @show rot
-    filter(coords) do p
+    
+    filter(points) do p
       q = cts(rot*(p-o))
       q.ϕ+π/2 - eps(Float32) ≤ acos(1-Ω/(2π))
     end
@@ -788,7 +788,7 @@ Index of the coordinate `p` closest to the nearest site on lattice `L`. `p` is a
 @doc "Dimension of the lattice. Functionally equivalent to `ndims(lattice.data)`." dimension
 
 @doc raw"""
-neighbors(L::RealLattice, I)
+    neighbors(L::RealLattice, I)
 
 Vector of neighbors of index `I``. Returns `Vector{CartesianIndex{dimension(L)}}``.
 
@@ -796,7 +796,7 @@ Does not check for bounds.
 """ neighbors
 
 @doc raw"""
-neighbors!(n, L, I)
+    neighbors!(n, L, I)
 
 In-place version of `neighbors`.
 

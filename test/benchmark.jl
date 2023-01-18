@@ -1,6 +1,6 @@
 using GrowthDynamics
 using .Lattices
-using .TumorConfigurations
+using .Populations
 using BenchmarkTools
 
 μ = 0e-2
@@ -10,7 +10,7 @@ Nfinal=10_000
 
 fit_func(s, gold, gnew) = gnew==2 ? 1.3 : 1.0
 
-state_spatial = GrowthDynamics.TumorConfigurations.single_center(Lattices.CubicLattice, L, g1=0, g2=1)
+state_spatial = GrowthDynamics.Populations.single_center(Lattices.CubicLattice, L, g1=0, g2=1)
 
 suite = BenchmarkGroup()
 
@@ -25,7 +25,7 @@ suite["tc"]["meta"] = BenchmarkGroup()
 suite["tc"]["meta"]["push"] = BenchmarkGroup()
 
 for L in [32,64,128]
-    suite["dynamics"]["dop"][string(L)] = @benchmarkable LatticeTumorDynamics.die_or_proliferate!(state_spatial;DEBUG=false,
+    suite["dynamics"]["dop"][string(L)] = @benchmarkable LatticeDynamics.die_or_proliferate!(state_spatial;DEBUG=false,
             fitness=fit_func,
             d=0.0,
             T=2N,

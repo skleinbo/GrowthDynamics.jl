@@ -3,15 +3,15 @@
 ## and `w` perpendicular to it.
 ## `u,v,w` are not independent, but filled in by the constructors.
 
-import Base: ==
+import Base: ==, isvalid
 import LinearAlgebra: cross, dot, norm, norm2, normalize
-import GeometryBasics: Pointf0
+import GeometryBasics: Pointf
 
-struct Plane
-    p
-    u
-    v
-    w
+struct Plane{T}
+    p::T
+    u::T
+    v::T
+    w::T
 end
 
 """
@@ -47,8 +47,10 @@ function Plane(p, w)
         u = SVector{3}(1.0, 0.0, 0.0)
     end
     v = -normalize(cross(u, w))
+    p, u, v, w = promote(p,u,v,w)
     return Plane(p, u,v,w)
 end
+
 """
     Plane(p, u,v)
 
@@ -70,30 +72,31 @@ function Plane(p, u,v)
     if iszero(u) || iszero(v)
         throw(ArgumentError("Tangent vectors cannot be zero."))
     end
-
+    
+    p, u, v = promote(p, u, v)
     w = normalize(cross(u,v))
     return Plane(p, u,v,w)
 end
 
-function isvalid(P::Plane)
-    isvalid = true
-    if norm(P.u)≉ 1.0 || norm(P.v)≉ 1.0 || norm(P.w)≉ 1.0 || dot(P.u,P.w)!=0 || dot(P.v,P.w)!=0
-        isvalid = false
+function isvalid(P::Plane{<:AbstractArray{T}}) where T
+    atol = sqrt(eps(T))
+    if norm(P.u)≉ 1.0 || norm(P.v)≉ 1.0 || norm(P.w)≉ 1.0 ||
+        !isapprox(dot(P.u,P.w), 0; atol) || !isapprox(dot(P.v,P.w), 0; atol) ||
+        P.u == P.v || P.u == -P.v
+        return false
     end
-    if P.u == P.v || P.u == -P.v
-        isvalid = false
-    end
-    isvalid
+    return true
 end
 
 function ==(P1::Plane, P2::Plane)
     if !isvalid(P1) || !isvalid(P2)
         throw(ArgumentError("Invalid plane(s)."))
     end
-    if P1.p ≉  P2.p
+    if !(P1.w ≈ P2.w || P1.w ≈ -P2.w)
         return false
     end
-    if !(P1.w ≈ P2.w || P1.w ≈ -P2.w)
+    #TODO: Should check if P2.p ∈ P1
+    if P1.p ≉ P2.p
         return false
     end
     return true
@@ -113,7 +116,7 @@ end
 """
     volume(r, dim)
 
-Volume of unit ball in `dim` dimensions.
+Volume of ball of radius `r` in `dim` dimensions.
 """
 function volume(r, dim::Int) 
     if dim == 1
@@ -122,6 +125,22 @@ function volume(r, dim::Int)
         return π*r^2
     elseif dim == 3
         return 4π/3*r^3
+    else
+        throw(ArgumentError("dim >=4 not supported"))
+    end
+end
+"""
+    surface(r, dim)
+
+Surface of ball of radius `r` in `1<=dim<=3` dimensions.
+"""
+function surface(r, dim::Int) 
+    if dim == 1
+        return 2
+    elseif dim == 2
+        return 2π*r
+    elseif dim == 3
+        return 4π*r^2
     else
         throw(ArgumentError("dim >=4 not supported"))
     end

@@ -9,4 +9,4 @@ Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 
 [compat]
 Documenter = "~0.27.16"
-Makie = "0.17"
+Makie = "0.17, 0.18, 0.19"

@@ -1,4 +1,4 @@
-module TumorConfigurations
+module Populations
 
 import Base: axes, checkbounds, copyto!, copy, dotview
 import Base: eachindex, firstindex, getindex, IndexStyle, IndexLinear, lastindex, materialize!
@@ -6,27 +6,28 @@ import Base: length, @propagate_inbounds, push!, resize!, setindex!, similar, si
 import Base.Broadcast: Broadcasted, BroadcastStyle
 import Base.Iterators: product
 import CoordinateTransformations: SphericalFromCartesian
+import DataFrames: rename!
 import Dictionaries: Dictionary, index
 import Graphs: SimpleDiGraph, add_vertex!, add_vertices!, add_edge!, induced_subgraph
-import Graphs: inneighbors, nv, outneighbors, rem_vertex!
-import GeometryBasics: Point2f0, Point3f0
+import Graphs: add_edge!, inneighbors, nv, outneighbors, rem_vertex!
+import GeometryBasics: Point2f, Point3f
 import ..Lattices
-import ..Lattices: AbstractLattice
+import ..Lattices: AbstractLattice, RealLattice, TypedLattice
 import ..Lattices: coord, dimension, index, isonshell, radius, realsize, midpoint, dist, spacings
 import ..Lattices: sitesperunitcell
 import LinearAlgebra: norm
-import ..Phylogenies: children, df_traversal, isroot, isleaf, nchildren, parent
+import ..Phylogenies: children, df_traversal, isroot, isleaf, nchildren, parent, sample_ztp
 import StatsBase
 
-export half_space, hassnps, lastgenotype, nolattice_state, MetaData
-export push!, single_center, spheref, spherer, sphere_with_diverse_outer_shell
-export sphere_with_single_mutant_on_outer_shell, TumorConfiguration, uniform
+export add_genotype!, add_snps!, connect!, half_space, hassnps, lastgenotype, nolattice_state, MetaData, MetaDatum, index!
+export push!, remove_genotype!, single_center, spheref, spherer, sphere_with_diverse_outer_shell
+export sphere_with_single_mutant_on_outer_shell, Population, prune_phylogeny!, rename!, uniform
 
 const SNPSType = Union{Nothing, Vector{Int}}
 
 ##-- METADATA for efficiently storing population information --##
 const MetaDatumFields = (:genotype, :npop, :fitness, :snps, :age)
-const MetaDatumFieldTypes{T,S<:SNPSType} = Tuple{T,Int64,Float64,S,Tuple{Int64,Float64}}
+const MetaDatumFieldTypes{T,S<:SNPSType} = Tuple{T,Int,Float64,S,Tuple{Int,Float64}}
 
 """
     MetaDatum{T,S}
@@ -72,7 +73,7 @@ information.
 See also [`MetaDatum`](@ref)
 """
 mutable struct MetaData{T} <: AbstractArray{MetaDatum{T,S} where S<:SNPSType, 1}
-    _len::Int64
+    _len::Int
     index::Dictionary{T, Int}
     genotype::Vector{T}
     npop::Vector{Int}
@@ -89,16 +90,17 @@ IndexStyle(::Type{<:MetaData}) = IndexLinear()
 
 Empty `MetaData`` for genotype-type `T`.
 """
-MetaData(T::DataType) = MetaData(0, Dictionary{T, Int}(), T[], Int64[], Float64[], Vector{Int64}[], Tuple{Int64,Float64}[], Dict())
+MetaData(T::DataType) = MetaData(0, Dictionary{T, Int}(), T[], Int[], Float64[],
+ SNPSType[], Tuple{Int,Float64}[], Dict())
 
 function MetaData{T}(::UndefInitializer, n) where T
     return MetaData{T}(0,
         Dictionary{T, Int}(),
         Vector{T}(undef, n),
-        Vector{Int64}(undef, n),
+        Vector{Int}(undef, n),
         Vector{Float64}(undef, n),
         Vector{SNPSType}(undef, n),
-        Vector{Tuple{Int64,Float64}}(undef, n),
+        Vector{Tuple{Int,Float64}}(undef, n),
         Dict()
     )
 end
@@ -135,9 +137,23 @@ function MetaData(g::Vector{T}, n::Vector{<:Integer}) where {T}
     M
 end
 
-hassnps(M::MetaData, v) = !isnothing(M[v, :snps]) && !isempty(M[v, :snps])
-hassnps(M::MetaData; g) = !isnothing(M[g; :snps]) && !isempty(M[g; :snps])
+snpsfrom(M::MetaData, g) = snpsfrom(M[g=g, Val(:snps)])
+snpsfrom(::Nothing) = Int[]
+snpsfrom(v::Vector{Int}) = copy(v)
 
+hassnps(M::MetaData, v) = !isnothing(M[v, Val(:snps)]) && !isempty(M[v, Val(:snps)])
+"""
+    hassnps(M::MetaData; g)
+
+Return `true` if genotype contains mutations.
+"""
+hassnps(M::MetaData; g) = !isnothing(M[g; Val(:snps)]) && !isempty(M[g; Val(:snps)])
+
+"""
+    lastgenotype(M::MetaData)
+
+Return genotype that was added last.
+"""    
 lastgenotype(M::MetaData) = M[end, Val(:genotype)]
 
 """
@@ -164,26 +180,40 @@ size(M::MetaData) = (length(M),)
 function Base.similar(M::MetaData{T}) where T
     return similar(M, M._len)
 end
-function Base.similar(::MetaData{T}, len) where T
+function Base.similar(::MetaData{T}, len::Int) where T
     return MetaData{T}(undef, len)
 end
 
-@propagate_inbounds function Base.copyto!(dest::MetaData{T}, src::MetaData{T}) where T
+@propagate_inbounds function Base.copyto!(dest::MetaData{T}, src::S) where {T, S<:MetaData{T}}
     @boundscheck if length(src) > length(dest.genotype)
         throw(BoundsError())
     end
     dest._len = src._len
     dest.misc = copy(src.misc)
-    for field in setdiff(fieldnames(src), [:_len, :misc])
-        copyto!(getproperty(dest, field), getproperty(dest, field))
+    for field in setdiff(fieldnames(S), [:_len, :misc, :index])
+        copyto!(getproperty(dest, field), getproperty(src, field))
     end
+    dest.index = copy(src.index)
     return dest
 end
 
+"""
+    index(M, g)
+
+Return the index of genotype `g`, or `nothing` if `g` is not
+in meta data `M`.
+""" 
 @propagate_inbounds function index(M::MetaData{T}, g) where T
     return haskey(M.index, g) ? M.index[g] : nothing
 end
 
+"""
+    getindex(M::MetaData; g)
+
+Synonymous with `M[g=g] == M[;g]`.
+
+Return a named tuple with metdata about genotype `g`. 
+"""
 @propagate_inbounds function Base.getindex(M::MetaData{T}; g) where {T}
     M[index(M, g)]
 end
@@ -209,12 +239,13 @@ Base.getindex(M::MetaData{T}, ::Colon) where {T} = @inbounds M[eachindex(M)]
         M.misc
     )
     N._len = length(N.genotype)
+    index!(N)
     return N
 end
 
 Base.@propagate_inbounds getindex(M::MetaData, i::Integer, field::Symbol) = getindex(M, i, Val(field))
 
-@propagate_inbounds function getindex(M::MetaData, i::Integer, field::Val{F}) where F
+@propagate_inbounds function getindex(M::MetaData, i::Integer, ::Val{F}) where F
     # mfield = _pluralize(field)
     getindex(getproperty(M, F), i)
 end
@@ -229,6 +260,10 @@ end
 
 @propagate_inbounds function getindex(M::MetaData{T}, ::Colon, field::Symbol) where T
     return getproperty(M, field)[eachindex(M)]
+end
+
+@propagate_inbounds function getindex(M::MetaData{T}, ::Colon, ::Val{F}) where {T,F}
+    return getproperty(M, F)[eachindex(M)]
 end
 
 @propagate_inbounds function view(M::MetaData{T}, ::Colon, field::Val{F}) where {T, F}
@@ -282,7 +317,7 @@ Base.push!(M::MetaData, D::MetaDatum) = push!(M, values(D))
     i = lastindex(M)+1
     int_length = length(M.genotype) # internal length
     if i >= int_length
-        _resize!(M, ceil(Int64, max(1, int_length*2)))
+        _resize!(M, ceil(Int, max(1, int_length*2)))
     end
     M._len = i
     setindex!(M, D, i)
@@ -291,7 +326,7 @@ end
 @propagate_inbounds Base.setindex!(M::MetaData, D::MetaDatum, i::Integer) = setindex!(M, values(D), i)
 
 @propagate_inbounds function Base.setindex!(M::MetaData{T}, D::MetaDatumFieldTypes{T}, i::Integer) where {T}
-    @boundscheck checkbounds(Bool, M, i) || throw(BoundsError(M, I))
+    @boundscheck checkbounds(Bool, M, i) || throw(BoundsError(M, i))
 
     g = M.genotype[i] = D[1]
     if isnothing(index(M, g))
@@ -307,9 +342,13 @@ end
 end
 
 @inline @propagate_inbounds function setindex!(M::MetaData, v, i::Integer, ::Val{field}) where field
-    @boundscheck checkbounds(Bool, M, i) || throw(BoundsError(M, I))
-
-    # mfield = _pluralize(field)
+    @boundscheck checkbounds(Bool, M, i) || throw(BoundsError(M, i))
+    # update index if genotype changes
+    if field == :genotype
+        old_g = M[i, Val(:genotype)]
+        insert!(M.index, v, i)
+        delete!(M.index, old_g)
+    end
     @inbounds setindex!(getproperty(M, field), v, i)
     return v
 end
@@ -332,7 +371,7 @@ end
 end
 
 
-##--  BEGIN TumorConfiguration                                   --##
+##--  BEGIN Population                                   --##
 
 ## Certain values on the lattice are special. 
 ## For example, we need a way to identify the empty site.
@@ -340,9 +379,23 @@ end
 ## type you are using, define it, e.g
 zero(::Type{String}) = "0"
 
-mutable struct TumorConfiguration{G, T <: Lattices.AbstractLattice}
+"""
+    Population{G, T}
+
+Represents a population on a lattice of type `T` with genotypes of data type `G`.
+
+# Fields
+
+* `lattice<:Lattices.AbstractLattice`
+* `phylogeny`: directed graph recording the ancestry of genotypes
+* `meta::MetaData`: metadata such as fitnesses, mutations, etc. See [`MetaData`](@ref).
+* `t::Int`: age in timesteps
+* `treal::Float64`: age in "real" time.
+* `observables`: dictionary to store observables in
+"""
+mutable struct Population{G, T <: Lattices.AbstractLattice}
     lattice::T
-    phylogeny::SimpleDiGraph{Int64}
+    phylogeny::SimpleDiGraph{Int}
     meta::MetaData{G}
     t::Int
     treal::Float64
@@ -350,13 +403,13 @@ mutable struct TumorConfiguration{G, T <: Lattices.AbstractLattice}
 end
 
 """
-    TumorConfiguration(lattice, [phylogeny])
+    Population(lattice, [phylogeny])
 
-Wraps an existing lattice in a TumorConfiguration. Calculates meta.npops automatically.
+Wraps an existing lattice in a Population. Calculates meta.npops automatically.
 
 If `phylogeny` is not given, it defaults to an empty graph.
 """
-function TumorConfiguration(lattice::Lattices.RealLattice{T}, phylogeny::SimpleDiGraph = SimpleDiGraph()) where {T}
+function Population(lattice::Lattices.RealLattice{T}, phylogeny::SimpleDiGraph = SimpleDiGraph()) where {T}
     counts_dict = StatsBase.countmap(lattice.data, alg = :dict)
     if haskey(counts_dict, zero(T))
         delete!(counts_dict, zero(T))
@@ -365,19 +418,22 @@ function TumorConfiguration(lattice::Lattices.RealLattice{T}, phylogeny::SimpleD
     npops = collect(values(counts_dict))
     metadata = MetaData(genotypes, npops)
     add_vertices!(phylogeny, length(genotypes))
-    TumorConfiguration(lattice, phylogeny, metadata, 0, 0.0, Dict{Symbol,Any}())
+    Population(lattice, phylogeny, metadata, 0, 0.0, Dict{Symbol,Any}())
 end
-function TumorConfiguration(nolattice::Lattices.NoLattice{T}) where T
+function Population(nolattice::Lattices.NoLattice{T}) where T
     metadata = MetaData(T)
     phylogeny = SimpleDiGraph()
-    TumorConfiguration(nolattice, phylogeny, metadata, 0, 0.0, Dict{Symbol,Any}())
+    Population(nolattice, phylogeny, metadata, 0, 0.0, Dict{Symbol,Any}())
 end
 
-@propagate_inbounds Base.getindex(T::TumorConfiguration, ind...) = getindex(T.lattice.data, ind...)
+connect!(T::Population, p::Pair{Int,Int}) = connect!(T, p[1], p[2])
+connect!(T::Population, a::Int, b::Int) = add_edge!(T.phylogeny, a, b)
 
-@propagate_inbounds Base.setindex!(T::TumorConfiguration, v, ind::CartesianIndex) = setindex!(T, v, Tuple(ind)...)
+@propagate_inbounds Base.getindex(T::Population, ind...) = getindex(T.lattice.data, ind...)
 
-@propagate_inbounds function Base.setindex!(T::TumorConfiguration{S, <:AbstractLattice{S, A}}, v, ind::Vararg{Int64}) where {S,A}
+@propagate_inbounds Base.setindex!(T::Population, v, ind::CartesianIndex) = setindex!(T, v, Tuple(ind)...)
+
+@propagate_inbounds function Base.setindex!(T::Population{S, <:AbstractLattice{S, A}}, v, ind::Vararg{Int}) where {S,A}
     z = zero(S)
     L = T.lattice.data
     g_old = L[ind...]
@@ -387,7 +443,7 @@ end
     if v != z
         @boundscheck begin
             if @inbounds isnothing(index(T.meta, v))
-                throw(ArgumentError("Genotype $v is not know. Use push!(::TumorConfiguration, $v) first."))
+                throw(ArgumentError("Genotype $v is not know. Use push!(::Population, $v) first."))
             end
         end
         @inbounds T.meta[g=v, Val(:npop)] += 1
@@ -401,14 +457,14 @@ end
 
 ## Broadcasting
 
-function dotview(S::TumorConfiguration, I...)
+function dotview(S::Population, I...)
     (S, I)
 end
 
 @inline function materialize!(::BroadcastStyle, dest::Tuple{S,U},
-    bc::Broadcasted{Style}) where {Style, S<:TumorConfiguration, U}
+    bc::Broadcasted{Style}) where {Style, S<:Population, U}
     if bc.f !== identity
-        throw(ArgumentError("Broadcasting functions other than `=` over TumorConfiguration is not implemented"))
+        throw(ArgumentError("Broadcasting functions other than `=` over Population is not implemented"))
     end
     state, idx = dest
     g = bc.args[1]
@@ -419,28 +475,35 @@ end
     state
 end
 
-
 """
-    add_genotype!(S::TumorConfiguration, G)
+    add_genotype!(S::Population, G, parent)
 
-Add genotype `G` to the population. `G` is either a genotype or a full `MetaDatum`
+Add genotype `G` to the population and connect it to `parent` in the phylogeny.
+`G` is either a genotype or a full `MetaDatum`.
+`parent` defaults to the first genotype, i.e. the root of the phylogenetic tree.
+If `parent=nothing`, the genotype will not be connected to the tree.
 
 See also: [`MetaDatum`](@ref), [`remove_genotype!`](@ref)
 """
-add_genotype!(S::TumorConfiguration, args...; kwargs...) = push!(S, args...;kwargs...)
+add_genotype!(S::Population, G, parent=S.meta[1, :genotype]; kwargs...) = push!(S, G, parent; kwargs...)
 
-"Add a new _unconnected_ genotype to a TumorConfiguration."
-@propagate_inbounds @inline function Base.push!(S::TumorConfiguration{T, <:Lattices.TypedLattice{T}}, g::T) where {T}
-    push!(S, MetaDatum{T, Nothing}((g, 0, 1.0, nothing, (S.t, S.treal))))
+"Add a new _unconnected_ genotype to a Population."
+@propagate_inbounds @inline function Base.push!(S::Population{T, <:TypedLattice{T}}, g::T, args...) where {T}
+    push!(S, MetaDatum{T, Nothing}((g, 0, 1.0, nothing, (S.t, S.treal))), args...)
 end
 
-@propagate_inbounds function Base.push!(S::TumorConfiguration{T, <:Lattices.TypedLattice{T}}, M::MetaDatum{T}) where {T}
+@propagate_inbounds function Base.push!(S::Population{T, <:TypedLattice{T}}, M::MetaDatum{T}, parent=nothing) where {T}
     @boundscheck if !isnothing(index(S.meta, M.genotype))
         throw(ArgumentError("genotype $(M.genotype) already present"))
     end
     push!(S.meta, M)
     add_vertex!(S.phylogeny)
-    lastindex(S.meta)
+    inew = lastindex(S.meta)
+    if !isnothing(parent)
+        iparent = index(S.meta, parent)
+        add_edge!(S.phylogeny, inew, iparent)
+    end
+    inew
 end
 
 """
@@ -475,7 +538,7 @@ function remove_genotype_from_metadata!(M::MetaData{T}, g::T) where {T}
     end
     ## Mimic behavior for removal from Graphs:
     ## Overwrite the meta data at index v with 
-    ## those from the last position and shorten.
+    ## those from the last position and trim.
     g_new = M[end, :genotype]
     M[v] = M[end]
     M._len -= 1
@@ -485,7 +548,7 @@ function remove_genotype_from_metadata!(M::MetaData{T}, g::T) where {T}
 end
 
 """
-    remove_genotype!(S::TumorConfiguration, g; bridge=true)
+    remove_genotype!(S::Population, g; bridge=true)
 
 Remove genotype from the population. Discards it from meta data, prunes it from the 
 phylogeny, and sets all corresponding sites of the lattice to zero.
@@ -496,20 +559,39 @@ Throw an exception if the requested genotype does not exist.
 
 Return `true` if successful, else `false`.
 """
-function remove_genotype!(S::TumorConfiguration{T, <:Lattices.TypedLattice{T}}, g::T; bridge=true) where {T}
+function remove_genotype!(S::Population{T, <:Lattices.TypedLattice{T}}, g::T; bridge=true) where {T}
     v = index(S, g)
     isnothing(v) && throw(ArgumentError("Genotype $g does not exist."))
     if S.lattice isa RealLattice
         sites = S.lattice.data .== g 
-        S.lattice.data[sites] = zero(T)
+        S.lattice.data[sites] .= zero(T)
     end
     return remove_genotype_from_phylogeny!(S.phylogeny, v) && remove_genotype_from_metadata!(S.meta, g)
 end
 
+"""
+    rename!(S, g1 => g2)
+
+Rename genotype `g1` to `g2`.
+"""
+function rename!(S::Population{T, <:Lattices.TypedLattice{T}}, x::Pair{T,T}) where T
+    rename!(S.meta, x)
+    if S.lattice isa RealLattice
+        S.lattice.data[ S.lattice.data.==x[1] ] .= x[2]
+    end
+    nothing
+end
+function rename!(M::MetaData{T}, x::Pair{T,T}) where T
+    @boundscheck if x[2] in M.index
+        throw(ArgumentError("cannot rename to existing genotype $(x[2])"))
+    end
+    M[g=x[1], Val(:genotype)] = x[2]
+    nothing
+end
 
 ### similar et al. ###
 # // TODO: Generalize
-Base.similar(C::TumorConfiguration) = TumorConfiguration(typeof(C.lattice)(C.lattice.a, zero(C.lattice.data)))
+Base.similar(C::Population) = Population(typeof(C.lattice)(C.lattice.a, zero(C.lattice.data)))
 
 ## Define getter/setter for all fields of MetaData
 ## Better than dynamically dispatching on getindex
@@ -527,7 +609,7 @@ for field in MetaDatumFields
             end
             getindex(getproperty(M, $_field), id)
         end
-        $getfn(S::TumorConfiguration, g) = $getfn(S.meta, g)
+        $getfn(S::Population, g) = $getfn(S.meta, g)
 
         function $setfn(M::MetaData{T}, v, g::T) where T
             id = index(M, g)
@@ -536,42 +618,42 @@ for field in MetaDatumFields
             end
             setindex!(getproperty(M, Symbol($field)), v, id)
         end
-        $setfn(S::TumorConfiguration, v, g) = $setfn(S.meta, v, g)
+        $setfn(S::Population, v, g) = $setfn(S.meta, v, g)
     end
 end
 
-add_edge!(state::TumorConfiguration, newgenotype, parent) = add_edge!(state.phylogeny, index(state, newgenotype), index(state, parent))
+add_edge!(state::Population, newgenotype, parent) = add_edge!(state.phylogeny, index(state, newgenotype), index(state, parent))
 
-index(S::TumorConfiguration, args...) = index(S.meta, args...)
+index(S::Population, args...) = index(S.meta, args...)
 
 "Genotype that was last added to the population."
-lastgenotype(S::TumorConfiguration) = lastgenotype(S.meta)
+lastgenotype(S::Population) = lastgenotype(S.meta)
 
 "Number of direct descendends of a genotype."
-nchildren(S::TumorConfiguration, g) = length(children(S, g))
+nchildren(S::Population, g) = length(children(S, g))
 
-size(S::TumorConfiguration, args...) = size(S.lattice, args...)
+size(S::Population, args...) = size(S.lattice, args...)
 
 """
-    children(S::TumorConfiguration, g)
+    children(S::Population, g)
 
 Vector of direct descendants of a genotype.
 
 !!! info
     Returns indices.
 """
-function children(S::TumorConfiguration, g)
+function children(S::Population, g)
     vertex = index(S.meta, g)
     inneighbors(S.phylogeny, vertex)
 end
 
-isroot(S::TumorConfiguration, g) = isroot(S.phylogeny, index(S, g))
+isroot(S::Population, g) = isroot(S.phylogeny, index(S, g))
 """
-    parent(S::TumorConfiguration, g)
+    parent(S::Population, g)
 
 Parent of a genotype `g`.  Return tuple `(id=index, g=genotype)`.
 """
-function parent(S::TumorConfiguration, g)
+function parent(S::Population, g)
     vertex = index(S.meta, g)
     n = outneighbors(S.phylogeny, vertex)
     if length(n)!=1
@@ -581,7 +663,76 @@ function parent(S::TumorConfiguration, g)
 end
 
 """
-    annotate\\_snps!(S::TumorConfiguration, μ;
+    add_snps!(state::Population, g, μ)
+
+Randomize and add mutations to genotype `g`, or replace them.
+`μ` is the genome wide mutation rate (Poisson) or mutation count (fixed).
+
+__Note:__ `allow_multiple` is much faster if the number of mutations
+already present is large.
+
+## Keyword arguments
+
+* `L=10^9`: length of the genome
+* `allow_multiple=false`: allow for a site to mutate more than once.
+* `kind=:poisson`: either `:poisson` or `:fixed`
+- `replace=false`: replace existing SNPs.
+"""
+function add_snps!(state::Population, g, args...; kwargs...)
+    state.meta[g=g, :snps] = snpsfrom(state.meta, g)
+    add_snps!(state.meta[g=g, :snps], args...; kwargs...)
+
+    return state[g=g, :snps] 
+end
+
+"""
+    add_snps!(state::Population, g, v::Vector{Int})
+
+Add mutations `v` to genotype `g`.
+No checks for duplications are performed. 
+
+Return a vector of all mutations. 
+"""
+function add_snps!(state::Population, g, v::Vector{Int})
+    state.meta[g=g, :snps] = snpsfrom(state.meta, g)
+    append!(state[g=g, :snps], v)
+
+    return state[g=g, :snps] 
+end
+
+
+function add_snps!(S::Vector{Int}, μ;
+    L=10^9, allow_multiple=false, count=:poisson, replace=false)
+
+    if replace
+        empty!(S)
+    end
+
+    if count === :poisson
+        n = sample_ztp(μ)
+    else
+        n = μ
+    end
+
+    if allow_multiple
+        append!(S, rand(1:L, n))
+    else # randomize `n` _new_ SNPs
+        j = 0
+        while j < n
+            s = rand(1:L)
+            if !(s in S)
+                push!(S, s)
+                j += 1
+            end
+        end
+    end
+    sort!(S)
+
+    return S
+end
+
+"""
+    annotate\\_snps!(S::Population, μ;
         [L, allow_multiple=false, kind=:poisson, replace=false])
 
 Annotate a phylogeny with SNPs. Every vertex in the phylogeny inherits the SNPs
@@ -594,7 +745,7 @@ Skips any vertex that is already annotated, unless `replace` is set to `true`.
 * `kind=:poisson` Either `:poisson` or `:fixed`
 * `replace=false` Replace existing SNPs.
 """
-function annotate_snps!(S::TumorConfiguration, μ;
+function annotate_snps!(S::Population, μ;
     L=10^9, allow_multiple=false, kind=:poisson, replace=false)
 
     P = S.phylogeny
@@ -636,7 +787,7 @@ function annotate_snps!(S::TumorConfiguration, μ;
 end
 
 """
-    annotate\\_lineage!(S::TumorConfiguration, μ, v;
+    annotate\\_lineage!(S::Population, μ, v;
         [L, allow_multiple=false, kind=:poisson, replace=false])
 
 Annotate a _lineage_ (path from `v` to `root`) with SNPs. Every vertex in the phylogeny inherits the SNPs
@@ -658,7 +809,7 @@ Ends prematurely if a vertex with annotation is found on the way from tip to roo
     from root to target vertex.
 
 """
-function annotate_lineage!(S::TumorConfiguration{T, <:AbstractLattice{T}}, μ, v::Int, root=1;
+function annotate_lineage!(S::Population{T, <:AbstractLattice{T}}, μ, v::Int, root=1;
     L=10^9, allow_multiple=false, kind=:poisson, replace=true) where {T}
     path = []
     while !isnothing(v) && v!=root # && (isnothing(S.meta[v, :snps]) || isempty(S.meta[v, :snps]))
@@ -678,17 +829,17 @@ function annotate_lineage!(S::TumorConfiguration{T, <:AbstractLattice{T}}, μ, v
 end
 
 """
-    prune_phylogeny!(S::TumorConfiguration)
+    prune_phylogeny!(S::Population)
 
 Remove unpopulated genotypes from the phylogenetic tree and meta data.  
 Any gap in the phylogeny is bridged.
 """
-function prune_phylogeny!(S::TumorConfiguration{G,L}) where {G,L}
-    P = S.phylogeny::SimpleDiGraph{Int64}
+function prune_phylogeny!(S::Population{G,L}) where {G,L}
+    P = S.phylogeny::SimpleDiGraph{Int}
 
     function bridge!(s, d)
         children = inneighbors(P, d)
-        if s==1 || getnpop(S, d) > 0
+        if s==1 || S.meta[d, :npop] > 0
             @debug "Adding edge"  d s
             add_edge!(P, d, s)
         elseif length(children)==0
@@ -706,7 +857,7 @@ function prune_phylogeny!(S::TumorConfiguration{G,L}) where {G,L}
         children = inneighbors(P, v)
         parent = outneighbors(P, v)
         @debug "Vertex $v is empty" v children  parent[1]
-        while parent[1]!=1 && !isempty(parent) && S.meta[parent[1], Val(:npop)] == 0
+        while !isempty(parent) && parent[1]!=1 && S.meta[parent[1], Val(:npop)] == 0
             parent = outneighbors(P, parent[1])
         end
         if isempty(parent)
@@ -720,7 +871,7 @@ function prune_phylogeny!(S::TumorConfiguration{G,L}) where {G,L}
         # @debug "Removing vertex" v
         # rem_vertex!(P, v)
     end
-    S.phylogeny = induced_subgraph(P, subvertices)[1]::SimpleDiGraph{Int64}
+    S.phylogeny = induced_subgraph(P, subvertices)[1]::SimpleDiGraph{Int}
     S.meta = @inbounds S.meta[subvertices]
     return S.phylogeny, S.meta
 end
@@ -737,10 +888,10 @@ be `nothing`. =#
     nolattice_state()
 
 Model without spatial structure.  
-Populated with one individual of genotype `1::Int64` with fitness 1.0.
+Populated with one individual of genotype `1` with fitness 1.0.
 """
 function nolattice_state()
-    state = TumorConfiguration(Lattices.NoLattice())
+    state = Population(Lattices.NoLattice())
     push!(state, 1)
     state.meta[end, :npop] = 1
     state.meta[end, :fitness] = 1.0
@@ -749,9 +900,11 @@ end
 
 
 """
-    uniform(::Type{T<:RealLattice}, L; g=0, a=1.0)
+    uniform(T, L; g=0, a=1.0)
     
-Return a configuration on a lattice of type `T` with linear extension `L`, filled with genotype `g`.
+A population on a lattice of type `T` with linear extension `L`, filled with genotype `g`.
+
+Return `(population, nothing)`.
 
 # Example
 
@@ -764,14 +917,16 @@ julia> uniform(HexagonalLattice, 128; g=1)
 """
 function uniform(T::Type{LT}, L::Int; g=0) where LT<:Lattices.RealLattice
     lattice = LT(1.0, fill(g, sitesperunitcell(LT, L)))
-    state = TumorConfiguration(lattice)
+    state = Population(lattice)
     return state, nothing
 end
 
 """
-    single_center(::Type{T<:RealLattice}, L; g1=1, g2=2)
+    single_center(T, L; g1=1, g2=2)
 
-Put a single cell of genotype `g2` at the midpoint of a lattice filled with `g1`.
+A single cell of genotype `g2` at the midpoint of a lattice of type `T` filled with `g1`.
+
+Return `(population, midpoint::Index)`
 """
 function single_center(::Type{LT}, L::Int; g1=0, g2=1) where LT<:Lattices.RealLattice
     state, _ = uniform(LT, L; g=g1)
@@ -783,15 +938,18 @@ function single_center(::Type{LT}, L::Int; g1=0, g2=1) where LT<:Lattices.RealLa
 end
 
 """
-    half_space(::Type{T<:RealLattice}, L; g1=1, g2=2)
+    half_space(T, L; g1=1, g2=2)
 
-Instantiates a population of genotype `g1` on a lattice of type `T`. 
-Fills the last dimension with `g2` up to fraction `f`
+A population of genotype `g1` on a lattice of type `T`. 
+Fill the last dimension with `g2` up to fraction `f`
+
+Return `(population, fill_to)` with `fill_to` defined as
+`state[:,..., 1:fill_to] == g2` and `state[:,..., fill_to+1:end] == g1`.
 
 # Example
 
 ```jldoctest
-julia> using GrowthDynamics.TumorConfigurations
+julia> using GrowthDynamics.Populations
 
 julia> state = half_space(CubicLattice, 32, f=1/4, g1=1, g2=2)[1]
 CubicLattice{Int64, Array{Int64, 3}}
@@ -819,10 +977,12 @@ function half_space(::Type{LT}, L::Int; f=1/2, g1=0, g2=1) where LT<:Lattices.Re
 end
 
 """
-    spherer(::Type{T}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
+    spherer(T, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
 
-Fill lattice of type `T` (e.g `CubicLattice`) with genotype `g1` and put a (L2-)sphere
+Fill lattice of type `T` (e.g `CubicLattice`) with genotype `g1` and put a (L2-)ball
 of approx. radius `r` with genotype `g2` at the center.
+
+Return `(population, idx_ball)` with `idx_ball` being the indices of sites within the ball.
 """
 function spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
     if r < 0
@@ -860,10 +1020,12 @@ function spherer(::Type{LT}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealL
 end
 
 """
-    spheref(::Type{T}, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
+    spheref(T, L::Int; r = 0, g1=0, g2=1) where LT<:Lattices.RealLattice
 
-Fill lattice of type `T` (e.g `CubicLattice`) with genotype `g1` and put a (L2-)sphere with genotype `g2`
+Fill lattice of type `T` (e.g `CubicLattice`) with genotype `g1` and put a (L2-)ball with genotype `g2`
 that occupies approx. a fraction `f` of the lattice at the center.
+
+Return `(population, idx_ball)` with `idx_ball` being the indices of sites within the ball.
 """
 function spheref(::Type{LT}, L::Int; f = 1 / 10, g1::G=0, g2::G=1) where {G,LT<:Lattices.RealLattice}
     if !(0.0<=f<=1)
@@ -905,6 +1067,15 @@ function spheref(::Type{LT}, L::Int; f = 1 / 10, g1::G=0, g2::G=1) where {G,LT<:
     return state, sphere
 end
 
+"""
+    sphere_with_diverse_outer_shell(T, L; r)
+
+A lattice of type `T` (e.g `CubicLattice`) with an (L2-)ball of genotype `1`
+and radius `r` at the center. Each site on the outermost shell is populated consecutively with 
+a different genotype, starting from `2`.
+
+Return `(population, idx_shell)` with `idx_shell` being the indices of the outer ("diverse") shell.
+"""
 function sphere_with_diverse_outer_shell(::Type{LT}, L::Int; r) where LT<:Lattices.RealLattice
     state, _ = spherer(LT, L; r, g1=0, g2=1)
     # all indices with distance m
@@ -921,10 +1092,15 @@ function sphere_with_diverse_outer_shell(::Type{LT}, L::Int; r) where LT<:Lattic
 end
 
 """
-    sphere_with_single_mutant_on_outer_shell(::Type{<:RealLattice}, L::Int; r, s=1.0)
+    sphere_with_single_mutant_on_outer_shell(T, L::Int; r, s=1.0)
 
-Fill a ball of radius `r` with genotype `1`.
-Place a single cell of genotype `2` on the outermost shell at random.
+A lattice of type `T` (e.g `CubicLattice`) with an (L2-)ball of genotype `1`
+and radius `r` at the center. One random site on the outermost shell is populated 
+with genotype `2` that has fitness `s`.
+
+Return `(population, (idx_shell, idx_mutant))` with `idx_shell` being
+the indices of the outer shell, and `idx_mutant` the index
+of the mutant genotype.
 """
 function sphere_with_single_mutant_on_outer_shell(::Type{LT}, L::Int; r, s=1.0) where LT<:Lattices.RealLattice
     state, _ = spherer(LT, L; r, g1=0, g2=1)
@@ -939,7 +1115,7 @@ function sphere_with_single_mutant_on_outer_shell(::Type{LT}, L::Int; r, s=1.0) 
     push!(state.meta[end, :snps], g)
 
     state.meta[2, :fitness] = s
-    state, shell, i
+    state, (shell, i)
 end
 
 
