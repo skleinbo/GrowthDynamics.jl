@@ -26,4 +26,5 @@ makedocs(sitename="GrowthDynamics.jl",
 
 deploydocs(
     repo = "github.com/skleinbo/GrowthDynamics.jl.git",
+    push_preview = true
 )
