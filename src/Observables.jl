@@ -256,71 +256,41 @@ function linterface(v::AbstractVector, args...; kwargs...)
     length(interface(v, args...; kwargs...)[1])
 end
 
-function interface(v::AbstractVector, lattice::RealLattice; o=coord(lattice, midpoint(lattice)))
+function interface(v::AbstractVector, state::Population; o=coord(state.lattice, midpoint(state.lattice)))
+    lattice = state.lattice
     if length(v)==0
         return (CartesianIndex{3}[], Point3f[])
     end
-    r = round(norm(v[1].-o)) #round(norm(com-o))
+    a = spacings(lattice)[1]
+    ir = round(norm(v[1].-o)/a)
+    r = round(norm(v[1].-o)/a)*a #round(norm(com-o))
     iv = Lattices.index.(Ref(lattice), v) # indices
 
     # "(not)-on-shell neighbors"
     nbs = Neighbors(lattice)
     inter = Base.filter(iv) do i
         neighbors!(nbs, lattice, i)
-        nosneighbors = filter(j->!isonshell(lattice, coord(lattice, j), r, o), nbs) # not-on-shell-neighbors
-        # a site is on the interface if it
-        # a) has neighbors not on the same shell, i.e. has a shell to grow onto, AND
-        !isempty(nosneighbors) &&
-            # b) 
-            any(nosneighbors) do nosn
-                # On-Shell-neighbors to compete with
-                Y = filter(neighbors(lattice, nosn)) do nosnn
-                        isonshell(lattice, coord(lattice, nosnn), r, o)
-                    end
-                any(Y) do y
-                    !(y in iv)
-                end
-            end
+        nos_neighbors = filter(
+            j->!out_of_bounds(lattice, j) && 
+            (state[j]==0 || round(norm(coord(lattice, j)-o)/a)>ir),
+        nbs) # not-on-shell-neighbors
+        isempty(nos_neighbors) && return false
+
+        any(nosn->any(
+                    j->!out_of_bounds(lattice, j) &&
+                        state[j]!=0 && state[j]!=state[i] &&
+                        isonshell(lattice, coord(lattice, j), r, o),
+                    neighbors(lattice, nosn)
+                ),
+            nos_neighbors
+        )
+
     end
-    cinter = coord.(Ref(lattice), inter)
+    cinter = coord(lattice, inter)
     return inter, cinter
 end
 
-function interface(v::AbstractVector, embedding::Population; o=coord(embedding.lattice, midpoint(embedding.lattice)),  g=2)
-    # embed v into lattice
-    # state = uniform(lat, L; g=0)
-
-    lattice = embedding.lattice
-    r = round(norm(v[1].-o)) #round(norm(com-o))
-    for i in Lattices.shell(lattice, r, o)
-        embedding[i] = 1
-    end
-    for p in v
-        embedding[Lattices.index(lattice, p)] = g
-    end
-
-    # @show r
-
-    # @assert any(isonshell.(Ref(lattice), v, r))
-    iv = map(x->Lattices.index(lattice, x), v) # indices
-
-    # "on-shell neighbors"
-    inter = filter(iv) do i
-        osneighbors = filter!(i->embedding[i]==0, neighbors(lattice, i)) # filter!(j->isonshell(lattice, coord(lattice, j), r, o), neighbors(lattice, i))
-        # @assert !isempty(osneighbors)
-        !isempty(osneighbors) && any(x->any(y->embedding[y]==1, neighbors(lattice, x)), osneighbors)
-    end |> x->map(i->coord(lattice, i), x)
-    return inter
-    # map(inter) do p
-    #     i = index(lattice, p)
-    #     nn = neighbors(lattice, i)
-    #     map(nn) do n
-    #         (n, isonshell(lattice, coord(lattice, n), r, o), state[n])
-    #     end
-    # end
-end
-
-interface(state::Population{G, <:RealLattice}, g::G) where G = interface(state, ipositions(state, g))
+interface(state::Population{G, <:RealLattice}, g::G) where G = interface(positions(state, g), state)
 
 function interface(state::Population{G, <:RealLattice}, v::AbstractVector{<:Lattices.Index}) where G
     lat = state.lattice
