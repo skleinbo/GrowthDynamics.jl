@@ -695,9 +695,9 @@ Return a vector of all mutations.
 """
 function add_snps!(state::Population, g, v::Vector{Int})
     state.meta[g=g, :snps] = snpsfrom(state.meta, g)
-    append!(state[g=g, :snps], v)
+    append!(state.meta[g=g, :snps], v)
 
-    return state[g=g, :snps] 
+    return state.meta[g=g, :snps] 
 end
 
 
@@ -1109,10 +1109,9 @@ function sphere_with_single_mutant_on_outer_shell(::Type{LT}, L::Int; r, s=1.0) 
     
     g = 2
     i = rand(shell)
-    push!(state, g)
+    add_genotype!(state, g)
     state[i] = g
-    add_edge!(state.phylogeny, nv(state.phylogeny), 1)
-    push!(state.meta[end, :snps], g)
+    add_snps!(state, g, [g])
 
     state.meta[2, :fitness] = s
     state, (shell, i)
